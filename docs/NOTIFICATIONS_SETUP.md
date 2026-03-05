@@ -63,12 +63,23 @@ firebase deploy --only database
 
 ## 4. Configure in Dashboard
 
-1. Open the dashboard
+1. Open the dashboard and sign in with your Google account
 2. Click the **bell icon** (🔔) in the header
-3. Enable notifications and enter your email
-4. Choose which alerts to receive
+3. Enable notifications and enter **your** email
+4. Choose which alerts you want to receive
 5. Set low-level threshold (default 20%)
 6. Click **Save**
+
+Each signed-in user has their **own** notification settings stored under:
+
+```text
+pump_system/config/notifications_by_user/{uid}
+```
+
+Alerts are sent to every user who has:
+
+- `enabled: true`
+- A non-empty `email`
 
 ---
 

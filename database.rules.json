@@ -15,13 +15,17 @@
         }
       },
       "config": {
-        "notifications": {
-          ".read": "auth != null",
-          ".write": "auth != null"
+        "notifications_by_user": {
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid"
+          }
         },
         "notification_last_sent": {
-          ".read": false,
-          ".write": false
+          "$uid": {
+            ".read": false,
+            ".write": false
+          }
         }
       }
     }

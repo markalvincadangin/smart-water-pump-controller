@@ -7,12 +7,13 @@ import { useNotificationConfig } from "@/lib/useNotificationConfig";
 import type { NotificationConfig } from "@/lib/types";
 
 interface NotificationSettingsProps {
+  userUid: string | null;
   userEmail: string | null;
   onClose: () => void;
 }
 
-export default function NotificationSettings({ userEmail, onClose }: NotificationSettingsProps) {
-  const { config, loading, saveConfig } = useNotificationConfig();
+export default function NotificationSettings({ userUid, userEmail, onClose }: NotificationSettingsProps) {
+  const { config, loading, saveConfig } = useNotificationConfig(userUid);
   const [form, setForm] = useState<NotificationConfig>({
     enabled: false,
     email: "",
@@ -103,7 +104,7 @@ export default function NotificationSettings({ userEmail, onClose }: Notificatio
               onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
               className="w-4 h-4 rounded border-surface-4 bg-surface-2 text-accent-cyan focus:ring-accent-cyan/50"
             />
-            <span className="text-sm font-mono text-text-primary">Enable email notifications</span>
+            <span className="text-sm font-mono text-text-primary">Enable email notifications for your account</span>
           </label>
 
           <div>
