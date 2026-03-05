@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+build/
+dist/
+functions/lib/
+
+# Environment and secrets
+.env.local
+**/serviceAccountKey.json
+**/service-account*.json
+.env.development.local
+.env.test.local
+.env.production.local
+firmware/**/secrets.h
+
+# IDE and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

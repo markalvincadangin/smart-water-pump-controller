@@ -1,0 +1,29 @@
+{
+  "rules": {
+    "pump_system": {
+      "status": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      },
+      "control": {
+        ".read": "auth != null",
+        "mode": {
+          ".write": "auth.uid === 'ZScmJXQg2tZSVDiZ1YxTUxN36xw1' || auth.uid === 'vQ4s0FyCmjMgoeltwcZR7WfckXZ2'"
+        },
+        "clear_error": {
+          ".write": "auth != null"
+        }
+      },
+      "config": {
+        "notifications": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+        "notification_last_sent": {
+          ".read": false,
+          ".write": false
+        }
+      }
+    }
+  }
+}
