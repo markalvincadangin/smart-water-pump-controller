@@ -47,7 +47,9 @@ export default function NotificationSettings({ userEmail, onClose }: Notificatio
         const code = (err as { code?: string }).code;
         if (code === "PERMISSION_DENIED") msg = "Permission denied. Deploy database rules: firebase deploy --only database";
         else if (code === "UNAVAILABLE") msg = "Database unavailable. Check your connection.";
-        else msg = (err as Error).message || msg;
+        else msg = ("message" in err && typeof (err as { message?: string }).message === "string")
+          ? (err as { message: string }).message
+          : msg;
       } else if (err instanceof Error) {
         msg = err.message;
       }
