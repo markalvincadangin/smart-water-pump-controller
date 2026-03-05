@@ -260,6 +260,7 @@ export default function DashboardPage() {
     </div>
     {showNotifications && (
       <NotificationSettings
+        userUid={authUser?.uid ?? null}
         userEmail={authUser?.email ?? null}
         onClose={() => setShowNotifications(false)}
       />

@@ -28,7 +28,7 @@ export function usePumpData() {
   const [history,     setHistory]     = useState<HistoryEntry[]>([]);
   const [connected,   setConnected]   = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
-  const [authUser,    setAuthUser]    = useState<{ email: string | null } | null>(null);
+  const [authUser,    setAuthUser]    = useState<{ uid: string; email: string | null } | null>(null);
   const [error,       setError]       = useState<string | null>(null);
 
   // Keep refs so callbacks don't close over stale state
@@ -42,7 +42,7 @@ export function usePumpData() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setAuthChecked(true);
-      setAuthUser(user ? { email: user.email ?? null } : null);
+      setAuthUser(user ? { uid: user.uid, email: user.email ?? null } : null);
     });
     return () => unsub();
   }, []);

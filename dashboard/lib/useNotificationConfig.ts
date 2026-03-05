@@ -7,14 +7,18 @@ import { db } from "./firebase";
 import type { NotificationConfig } from "./types";
 import { DEFAULT_NOTIFICATION_CONFIG } from "./types";
 
-const CONFIG_PATH = "/pump_system/config/notifications";
-
-export function useNotificationConfig() {
+export function useNotificationConfig(uid: string | null) {
   const [config, setConfig] = useState<NotificationConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const configRef = ref(db, CONFIG_PATH);
+    if (!uid) {
+      setConfig({ ...DEFAULT_NOTIFICATION_CONFIG });
+      setLoading(false);
+      return;
+    }
+
+    const configRef = ref(db, `/pump_system/config/notifications_by_user/${uid}`);
     const unsub = onValue(
       configRef,
       (snap) => {
@@ -37,13 +41,17 @@ export function useNotificationConfig() {
       unsub();
       clearTimeout(t);
     };
-  }, []);
+  }, [uid]);
 
   const saveConfig = useCallback(async (next: Partial<NotificationConfig>) => {
-    const configRef = ref(db, CONFIG_PATH);
+    if (!uid) {
+      throw new Error("Cannot save notification config without user ID");
+    }
+
+    const configRef = ref(db, `/pump_system/config/notifications_by_user/${uid}`);
     const merged = { ...DEFAULT_NOTIFICATION_CONFIG, ...config, ...next };
     await set(configRef, merged);
-  }, [config]);
+  }, [config, uid]);
 
   return { config, loading, saveConfig };
 }
