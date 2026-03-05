@@ -1,0 +1,68 @@
+# libraries.txt
+# Smart Water Pump Controller — ESP32 Firmware
+# Required Arduino libraries. Install all of these before compiling.
+#
+# HOW TO INSTALL:
+#   Arduino IDE: Sketch → Include Library → Manage Libraries → search by name
+#   OR manually: download the ZIP from the URL and install via
+#                Sketch → Include Library → Add .ZIP Library
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── 1. Firebase ESP Client ────────────────────────────────────────────────────
+# Used for:  Firebase Realtime Database (RTDB) read/write, Anonymous Auth,
+#            token management, WiFi auto-reconnect
+# Includes:  Firebase_ESP_Client.h
+#            addons/TokenHelper.h   (token status callback)
+#            addons/RTDBHelper.h    (RTDB payload helpers)
+#
+Name:        Firebase ESP Client
+Author:      Mobizt
+Version:     >= 4.4.14
+Library Mgr: "Firebase ESP Client"
+GitHub:      https://github.com/mobizt/Firebase-ESP-Client
+Install:     Arduino Library Manager → search "Firebase ESP Client" by Mobizt
+
+# ── 2. ArduinoJson ────────────────────────────────────────────────────────────
+# Used for:  JSON serialization/deserialization inside Firebase ESP Client.
+#            NOT referenced directly in the firmware, but Firebase ESP Client
+#            requires it as a dependency and will fail to compile without it.
+#
+Name:        ArduinoJson
+Author:      Benoit Blanchon
+Version:     >= 6.21.5   (must be v6.x — NOT v5.x, NOT v7.x)
+Library Mgr: "ArduinoJson"
+GitHub:      https://github.com/bblanchon/ArduinoJson
+Install:     Arduino Library Manager → search "ArduinoJson" by Benoit Blanchon
+
+# ── Built-in (no install needed) ─────────────────────────────────────────────
+# These are bundled with the ESP32 Arduino Core and require no separate install.
+#
+# WiFi.h          — ESP32 Wi-Fi connectivity
+# Arduino.h       — Core Arduino functions (pinMode, digitalWrite, millis, etc.)
+# esp32/pgmspace  — IRAM_ATTR macro for ISR placement
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BOARD SETUP (Arduino IDE)
+# ─────────────────────────────────────────────────────────────────────────────
+# If you have not added ESP32 board support yet:
+#
+#   1. Arduino IDE → File → Preferences → Additional Boards Manager URLs
+#      Add: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+#
+#   2. Tools → Board → Boards Manager → search "esp32" by Espressif Systems
+#      Install version: >= 2.0.11
+#
+#   3. Tools → Board → ESP32 Arduino → "ESP32 Dev Module"
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# UPLOAD SETTINGS (Tools menu)
+# ─────────────────────────────────────────────────────────────────────────────
+# Board:            ESP32 Dev Module
+# Upload Speed:     115200
+# CPU Frequency:    240MHz (WiFi/BT)
+# Flash Frequency:  80MHz
+# Flash Mode:       QIO
+# Flash Size:       4MB (32Mb)
+# Partition Scheme: Default 4MB with spiffs
+# PSRAM:            Disabled
+# Port:             (your COM port — check Device Manager on Windows)
