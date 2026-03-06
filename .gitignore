@@ -13,6 +13,7 @@ functions/lib/
 # Environment and secrets
 .env.local
 **/serviceAccountKey.json
+functions/.env
 **/service-account*.json
 .env.development.local
 .env.test.local

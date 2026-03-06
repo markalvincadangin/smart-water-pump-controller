@@ -177,7 +177,7 @@ npm run dev
 **Firebase Console setup** (one-time):
 1. [console.firebase.google.com](https://console.firebase.google.com) → your project
 2. **Realtime Database** → Create database → Start in test mode
-3. **Authentication** → Sign-in methods → **Email/Password**, **Anonymous**, and **Google** → Enable all
+3. **Authentication** → Sign-in methods → **Email/Password** (for ESP32) and **Google** (for dashboard) → Enable both
 4. **Realtime Database → Rules** — use `database.rules.json` and replace `YOUR_GOOGLE_UID` with your UID from Authentication → Users, or deploy: `firebase deploy --only database`
 
 **Deploy to Vercel (optional):**
@@ -209,6 +209,10 @@ Complete every item before switching the MCB on for the first time.
 
 ---
 
+## Full deployment
+
+For a single, end-to-end deployment guide (Firebase, Functions, Dashboard, ESP32, and smoke tests), use **`docs/DEPLOY_GUIDE.md`**.
+
 ## Notifications (Optional)
 
 Email alerts for dry-run lockout, low tank level, and pump started. See `docs/NOTIFICATIONS_SETUP.md`.
@@ -229,14 +233,14 @@ Email alerts for dry-run lockout, low tank level, and pump started. See `docs/NO
     mode:        "AUTO"            string  AUTO | FORCE_ON | FORCE_OFF
     clear_error: false             bool    set true to acknowledge dry-run lockout
 
-  config/                          ← Dashboard writes (notification settings)
-    notifications/
-      enabled:           false     bool
-      email:             ""        string
-      dryRunAlert:       true      bool
-      lowLevelAlert:     true      bool
-      lowLevelThreshold: 20        int     (percent)
-      pumpStartedAlert:  true      bool
+  config/
+    device/                        ← Dashboard writes, ESP32 reads every 30 seconds
+      tank_empty_cm, tank_full_cm, pump_start_level, pump_stop_level,
+      dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor
+    notifications_by_user/        ← Per-user notification settings (Dashboard ↔ Cloud Function)
+      $uid/
+        enabled, email, dryRunAlert, lowLevelAlert, lowLevelThreshold, pumpStartedAlert
+    notification_last_sent/       ← Functions only (throttling); no client access
 ```
 
 ---

@@ -35,6 +35,11 @@ The dashboard reads/writes the same paths as the ESP32 firmware:
   control/                   ← Dashboard writes, ESP32 reads every 3s
     mode: "AUTO"             ← "AUTO" | "FORCE_ON" | "FORCE_OFF"
     clear_error: false       ← Set to true to acknowledge dry-run lockout
+
+  config/
+    device/                  ← Dashboard writes, ESP32 reads every 30s (calibration/thresholds)
+    notifications_by_user/  ← Per-user notification settings (bell icon)
+      $uid/  enabled, email, dryRunAlert, lowLevelAlert, lowLevelThreshold, pumpStartedAlert
 ```
 
 ---
@@ -47,8 +52,8 @@ The dashboard reads/writes the same paths as the ESP32 firmware:
 
 ### 2. Clone / copy this project
 ```bash
-# If you have this as a zip, extract it then:
-cd pump-dashboard
+# From the repo root (smart-water-pump-controller):
+cd dashboard
 ```
 
 ### 3. Install dependencies
@@ -90,7 +95,7 @@ Visit [http://localhost:3000](http://localhost:3000)
 ## Project Structure
 
 ```
-pump-dashboard/
+dashboard/
 ├── app/
 │   ├── layout.tsx          # Root layout (fonts, metadata)
 │   ├── page.tsx            # Main dashboard page
@@ -102,7 +107,7 @@ pump-dashboard/
 │   ├── StatCard.tsx        # Metric display card
 │   └── StatusBar.tsx       # Top connection status bar
 ├── lib/
-│   ├── firebase.ts         # Firebase init + anonymous auth
+│   ├── firebase.ts         # Firebase init + Google Auth
 │   ├── types.ts            # TypeScript interfaces
 │   └── usePumpData.ts      # Real-time data hook
 ├── .env.local.example      # Environment variable template

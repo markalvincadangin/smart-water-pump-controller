@@ -15,6 +15,10 @@
         }
       },
       "config": {
+        "device": {
+          ".read": "auth != null",
+          ".write": "auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_4' || auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_2'"
+        },
         "notifications_by_user": {
           "$uid": {
             ".read": "auth != null && auth.uid === $uid",
