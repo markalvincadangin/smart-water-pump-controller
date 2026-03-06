@@ -9,7 +9,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── 1. Firebase ESP Client ────────────────────────────────────────────────────
-# Used for:  Firebase Realtime Database (RTDB) read/write, Anonymous Auth,
+# Used for:  Firebase Realtime Database (RTDB) read/write, Email/Password Auth,
 #            token management, WiFi auto-reconnect
 # Includes:  Firebase_ESP_Client.h
 #            addons/TokenHelper.h   (token status callback)

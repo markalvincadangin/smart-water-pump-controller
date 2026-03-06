@@ -6,31 +6,44 @@ import { Wifi, WifiOff, Clock } from "lucide-react";
 
 interface StatusBarProps {
   connected: boolean;
+  esp32Online: boolean;
   updatedAt: number | null;
   mode:      string;
 }
 
-export default function StatusBar({ connected, updatedAt, mode }: StatusBarProps) {
+export default function StatusBar({ connected, esp32Online, updatedAt, mode }: StatusBarProps) {
   const timeAgo = updatedAt
     ? Math.round((Date.now() - updatedAt) / 1000)
     : null;
 
   return (
-    <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 bg-surface-1 border-b border-surface-3 min-w-0">
-      {/* Left: connection */}
+    <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] bg-surface-1 border-b border-surface-3 min-w-0">
+      {/* Left: ESP32 online/offline (stale = no update in 15s) */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-        {connected ? (
-          <>
-            <div className="dot-live" />
-            <Wifi size={12} className="sm:w-[13px] sm:h-[13px] text-accent-green" />
-            <span className="text-[10px] sm:text-xs font-mono text-accent-green">LIVE</span>
-          </>
-        ) : (
+        {!connected ? (
           <>
             <div className="dot-error" />
             <WifiOff size={12} className="sm:w-[13px] sm:h-[13px] text-accent-red" />
             <span className="text-[10px] sm:text-xs font-mono text-accent-red hidden sm:inline">DISCONNECTED</span>
             <span className="text-[10px] font-mono text-accent-red sm:hidden">OFF</span>
+          </>
+        ) : esp32Online ? (
+          <>
+            <div className="dot-live" />
+            <Wifi size={12} className="sm:w-[13px] sm:h-[13px] text-accent-green" />
+            <span className="text-[10px] sm:text-xs font-mono text-accent-green">ESP32 online</span>
+          </>
+        ) : (
+          <>
+            <div className="dot-error" />
+            <WifiOff size={12} className="sm:w-[13px] sm:h-[13px] text-accent-amber" />
+            <span className="text-[10px] sm:text-xs font-mono text-accent-amber hidden sm:inline">
+              ESP32 offline
+              {timeAgo !== null ? ` (${timeAgo}s)` : ""}
+            </span>
+            <span className="text-[10px] font-mono text-accent-amber sm:hidden">
+              Offline{timeAgo !== null ? ` ${timeAgo}s` : ""}
+            </span>
           </>
         )}
       </div>

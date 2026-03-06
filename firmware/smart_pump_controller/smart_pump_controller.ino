@@ -19,6 +19,8 @@
 // --- Core Libraries ---
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Preferences.h>   // NVS for persisting device config across reboot
+#include <math.h>          // fabs() for float epsilon comparison
 
 // --- Firebase Libraries ---
 #include <Firebase_ESP_Client.h>
@@ -72,10 +74,14 @@
 // YF-G1 Flow Sensor: F (Hz) = Q (L/min), i.e. pulses/second = L/min
 #define FLOW_CALIBRATION_FACTOR  1.0f
 
-// Timing intervals
-#define SENSOR_INTERVAL_MS    1000   // Sample sensors every 1 second
-#define FIREBASE_INTERVAL_MS  3000   // Push to Firebase every 3 seconds
-#define ULTRASONIC_TIMEOUT_MS 30     // Max wait for echo pulse (ms)
+// Timing intervals (kept in firmware only)
+#define SENSOR_INTERVAL_MS       1000   // Sample sensors every 1 second
+#define FIREBASE_INTERVAL_MS     3000   // Push to Firebase every 3 seconds
+#define DEVICE_CONFIG_INTERVAL_MS 30000 // Read device config from Firebase every 30 seconds (reduces 7 RTDB reads)
+#define ULTRASONIC_TIMEOUT_MS   30     // Max wait for echo pulse (ms)
+
+// NVS namespace for device config
+#define NVS_NAMESPACE  "pump_cfg"
 
 // =============================================================================
 // SECTION 5: FIREBASE OBJECTS
@@ -84,10 +90,20 @@
 FirebaseData   fbdo;
 FirebaseAuth   auth;
 FirebaseConfig config;
+Preferences    prefs;   // NVS
 
 // =============================================================================
 // SECTION 6: GLOBAL STATE VARIABLES
 // =============================================================================
+
+// --- Device config (runtime; loaded from NVS on boot, then from Firebase when online) ---
+int    cfgTankEmptyCm         = TANK_EMPTY_CM;
+int    cfgTankFullCm          = TANK_FULL_CM;
+int    cfgPumpStartLevel      = PUMP_START_LEVEL;
+int    cfgPumpStopLevel       = PUMP_STOP_LEVEL;
+float  cfgDryRunThresholdLpm  = DRY_RUN_THRESHOLD_LPM;
+int    cfgDryRunTimeoutSec    = (int)(DRY_RUN_TIMEOUT_MS / 1000UL);
+float  cfgFlowCalibration     = FLOW_CALIBRATION_FACTOR;
 
 // --- Sensor Data ---
 volatile uint32_t pulseCount      = 0;   // ISR-incremented pulse counter
@@ -104,8 +120,10 @@ unsigned long     dryRunStartMs   = 0;
 bool              dryRunTimerActive = false;
 
 // --- Timing ---
-unsigned long     lastSensorMs    = 0;
-unsigned long     lastFirebaseMs  = 0;
+unsigned long     lastSensorMs     = 0;
+unsigned long     lastFirebaseMs   = 0;
+unsigned long     lastDeviceConfigMs = 0;  // When we last read config from Firebase
+unsigned long     lastWifiRetryMs    = 0;
 
 // =============================================================================
 // SECTION 7: INTERRUPT SERVICE ROUTINE (ISR)
@@ -162,15 +180,15 @@ int readUltrasonicSensor() {
   float distanceCm = duration / 58.0f;
 
   // Clamp distance to calibrated range before mapping
-  distanceCm = constrain(distanceCm, (float)TANK_FULL_CM, (float)TANK_EMPTY_CM);
+  distanceCm = constrain(distanceCm, (float)cfgTankFullCm, (float)cfgTankEmptyCm);
 
   // Map distance to percentage:
-  // At TANK_FULL_CM (e.g., 15cm)  -> 100%
-  // At TANK_EMPTY_CM (e.g., 100cm) -> 0%
+  // At cfgTankFullCm  -> 100%
+  // At cfgTankEmptyCm -> 0%
   int levelPct = map(
     (long)distanceCm,
-    (long)TANK_FULL_CM,
-    (long)TANK_EMPTY_CM,
+    (long)cfgTankFullCm,
+    (long)cfgTankEmptyCm,
     100,
     0
   );
@@ -196,7 +214,7 @@ float calculateFlowRate() {
   interrupts();
 
   // Convert pulses/second to L/min
-  float lpm = (float)count / FLOW_CALIBRATION_FACTOR;
+  float lpm = (float)count / cfgFlowCalibration;
   return lpm;
 }
 
@@ -219,7 +237,8 @@ void checkSafetyCutoff() {
     return;
   }
 
-  if (flowRateLpm < DRY_RUN_THRESHOLD_LPM) {
+  unsigned long dryRunTimeoutMs = (unsigned long)cfgDryRunTimeoutSec * 1000UL;
+  if (flowRateLpm < cfgDryRunThresholdLpm) {
     // Flow is too low while pump is supposed to be running
     if (!dryRunTimerActive) {
       dryRunTimerActive = true;
@@ -227,7 +246,7 @@ void checkSafetyCutoff() {
       Serial.println("[WARN] Dry-run condition detected. Timer started.");
     } else {
       unsigned long elapsed = millis() - dryRunStartMs;
-      if (elapsed >= DRY_RUN_TIMEOUT_MS) {
+      if (elapsed >= dryRunTimeoutMs) {
         // LOCKOUT TRIGGERED
         isDryRunError = true;
         setPump(false);
@@ -272,15 +291,135 @@ void executePumpLogic() {
 
   } else {
     // AUTO mode — hysteresis control
-    if (!isRunning && waterLevelPct <= PUMP_START_LEVEL) {
+    if (!isRunning && waterLevelPct <= cfgPumpStartLevel) {
       Serial.printf("[AUTO] Water at %d%%. Starting pump.\n", waterLevelPct);
       setPump(true);
-    } else if (isRunning && waterLevelPct >= PUMP_STOP_LEVEL) {
+    } else if (isRunning && waterLevelPct >= cfgPumpStopLevel) {
       Serial.printf("[AUTO] Water at %d%%. Stopping pump.\n", waterLevelPct);
       setPump(false);
     }
     // If between thresholds, maintain current state (hysteresis)
   }
+}
+
+// =============================================================================
+// SECTION 12b: DEVICE CONFIG — NVS (persist across reboot when offline)
+// =============================================================================
+
+void loadDeviceConfigFromNVS() {
+  if (!prefs.begin(NVS_NAMESPACE, true)) {  // read-only
+    Serial.println("[NVS] Namespace open failed. Using firmware defaults.");
+    return;
+  }
+  if (prefs.getInt("tank_empty", -1) == -1) {
+    prefs.end();
+    Serial.println("[NVS] No saved config. Using firmware defaults.");
+    return;
+  }
+  int te = prefs.getInt("tank_empty", TANK_EMPTY_CM);
+  int tf = prefs.getInt("tank_full", TANK_FULL_CM);
+  int ps = prefs.getInt("pump_start", PUMP_START_LEVEL);
+  int po = prefs.getInt("pump_stop", PUMP_STOP_LEVEL);
+  float drLpm = prefs.getFloat("dry_run_lpm", DRY_RUN_THRESHOLD_LPM);
+  int drSec = prefs.getInt("dry_run_sec", (int)(DRY_RUN_TIMEOUT_MS / 1000UL));
+  float flowCal = prefs.getFloat("flow_cal", FLOW_CALIBRATION_FACTOR);
+  prefs.end();
+  // Validate: if NVS was corrupted, keep firmware defaults
+  if (te < 5 || te > 200 || tf < 1 || tf >= te || ps < 0 || ps > 100 || po < 0 || po > 100 || po <= ps
+      || drLpm < 0.1f || drLpm > 10.0f || drSec < 10 || drSec > 300 || flowCal < 0.1f || flowCal > 10.0f) {
+    Serial.println("[NVS] Stored config invalid. Using firmware defaults.");
+    return;
+  }
+  cfgTankEmptyCm = te;
+  cfgTankFullCm = tf;
+  cfgPumpStartLevel = ps;
+  cfgPumpStopLevel = po;
+  cfgDryRunThresholdLpm = drLpm;
+  cfgDryRunTimeoutSec = drSec;
+  cfgFlowCalibration = flowCal;
+  Serial.println("[NVS] Device config loaded.");
+}
+
+void saveDeviceConfigToNVS() {
+  if (!prefs.begin(NVS_NAMESPACE, false)) {  // read-write
+    Serial.println("[NVS] Failed to open for write. Config not persisted.");
+    return;
+  }
+  prefs.putInt("tank_empty", cfgTankEmptyCm);
+  prefs.putInt("tank_full", cfgTankFullCm);
+  prefs.putInt("pump_start", cfgPumpStartLevel);
+  prefs.putInt("pump_stop", cfgPumpStopLevel);
+  prefs.putFloat("dry_run_lpm", cfgDryRunThresholdLpm);
+  prefs.putInt("dry_run_sec", cfgDryRunTimeoutSec);
+  prefs.putFloat("flow_cal", cfgFlowCalibration);
+  prefs.end();
+  Serial.println("[NVS] Device config saved.");
+}
+
+// =============================================================================
+// SECTION 12c: FIREBASE — READ DEVICE CONFIG (single getJSON = 1 round trip)
+// Reads /pump_system/config/device. Validates, applies, saves to NVS only if changed.
+// Called every DEVICE_CONFIG_INTERVAL_MS. If your library lacks to<FirebaseJson>(),
+// use: FirebaseJson* json = fbdo.jsonObject(); if (!json) return; json->get(jsonData, "key");
+// =============================================================================
+
+void readDeviceConfigFromFirebase() {
+  if (!Firebase.RTDB.getJSON(&fbdo, "/pump_system/config/device")) return;
+
+  FirebaseJson json = fbdo.to<FirebaseJson>();
+  FirebaseJsonData jsonData;
+
+  int te = 0, tf = 0, ps = 0, po = 0, drSec = 0;
+  float drLpm = 0.0f, flowCal = 0.0f;
+  bool allOk = true;
+
+  json.get(jsonData, "tank_empty_cm");
+  if (jsonData.success) { int v = jsonData.intValue; if (v >= 5 && v <= 200) te = v; else allOk = false; } else allOk = false;
+
+  json.get(jsonData, "tank_full_cm");
+  if (allOk && jsonData.success) { int v = jsonData.intValue; if (v >= 1 && v < te) tf = v; else allOk = false; } else allOk = false;
+
+  json.get(jsonData, "pump_start_level");
+  if (allOk && jsonData.success) { int v = jsonData.intValue; if (v >= 0 && v <= 100) ps = v; else allOk = false; } else allOk = false;
+
+  json.get(jsonData, "pump_stop_level");
+  if (allOk && jsonData.success) { int v = jsonData.intValue; if (v >= 0 && v <= 100 && v > ps) po = v; else allOk = false; } else allOk = false;
+
+  json.get(jsonData, "dry_run_threshold_lpm");
+  if (allOk && jsonData.success) { 
+    float v = (jsonData.typeNum == FirebaseJson::JSON_INT) ? (float)jsonData.intValue : (float)jsonData.doubleValue; 
+    if (v >= 0.1f && v <= 10.0f) drLpm = v; else allOk = false; 
+  } else allOk = false;
+
+  json.get(jsonData, "dry_run_timeout_sec");
+  if (allOk && jsonData.success) { int v = jsonData.intValue; if (v >= 10 && v <= 300) drSec = v; else allOk = false; } else allOk = false;
+
+  json.get(jsonData, "flow_calibration_factor");
+  if (allOk && jsonData.success) { 
+    float v = (jsonData.typeNum == FirebaseJson::JSON_INT) ? (float)jsonData.intValue : (float)jsonData.doubleValue; 
+    if (v >= 0.1f && v <= 10.0f) flowCal = v; else allOk = false; 
+  } else allOk = false;
+
+  if (!allOk) return;  // Path missing or invalid — keep current config (no log spam)
+
+  // Apply only if something changed (reduces NVS wear)
+  // Use a small epsilon (0.01) for float comparisons to avoid false positives from rounding
+  bool floatsChanged = (fabsf(drLpm - cfgDryRunThresholdLpm) > 0.01f) ||
+                       (fabsf(flowCal - cfgFlowCalibration) > 0.01f);
+
+  bool changed = (te != cfgTankEmptyCm || tf != cfgTankFullCm || ps != cfgPumpStartLevel || po != cfgPumpStopLevel
+                  || drSec != cfgDryRunTimeoutSec || floatsChanged);
+  if (!changed) return;
+
+  cfgTankEmptyCm        = te;
+  cfgTankFullCm         = tf;
+  cfgPumpStartLevel     = ps;
+  cfgPumpStopLevel      = po;
+  cfgDryRunThresholdLpm = drLpm;
+  cfgDryRunTimeoutSec   = drSec;
+  cfgFlowCalibration    = flowCal;
+  saveDeviceConfigToNVS();
+  Serial.println("[FIREBASE] Device config updated from database.");
 }
 
 // =============================================================================
@@ -430,14 +569,20 @@ void setup() {
   // --- WiFi ---
   connectWiFi();
 
+  // --- Load device config from NVS (last known or defaults from firmware) ---
+  loadDeviceConfigFromNVS();
+
   // --- Firebase ---
   if (WiFi.status() == WL_CONNECTED) {
     initFirebase();
   }
 
   // --- Initialize Timing ---
-  lastSensorMs  = millis();
-  lastFirebaseMs = millis();
+  unsigned long nowInit = millis();
+  lastSensorMs        = nowInit;
+  lastFirebaseMs      = nowInit;
+  lastDeviceConfigMs  = 0;   // Read config on first Firebase-ready cycle
+  lastWifiRetryMs     = 0;    // WiFi reconnect throttle (15s when disconnected)
 
   Serial.println("[INIT] Boot complete. Entering main loop.\n");
 }
@@ -451,6 +596,18 @@ void setup() {
 
 void loop() {
   unsigned long now = millis();
+
+  // --- WIFI RECOVERY (non-blocking; 15s throttle to avoid reconnect spam) ---
+  if (WiFi.status() != WL_CONNECTED) {
+    if (now - lastWifiRetryMs >= 15000) {
+      lastWifiRetryMs = now;
+      Serial.println("[WIFI] Connection lost. Attempting reconnect...");
+      WiFi.disconnect();
+      WiFi.reconnect();
+    }
+  } else {
+    lastWifiRetryMs = 0;  // Reset so first disconnect triggers retry after 15s
+  }
 
   // --- SENSOR SAMPLING (every 1 second) ---
   if (now - lastSensorMs >= SENSOR_INTERVAL_MS) {
@@ -481,7 +638,11 @@ void loop() {
     lastFirebaseMs = now;
 
     if (Firebase.ready()) {
-      // Read control commands first, then push status
+      // Device config: read every 30s to reduce RTDB load (7 reads per run); first time (lastDeviceConfigMs==0) run immediately
+      if (lastDeviceConfigMs == 0 || (now - lastDeviceConfigMs >= DEVICE_CONFIG_INTERVAL_MS)) {
+        lastDeviceConfigMs = now;
+        readDeviceConfigFromFirebase();
+      }
       readFirebaseControl();
       pushFirebaseStatus();
     } else {
@@ -489,6 +650,6 @@ void loop() {
     }
   }
 
-  // Small yield to prevent watchdog resets
-  yield();
+  // FreeRTOS: delay(1) yields to scheduler and feeds watchdog (more reliable than yield() on ESP32)
+  delay(1);
 }

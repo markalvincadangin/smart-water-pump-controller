@@ -11,9 +11,12 @@ import {
   AlertTriangle,
   RefreshCw,
   Bell,
+  Settings,
 } from "lucide-react";
 
 import { usePumpData } from "@/lib/usePumpData";
+import DeviceConfigSettings from "@/components/DeviceConfigSettings";
+import { ESP32_STALE_SEC } from "@/lib/constants";
 import NotificationSettings from "@/components/NotificationSettings";
 import TankVisual       from "@/components/TankVisual";
 import ModeControls     from "@/components/ModeControls";
@@ -47,6 +50,7 @@ export default function DashboardPage() {
   // Ticker for "time ago" refresh
   const [tick, setTick] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showDeviceConfig, setShowDeviceConfig] = useState(false);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
@@ -58,6 +62,10 @@ export default function DashboardPage() {
   const running  = snapshot?.status.is_running          ?? false;
   const isError  = snapshot?.status.is_error            ?? false;
   const mode     = snapshot?.control.mode               ?? "AUTO";
+
+  // ESP32 online = we have received a status update within the last STALE_SEC seconds
+  const updatedAt = snapshot?.updatedAt ?? null;
+  const esp32Online = updatedAt != null && (Date.now() - updatedAt) / 1000 < ESP32_STALE_SEC;
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (!authChecked || !authReady) {
@@ -78,7 +86,8 @@ export default function DashboardPage() {
       {/* ── Top status bar ────────────────────────────────────────────────── */}
       <StatusBar
         connected={connected}
-        updatedAt={snapshot?.updatedAt ?? null}
+        esp32Online={esp32Online}
+        updatedAt={updatedAt}
         mode={mode}
       />
 
@@ -102,10 +111,19 @@ export default function DashboardPage() {
                 {authUser?.email ?? ""}
               </span>
               <button
+                onClick={() => setShowDeviceConfig(true)}
+                title="Device config (calibration & thresholds)"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-lg border border-surface-3 text-text-secondary
+                           hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
+                           focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1"
+              >
+                <Settings size={18} />
+              </button>
+              <button
                 onClick={() => setShowNotifications(true)}
                 title="Notification settings"
-                className="p-2 rounded-lg border border-surface-3 text-text-secondary
-                           hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-lg border border-surface-3 text-text-secondary
+                           hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
                            focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1"
               >
                 <Bell size={18} />
@@ -119,7 +137,7 @@ export default function DashboardPage() {
               >
                 Sign out
               </button>
-              {/* Pump running indicator */}
+              {/* Pump running indicator — compact label on small screens */}
               <div className={clsx(
                 "flex items-center gap-2 sm:gap-2.5 px-3 sm:px-4 py-2 rounded-xl border transition-all duration-500 min-h-[44px] sm:min-h-0",
                 running && !isError
@@ -134,12 +152,20 @@ export default function DashboardPage() {
                   <div className="w-2 h-2 rounded-full bg-text-muted" />
                 )}
                 <span className={clsx(
-                  "font-mono text-xs sm:text-sm font-semibold uppercase tracking-wider",
+                  "font-mono text-xs sm:text-sm font-semibold uppercase tracking-wider hidden sm:inline",
                   running && !isError ? "text-accent-green"
                   : isError           ? "text-accent-red"
                   :                     "text-text-secondary"
                 )}>
                   {isError ? "ERROR" : running ? "RUNNING" : "IDLE"}
+                </span>
+                <span className={clsx(
+                  "font-mono text-xs font-semibold uppercase tracking-wider sm:hidden",
+                  running && !isError ? "text-accent-green"
+                  : isError           ? "text-accent-red"
+                  :                     "text-text-secondary"
+                )}>
+                  {isError ? "ERR" : running ? "RUN" : "IDLE"}
                 </span>
               </div>
             </div>
@@ -246,12 +272,12 @@ export default function DashboardPage() {
             ].map(({ label, value }) => (
               <div
                 key={label}
-                className="card p-3 border-surface-3"
+                className="card p-3 border-surface-3 min-w-0"
               >
                 <p className="text-[10px] font-mono text-text-muted uppercase tracking-widest">
                   {label}
                 </p>
-                <p className="text-xs font-mono text-text-secondary mt-1">{value}</p>
+                <p className="text-xs font-mono text-text-secondary mt-1 break-words">{value}</p>
               </div>
             ))}
           </div>
@@ -264,6 +290,9 @@ export default function DashboardPage() {
         userEmail={authUser?.email ?? null}
         onClose={() => setShowNotifications(false)}
       />
+    )}
+    {showDeviceConfig && (
+      <DeviceConfigSettings onClose={() => setShowDeviceConfig(false)} />
     )}
     </AuthGuard>
   );

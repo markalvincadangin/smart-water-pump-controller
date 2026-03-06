@@ -36,7 +36,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export default function HistoryChart({ data }: HistoryChartProps) {
   if (data.length < 2) {
     return (
-      <div className="flex flex-col items-center justify-center h-40 gap-2 text-text-muted text-sm font-mono">
+      <div className="flex flex-col items-center justify-center min-h-[160px] h-[180px] sm:h-[200px] gap-2 text-text-muted text-sm font-mono">
         <p>Waiting for data…</p>
         <div className="w-full max-w-[200px] h-24 rounded-lg border border-surface-4 bg-surface-2/50 animate-pulse" aria-hidden />
       </div>
@@ -47,7 +47,8 @@ export default function HistoryChart({ data }: HistoryChartProps) {
   const tickInterval = Math.max(1, Math.floor(data.length / 6));
 
   return (
-    <ResponsiveContainer width="100%" height={180}>
+    <div className="min-h-[160px] h-[180px] sm:h-[200px] w-full min-w-0">
+      <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 8, right: 4, left: -24, bottom: 0 }}>
         <defs>
           <linearGradient id="levelGrad" x1="0" y1="0" x2="0" y2="1">
@@ -78,7 +79,8 @@ export default function HistoryChart({ data }: HistoryChartProps) {
         <Tooltip content={<CustomTooltip />} />
 
         <Legend
-          wrapperStyle={{ fontSize: 11, fontFamily: "var(--font-jetbrains)", color: "#7A8BA8" }}
+          wrapperStyle={{ fontSize: "clamp(9px, 2.2vw, 11px)", fontFamily: "var(--font-jetbrains)", color: "#7A8BA8" }}
+          iconSize={8}
         />
 
         <Area
@@ -103,5 +105,6 @@ export default function HistoryChart({ data }: HistoryChartProps) {
         />
       </AreaChart>
     </ResponsiveContainer>
+    </div>
   );
 }

@@ -128,6 +128,8 @@ In Arduino IDE Tools menu, set exactly:
 
 ## Sensor Calibration
 
+Calibration and thresholds can be changed **without reflashing** via the dashboard: open the **Device config** (gear icon), edit values, and Save. The ESP32 reads `/pump_system/config/device` every **30 seconds** when online and persists to NVS. When offline it uses the last-saved config. If the database has no config yet, use **Seed defaults (if empty)** in the same modal, or the firmware uses the compiled defaults below.
+
 ### Ultrasonic Tank Level (Section 3 in firmware)
 
 The default calibration is for **Bestank WT660** (660L, sensor on lid):
@@ -140,10 +142,9 @@ The default calibration is for **Bestank WT660** (660L, sensor on lid):
 **How to calibrate for your actual tank:**
 1. Mount the JSN-SR04T probe vertically, pointing down into the tank
 2. With tank **empty**: open Serial Monitor (115200 baud), note the distance reading
-3. Update `TANK_EMPTY_CM` to that value
+3. Set **Tank empty (cm)** in dashboard Device config, or update `TANK_EMPTY_CM` and reflash
 4. Fill the tank **completely**: note the distance reading
-5. Update `TANK_FULL_CM` to that value
-6. Reflash
+5. Set **Tank full (cm)** in dashboard Device config, or update `TANK_FULL_CM` and reflash
 
 > The sensor measures distance to the water surface — closer distance = higher water level.
 > `TANK_FULL_CM` will always be a smaller number than `TANK_EMPTY_CM`.
@@ -219,6 +220,12 @@ The firmware reads `/pump_system/control/mode` from Firebase every 3 seconds.
   control/                       ← Dashboard writes, ESP32 reads every 3s
     mode:        "AUTO"          (string: "AUTO" | "FORCE_ON" | "FORCE_OFF")
     clear_error: false           (bool:  set true to acknowledge dry-run error)
+
+  config/
+    device/                      ← Dashboard writes, ESP32 reads every 30s (optional)
+      tank_empty_cm, tank_full_cm, pump_start_level, pump_stop_level,
+      dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor
+      (If present and valid, ESP32 uses these instead of compiled defaults; saves to NVS only when values change.)
 ```
 
 ---
@@ -267,12 +274,13 @@ Connect at **115200 baud** to see live debug output:
 ## Offline Behaviour
 
 If WiFi is unavailable at boot, the ESP32 continues to:
+- Load device config from **NVS** (last values saved when online), or use compiled defaults if NVS is empty
 - Read sensors every 1 second
-- Execute pump logic based on last known mode (defaults to `AUTO`)
+- Execute pump logic based on last known mode (defaults to `AUTO`) and last-known calibration/thresholds
 - Attempt to push/pull Firebase (will log "Not ready. Skipping sync.")
 
 When WiFi recovers, `Firebase.reconnectWiFi(true)` automatically re-establishes
-the connection and resumes sync without requiring a reboot.
+the connection; on the next sync cycle the ESP32 reads `/pump_system/config/device` again and updates NVS if the database has config.
 
 ---
 

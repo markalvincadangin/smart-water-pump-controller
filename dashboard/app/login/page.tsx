@@ -34,8 +34,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-surface p-4 sm:p-6">
-      <div className="card card-glow-cyan p-6 sm:p-10 flex flex-col items-center gap-6 w-full max-w-[20rem] sm:max-w-xs mx-auto">
+    <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-surface p-4 sm:p-6
+                 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
+                 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+      <div className="card card-glow-cyan p-6 sm:p-10 flex flex-col items-center gap-6 w-full max-w-[20rem] sm:max-w-xs mx-auto min-w-0">
         <div>
           <p className="text-xs font-mono text-text-muted uppercase tracking-widest text-center mb-1">
             Smart Water Pump System

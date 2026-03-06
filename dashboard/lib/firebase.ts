@@ -1,6 +1,6 @@
 // lib/firebase.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Firebase init. Dashboard uses Google Auth; ESP32 uses Anonymous Auth (keep both enabled).
+// Firebase init. Dashboard uses Google Auth; ESP32 uses Email/Password Auth (see firmware secrets.h).
 // Firebase Console → Project Settings → General → Your apps → SDK setup
 // ─────────────────────────────────────────────────────────────────────────────
 
