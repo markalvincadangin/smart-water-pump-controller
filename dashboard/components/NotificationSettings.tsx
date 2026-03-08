@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { Bell, X, Smartphone } from "lucide-react";
 import { useNotificationConfig } from "@/lib/useNotificationConfig";
 import InfoTooltip from "./InfoTooltip";
-import { isPushSupported, requestPushToken, getFcmDeviceId } from "@/lib/fcm";
+import { isPushSupported, requestPushToken, getFcmDeviceId, type PushSupportResult } from "@/lib/fcm";
 import type { NotificationConfig } from "@/lib/types";
 
 interface NotificationSettingsProps {
@@ -30,7 +30,7 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [pushSupported, setPushSupported] = useState<boolean | null>(null);
+  const [pushSupport, setPushSupport] = useState<PushSupportResult | null>(null);
   const [enablingPush, setEnablingPush] = useState(false);
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
   }, [config, userEmail]);
 
   useEffect(() => {
-    isPushSupported().then(setPushSupported);
+    isPushSupported().then(setPushSupport);
   }, []);
 
   async function handleEnablePush() {
@@ -119,10 +119,10 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
             </div>
             <div>
               <h2 className="font-display font-semibold text-text-primary">
-                Notifications
+                Alerts
               </h2>
               <p className="text-xs font-mono text-text-muted">
-                Email alerts for high-risk events
+                Get notified by email or push when something needs attention
               </p>
             </div>
           </div>
@@ -138,8 +138,8 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
         <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-6 py-4">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-            <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Delivery methods</p>
-            <InfoTooltip content="Choose how you want to receive alerts: email, push to your phone/browser (like YouTube or Facebook), or both." />
+            <p className="text-xs font-mono text-text-muted uppercase tracking-widest">How to receive alerts</p>
+            <InfoTooltip content="Choose how you want to receive alerts: by email, push on your phone or browser, or both." />
           </div>
 
           <label className="flex items-center gap-3 cursor-pointer min-h-[44px] py-1">
@@ -149,14 +149,14 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
               onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
               className="w-4 h-4 rounded border-surface-4 bg-surface-2 text-accent-cyan focus:ring-accent-cyan/50"
             />
-            <span className="text-sm font-mono text-text-primary">Enable email notifications</span>
-            <InfoTooltip content="Alerts sent to your email inbox. Requires Resend API in Cloud Functions." side="right" />
+            <span className="text-sm font-mono text-text-primary">Email</span>
+            <InfoTooltip content="Receive alerts in your email inbox." side="right" />
           </label>
 
           <div>
             <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1.5">
               Email address
-              <InfoTooltip content="Where to send email alerts. Use the address linked to your Google account or any other." side="right" />
+              <InfoTooltip content="Where to send alerts. Use any address you check regularly." side="right" />
             </label>
             <input
               type="email"
@@ -169,15 +169,18 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
             />
           </div>
 
-          {/* Push notifications */}
-          {pushSupported && (
-            <div className="pt-2 border-t border-surface-3">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-                <Smartphone size={16} className="text-accent-cyan" />
-                <span className="text-sm font-mono text-text-primary">Push notifications</span>
-                <InfoTooltip content="Alerts sent directly to your phone or browser — like YouTube, Facebook, or Instagram. Works when the app is closed. Install the app (Add to Home Screen) for best experience." maxWidth="300px" />
-              </div>
-              {(() => {
+          {/* Push notifications — always show section; display reason when unsupported */}
+          <div className="pt-2 border-t border-surface-3">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+              <Smartphone size={16} className="text-accent-cyan" />
+              <span className="text-sm font-mono text-text-primary">Push notifications</span>
+              <InfoTooltip content="Get alerts on your phone or browser, even when the app is closed. Add to Home Screen for the best experience." maxWidth="300px" />
+            </div>
+            {pushSupport === null ? (
+              <p className="text-xs font-mono text-text-muted py-1">Checking browser support…</p>
+            ) : !pushSupport.supported ? (
+              <p className="text-xs font-mono text-text-muted py-1">{pushSupport.reason}</p>
+            ) : (() => {
                 const deviceId = getFcmDeviceId();
                 const hasToken = Boolean(form.fcmTokens?.[deviceId]);
                 return hasToken ? (
@@ -207,13 +210,12 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
                   </button>
                 );
               })()}
-            </div>
-          )}
+          </div>
 
           <div className="pt-2 border-t border-surface-3">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-3">
-              <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Alert types</p>
-              <InfoTooltip content="Select which events trigger notifications. All high-risk events are recommended." side="right" />
+              <p className="text-xs font-mono text-text-muted uppercase tracking-widest">When to alert</p>
+              <InfoTooltip content="Pick which events trigger alerts. We recommend keeping critical ones on." side="right" />
             </div>
             <div className="space-y-2.5">
               <label className="flex items-center gap-3 cursor-pointer min-h-[44px] py-1">
@@ -223,8 +225,8 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
                   onChange={(e) => setForm((f) => ({ ...f, dryRunAlert: e.target.checked }))}
                   className="w-4 h-4 rounded border-surface-4 bg-surface-2 text-accent-red focus:ring-accent-red/50"
                 />
-                <span className="text-sm font-mono text-text-primary">Dry-Run lockout</span>
-                <InfoTooltip content="Pump shut down due to no water flow (protects motor from running dry). Critical — recommend keeping on." side="right" />
+                <span className="text-sm font-mono text-text-primary">Pump stopped (no water flow)</span>
+                <InfoTooltip content="Alert when the pump stops because no water is flowing. Protects the pump—we recommend keeping this on." side="right" />
               </label>
               <label className="flex items-center gap-3 cursor-pointer min-h-[44px] py-1">
                 <input
@@ -233,8 +235,8 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
                   onChange={(e) => setForm((f) => ({ ...f, lowLevelAlert: e.target.checked }))}
                   className="w-4 h-4 rounded border-surface-4 bg-surface-2 text-accent-amber focus:ring-accent-amber/50"
                 />
-                <span className="text-sm font-mono text-text-primary">Low tank level warning</span>
-                <InfoTooltip content="Fires when tank drops to or below your threshold %. Helps avoid running out of water." side="right" />
+                <span className="text-sm font-mono text-text-primary">Low water</span>
+                <InfoTooltip content="Alert when water drops to or below your threshold. Helps avoid running out." side="right" />
               </label>
               <div className="pl-7 flex items-center gap-2">
                 <span className="text-xs text-text-muted">Threshold:</span>
@@ -255,8 +257,8 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
                   onChange={(e) => setForm((f) => ({ ...f, pumpStartedAlert: e.target.checked }))}
                   className="w-4 h-4 rounded border-surface-4 bg-surface-2 text-accent-green focus:ring-accent-green/50"
                 />
-                <span className="text-sm font-mono text-text-primary">Pump started</span>
-                <InfoTooltip content="Fires when pump turns ON. Useful to know refill has begun." side="right" />
+                <span className="text-sm font-mono text-text-primary">Pump turned on</span>
+                <InfoTooltip content="Alert when the pump starts. Lets you know refilling has begun." side="right" />
               </label>
               <label className="flex items-center gap-3 cursor-pointer min-h-[44px] py-1">
                 <input
@@ -265,14 +267,14 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
                   onChange={(e) => setForm((f) => ({ ...f, overflowAlert: e.target.checked }))}
                   className="w-4 h-4 rounded border-surface-4 bg-surface-2 text-accent-red focus:ring-accent-red/50"
                 />
-                <span className="text-sm font-mono text-text-primary">Overflow alert</span>
-                <InfoTooltip content="Pump ran longer than max runtime without reaching stop level. May indicate tank overflow or sensor issue." side="right" />
+                <span className="text-sm font-mono text-text-primary">Overflow / run too long</span>
+                <InfoTooltip content="Alert when the pump ran too long without filling. May mean a sensor problem or tank overflow." side="right" />
               </label>
             </div>
           </div>
 
           <p className="text-[10px] font-mono text-text-muted pt-2">
-            Alerts are throttled to once per 15 minutes per type. Email requires Resend API; push requires HTTPS and browser permission.
+            Each alert type is sent at most once every 15 minutes. Email and push need to be set up first.
           </p>
           </div>
 

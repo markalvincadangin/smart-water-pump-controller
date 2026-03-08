@@ -33,8 +33,8 @@ export default function TankVisual({ level, isRunning, isError }: TankVisualProp
 
   return (
     <div className="flex flex-col items-center gap-3 sm:gap-4">
-      {/* Tank container */}
-      <div className="relative w-24 h-40 sm:w-32 sm:h-52">
+      {/* Tank container — responsive sizing */}
+      <div className="relative w-28 h-44 sm:w-32 sm:h-52">
         {/* Tank body */}
         <div className={clsx(
           "absolute inset-0 rounded-b-2xl rounded-t-lg border-2 overflow-hidden",
@@ -91,7 +91,7 @@ export default function TankVisual({ level, isRunning, isError }: TankVisualProp
       {/* Level readout */}
       <div className="text-center">
         <div className={clsx(
-          "text-3xl sm:text-4xl font-display font-bold tabular-nums",
+          "text-2xl sm:text-4xl font-display font-bold tabular-nums",
           isError       ? "text-accent-red"
           : level <= 20 ? "text-accent-amber"
           :               "text-gradient-cyan"

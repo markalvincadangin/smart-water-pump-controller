@@ -26,6 +26,7 @@ import StatCard from "@/components/StatCard";
 import StatusBar from "@/components/StatusBar";
 import AuthGuard from "@/components/AuthGuard";
 import InstallPrompt from "@/components/InstallPrompt";
+import Logo from "@/components/Logo";
 import { signOut } from "@/lib/auth";
 
 export default function DashboardPage() {
@@ -102,17 +103,22 @@ export default function DashboardPage() {
         />
 
         {/* ── Page header ───────────────────────────────────────────────────── */}
-        <header className="px-3 sm:px-6 pt-4 sm:pt-8 pb-4">
+        <header className="px-4 sm:px-6 pt-4 sm:pt-8 pb-4">
           <div className="max-w-6xl mx-auto">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] sm:text-xs font-mono text-text-muted uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-1">
-                  Deep Well Pump · 660L Storage Tank
-                </p>
-                <h1 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-text-primary truncate">
-                  Smart Water Pump{" "}
-                  <span className="text-gradient-cyan">System</span>
-                </h1>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-xl bg-accent-cyan/10 border border-accent-cyan/20">
+                  <Logo size="md" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-xs font-mono text-text-muted uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-0.5 sm:mb-1">
+                    Deep Well Pump · 660L Tank
+                  </p>
+                  <h1 className="font-display text-lg sm:text-2xl md:text-3xl font-bold text-text-primary truncate leading-tight">
+                    Smart Water Pump{" "}
+                    <span className="text-gradient-cyan">System</span>
+                  </h1>
+                </div>
               </div>
 
               {/* User + Sign out + Pump running indicator */}
@@ -122,7 +128,7 @@ export default function DashboardPage() {
                 </span>
                 <button
                   onClick={() => setShowDeviceConfig(true)}
-                  title="Device config (calibration & thresholds)"
+                  title="Device settings"
                   className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-lg border border-surface-3 text-text-secondary
                            hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
                            focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1"
@@ -131,7 +137,7 @@ export default function DashboardPage() {
                 </button>
                 <button
                   onClick={() => setShowNotifications(true)}
-                  title="Notification settings"
+                  title="Alert preferences"
                   className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-lg border border-surface-3 text-text-secondary
                            hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
                            focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1"
@@ -184,7 +190,7 @@ export default function DashboardPage() {
         </header>
 
         {/* ── Main layout ───────────────────────────────────────────────────── */}
-        <main className="flex-1 px-3 sm:px-6 pb-6 sm:pb-8 min-w-0">
+        <main className="flex-1 px-4 sm:px-6 pb-6 sm:pb-8 min-w-0">
           <div className="max-w-6xl mx-auto space-y-3 sm:space-y-4">
 
             {/* Connection error banner */}
@@ -192,16 +198,16 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2 sm:gap-3 p-3 rounded-xl bg-accent-red/10
                             border border-accent-red/30 text-accent-red text-xs sm:text-sm font-mono">
                 <AlertTriangle size={14} className="shrink-0" />
-                <span className="min-w-0 break-words">Connection error — unable to reach pump. {error}</span>
+                <span className="min-w-0 break-words">Can&apos;t connect to the pump. {error}</span>
               </div>
             )}
 
             {/* ── Row 1: Tank + Stats + Controls ─────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
 
               {/* Tank visual */}
               <div className={clsx(
-                "card p-4 sm:p-6 flex flex-col items-center justify-center gap-2",
+                "card p-4 sm:p-6 flex flex-col items-center justify-center gap-2 min-h-[200px] sm:min-h-0",
                 isError ? "card-glow-red"
                   : running ? "card-glow-green"
                     : "card-glow-cyan"
@@ -214,14 +220,14 @@ export default function DashboardPage() {
               </div>
 
               {/* Stats column */}
-              <div className="flex flex-col gap-2 sm:gap-3">
+              <div className="flex flex-col gap-2 sm:gap-3 min-w-0">
                 <StatCard
                   label="Tank Water Level"
                   value={level.toString()}
                   unit="%"
                   Icon={Droplets}
                   color={level <= (config?.pump_start_level ?? 30) ? "amber" : "cyan"}
-                  sub={`Auto start ≤ ${config?.pump_start_level ?? 30}% · stop ≥ ${config?.pump_stop_level ?? 100}%`}
+                  sub={`Pump on at ≤${config?.pump_start_level ?? 30}%, off at ≥${config?.pump_stop_level ?? 100}%`}
                 />
                 <StatCard
                   label="Flow Rate"
@@ -229,7 +235,7 @@ export default function DashboardPage() {
                   unit="LPM"
                   Icon={Wind}
                   color={running && flow < (config?.dry_run_threshold_lpm ?? 0.5) ? "red" : "green"}
-                  sub={running ? (flow < (config?.dry_run_threshold_lpm ?? 0.5) ? "⚠ Low — Dry-Run risk" : "Normal flow") : "Pump idle"}
+                  sub={running ? (flow < (config?.dry_run_threshold_lpm ?? 0.5) ? "⚠ Low flow — pump may stop" : "Normal flow") : "Pump idle"}
                   animate={running}
                 />
                 <StatCard
@@ -274,12 +280,12 @@ export default function DashboardPage() {
             </div>
 
             {/* ── Row 3: System info footer ────────────────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 min-w-0">
               {[
-                { label: "Hardware", value: "ESP32 38-pin" },
-                { label: "Sensors", value: "Ultrasonic · Flow Sensor" },
-                { label: "Safety", value: "Thermal Overload · Dry-Run Protection" },
-                { label: "Cloud", value: "Realtime Sync" },
+                { label: "Controller", value: "ESP32" },
+                { label: "Sensors", value: "Level · Flow" },
+                { label: "Protection", value: "Overload · No-flow shutdown" },
+                { label: "Sync", value: "Real-time" },
               ].map(({ label, value }) => (
                 <div
                   key={label}
