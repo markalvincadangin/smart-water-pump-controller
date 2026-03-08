@@ -186,6 +186,8 @@ npx vercel
 # Add each NEXT_PUBLIC_FIREBASE_* variable when prompted (same as .env.local)
 ```
 
+**Install as app (PWA):** Once deployed over HTTPS, users can add the dashboard to the home screen on mobile (Add to Home Screen / Install app) for an app-like experience.
+
 > 📄 Full detail: `dashboard/README.md`
 
 ---
@@ -215,11 +217,16 @@ For a single, end-to-end deployment guide (Firebase, Functions, Dashboard, ESP32
 
 ## Notifications (Optional)
 
-Email alerts for dry-run lockout, low tank level, pump started, and overflow protection. See `docs/NOTIFICATIONS_SETUP.md`.
+Email and **push notifications** (to phone/browser, like YouTube or Facebook) for dry-run lockout, low tank level, pump started, and overflow protection. See `docs/NOTIFICATIONS_SETUP.md`.
 
 ## Implemented Enhancements
 
-The system includes safety, resilience, and power-saving features. See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for the full list and status.
+The system includes safety, resilience, power-saving, and UX features:
+
+- **Phases 1–5:** Sensor reliability, overflow protection, NVS persistence, scheduled sleep, uptime counter, dynamic dashboard labels
+- **Phase 6:** Settings tooltips (InfoTooltip), push notifications (FCM), installable PWA (Add to Home Screen), Firebase optimization assessment
+
+See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for the full list and status.
 
 ---
 
@@ -252,7 +259,7 @@ The system includes safety, resilience, and power-saving features. See `docs/ENH
       idle_firebase_interval_ms
     notifications_by_user/        ← Per-user notification settings (Dashboard ↔ Cloud Function)
       $uid/
-        enabled, email, dryRunAlert, lowLevelAlert, lowLevelThreshold,
+        enabled, email, fcmTokens, dryRunAlert, lowLevelAlert, lowLevelThreshold,
         pumpStartedAlert, overflowAlert
     notification_last_sent/       ← Functions only (throttling); no client access
 ```
@@ -317,4 +324,4 @@ The system includes safety, resilience, and power-saving features. See `docs/ENH
 ---
 
 *Smart Water Pump Controller — Leon, Iloilo*
-*Documentation v2.4 — aligned with ENHANCEMENT_PLAN Phases 1–5*
+*Documentation v2.5 — aligned with ENHANCEMENT_PLAN Phases 1–6*

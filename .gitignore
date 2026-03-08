@@ -9,6 +9,10 @@ out/
 build/
 dist/
 functions/lib/
+dashboard/tsconfig.tsbuildinfo
+
+# Task/resolution files
+*.resolved
 
 # Environment and secrets
 .env.local

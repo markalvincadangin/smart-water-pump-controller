@@ -63,6 +63,6 @@ Install:     Arduino Library Manager → search "ArduinoJson" by Benoit Blanchon
 # Flash Frequency:  80MHz
 # Flash Mode:       QIO
 # Flash Size:       4MB (32Mb)
-# Partition Scheme: Default 4MB with spiffs
+# Partition Scheme: Huge APP (3MB No OTA/1MB SPIFFS) — required for ~1.25MB firmware
 # PSRAM:            Disabled
 # Port:             (your COM port — check Device Manager on Windows)

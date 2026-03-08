@@ -1,7 +1,7 @@
-# Implementation Verification — ENHANCEMENT_PLAN.md v4
+# Implementation Verification — ENHANCEMENT_PLAN.md v5
 
 **Date:** March 2026  
-**Scope:** Pre-Phase + Phases 1–5 + Dashboard Inconsistencies
+**Scope:** Pre-Phase + Phases 1–6 + Dashboard Inconsistencies
 
 ---
 
@@ -201,6 +201,44 @@ All other parameters match.
 
 ---
 
+## Phase 6 — Dashboard UX, Push Notifications & PWA
+
+### 6A. Firebase Data Optimization
+
+| Item | Expected | Implemented | Status |
+|------|----------|-------------|--------|
+| Optimization doc | Assessment of RTDB usage | `docs/FIREBASE_OPTIMIZATION.md` | ✅ |
+| Long-term suitability | Documented | Current architecture assessed as suitable | ✅ |
+
+### 6B. Dashboard Settings UX
+
+| Item | Expected | Implemented | Status |
+|------|----------|-------------|--------|
+| InfoTooltip component | Hover/tap popover | `dashboard/components/InfoTooltip.tsx` | ✅ |
+| DeviceConfigSettings tooltips | All sections + key fields | Tank Calibration, Pump Thresholds, Safety, Sleep, Advanced | ✅ |
+| NotificationSettings tooltips | Delivery methods, alert types | Yes | ✅ |
+
+### 6C. Push Notifications (FCM)
+
+| Item | Expected | Implemented | Status |
+|------|----------|-------------|--------|
+| FCM token request | "Enable push on this device" | `lib/fcm.ts`, NotificationSettings.tsx | ✅ |
+| Token storage | `fcmTokens` in RTDB | `notifications_by_user/{uid}/fcmTokens/{deviceId}` | ✅ |
+| Cloud Functions push | Send to FCM tokens | `sendPush()` in `functions/src/index.ts` | ✅ |
+| Service worker | Dynamic SW with Firebase config | `app/api/firebase-messaging-sw/route.ts` + rewrite | ✅ |
+| VAPID env | NEXT_PUBLIC_FIREBASE_VAPID_KEY | .env.local.example, DEPLOY_GUIDE | ✅ |
+
+### 6D. Progressive Web App (PWA)
+
+| Item | Expected | Implemented | Status |
+|------|----------|-------------|--------|
+| Manifest | name, icons, theme | `app/manifest.ts` | ✅ |
+| Service worker | next-pwa | @ducanh2912/next-pwa in next.config.js | ✅ |
+| Install prompt | beforeinstallprompt banner | `components/InstallPrompt.tsx` | ✅ |
+| Icons | 72, 192, 512px | `dashboard/public/icons/` | ✅ |
+
+---
+
 ## Gaps / Corrections Needed
 
 ### 1. Cloud Function — overflowAlert ✅ (Fixed)
@@ -221,6 +259,7 @@ All other parameters match.
 | Phase 3 | ✅ | All items implemented |
 | Phase 4 | ✅ | All items implemented |
 | Phase 5 | ✅ | Uptime, dynamic StatCards, dashboard bug fixes |
+| Phase 6 | ✅ | UX tooltips, FCM push, PWA installable app |
 
 ---
 
@@ -230,5 +269,15 @@ All other parameters match.
 |-----------|--------|------|
 | Dashboard TypeScript | ✅ `tsc --noEmit` passes | No type errors |
 | Dashboard Linter | ✅ No errors | ReadLints clean |
-| Dashboard Next.js build | ⚠️ Font fetch timeout | Fails on `fonts.gstatic.com` ETIMEDOUT (network); code compiles |
+| Dashboard Next.js build | ✅ | Build succeeds (Phase 6 additions verified) |
+| Cloud Functions | ✅ `npm run build` passes | Push notifications wired |
 | Firmware (PlatformIO) | — | `pio run` not in PATH; code verified via grep |
+
+---
+
+## Document References
+
+| Topic | File |
+|-------|------|
+| Firebase optimization assessment | `docs/FIREBASE_OPTIMIZATION.md` |
+| Push notifications setup | `docs/NOTIFICATIONS_SETUP.md` (see Push Notifications section) |

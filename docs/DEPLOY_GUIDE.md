@@ -118,6 +118,7 @@ Before starting, confirm:
    ```
    - Confirm in Firebase Console → Functions that `onStatusChange` is deployed and region matches your database (e.g. asia-southeast1).
    - **Alerts sent:** Dry-run lockout, low tank level, pump started, **overflow protection** (max runtime exceeded). Each is configurable in the dashboard bell icon.
+- **Push notifications:** With `NEXT_PUBLIC_FIREBASE_VAPID_KEY` set, users can enable push to phone/browser (like YouTube or Facebook). Cloud Functions sends both email and push when configured.
 
 ---
 
@@ -141,9 +142,10 @@ Before starting, confirm:
    | `NEXT_PUBLIC_FIREBASE_DATABASE_URL` | Realtime Database URL (Phase 1) |
    | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | projectId |
    | `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | storageBucket |
-   | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | messagingSenderId |
-   | `NEXT_PUBLIC_FIREBASE_APP_ID` | appId |
-   | `NEXT_PUBLIC_AUTHORIZED_UIDS` | Optional: comma-separated Firebase UIDs, or leave empty to allow any signed-in user |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | messagingSenderId |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | appId |
+| `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | **Push notifications:** Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair |
+| `NEXT_PUBLIC_AUTHORIZED_UIDS` | Optional: comma-separated Firebase UIDs, or leave empty to allow any signed-in user |
 
 3. **Verify build**
    ```bash
@@ -168,6 +170,9 @@ Before starting, confirm:
 
 6. **Sign-in test**  
    Open the dashboard URL → sign in with Google. If `NEXT_PUBLIC_AUTHORIZED_UIDS` is set, the signed-in user’s UID must be in that list or sign-in may be rejected.
+
+7. **Install as app (PWA)**
+   On mobile, users can add the dashboard to the home screen for an app-like experience. Chrome and Safari show an "Install" or "Add to Home Screen" option. The dashboard is a Progressive Web App (PWA).
 
 ---
 
@@ -303,8 +308,9 @@ cd dashboard && npm run build
 | Hardware wiring | `hardware/wiring_notes.md`, `hardware/enclosure_layout.md` |
 | Firmware calibration, Serial, troubleshooting | `firmware/README.md` |
 | Dashboard setup, env vars | `dashboard/README.md` |
-| Notifications (Resend, testing alerts) | `docs/NOTIFICATIONS_SETUP.md` |
+| Notifications (email, push, testing alerts) | `docs/NOTIFICATIONS_SETUP.md` |
 | Device config from DB | `docs/FIRMWARE_CONFIG_FROM_DATABASE.md` |
+| Firebase RTDB optimization & long-term assessment | `docs/FIREBASE_OPTIMIZATION.md` |
 | Enhancement plan & implementation status | `docs/ENHANCEMENT_PLAN.md`, `docs/IMPLEMENTATION_VERIFICATION.md` |
 
 ---

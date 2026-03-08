@@ -1145,13 +1145,17 @@ void setup() {
   }
 
   // --- Hardware Watchdog (Phase 2) ---
-  // ESP32 Arduino 3.x uses esp_task_wdt_config_t (old API: init(timeout_sec, panic))
+  // ESP32 Arduino 3.x uses esp_task_wdt_config_t; 2.x uses init(sec, panic)
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
   esp_task_wdt_config_t wdt_config = {
     .timeout_ms = (uint32_t)(WDT_TIMEOUT_SEC * 1000),
-    .idle_core_mask = 0,  // Don't monitor idle tasks; we add loop task explicitly
+    .idle_core_mask = 0,
     .trigger_panic = true
   };
   esp_task_wdt_init(&wdt_config);
+#else
+  esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
+#endif
   esp_task_wdt_add(NULL);  // Add current task (loopTask)
   Serial.printf("[INIT] Watchdog timer initialized: %ds timeout.\n", WDT_TIMEOUT_SEC);
 

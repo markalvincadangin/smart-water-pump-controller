@@ -32,6 +32,7 @@ interface PumpStatus {
 interface NotificationConfig {
   enabled?: boolean;
   email?: string;
+  fcmTokens?: Record<string, string>;  // deviceId -> FCM token for push notifications
   dryRunAlert?: boolean;
   lowLevelAlert?: boolean;
   lowLevelThreshold?: number;
@@ -88,6 +89,36 @@ async function sendEmail(
   }
 }
 
+async function sendPush(
+  tokens: string[],
+  title: string,
+  body: string,
+  tag: string
+): Promise<void> {
+  if (tokens.length === 0) return;
+  const messaging = admin.messaging();
+  const base = {
+    notification: { title, body },
+    data: { tag },
+    android: { priority: "high" as const, notification: { channelId: "pump_alerts" } },
+    apns: { payload: { aps: { sound: "default", badge: 1 } } },
+  };
+  try {
+    if (tokens.length === 1) {
+      await messaging.send({ ...base, token: tokens[0] });
+    } else {
+      const result = await messaging.sendEachForMulticast({ ...base, tokens });
+      if (result.failureCount > 0) {
+        result.responses.forEach((r, i) => {
+          if (!r.success) logger.warn("FCM send failed for token", i, r.error?.message);
+        });
+      }
+    }
+  } catch (err) {
+    logger.error("Push send failed:", err);
+  }
+}
+
 async function getActiveNotificationConfigs(): Promise<Array<{ uid: string; config: NotificationConfig }>> {
   const snap = await db.ref("pump_system/config/notifications_by_user").get();
   const all = snap.val() as Record<string, NotificationConfig> | null;
@@ -95,7 +126,12 @@ async function getActiveNotificationConfigs(): Promise<Array<{ uid: string; conf
 
   return Object.entries(all)
     .map(([uid, cfg]) => ({ uid, config: cfg || {} }))
-    .filter(({ config }) => config.enabled && !!config.email);
+    .filter(({ config }) => {
+      if (!config.enabled) return false;
+      const hasEmail = !!config.email;
+      const hasPush = config.fcmTokens && Object.keys(config.fcmTokens).length > 0;
+      return hasEmail || hasPush;
+    });
 }
 
 export const onStatusChange = onValueWritten(
@@ -119,89 +155,98 @@ export const onStatusChange = onValueWritten(
       return;
     }
 
+    const pushTokens = (config: NotificationConfig): string[] =>
+      config.fcmTokens ? Object.values(config.fcmTokens).filter(Boolean) : [];
+
     for (const { uid, config } of configs) {
       const threshold = config.lowLevelThreshold ?? 20;
+      const tokens = pushTokens(config);
 
       // 1. Dry-Run Lockout (highest priority)
       if (after.is_error && (config.dryRunAlert ?? true)) {
         if (await canSend(uid, "dryRun")) {
-          const sent = await sendEmail(
-            apiKey,
-            config.email as string,
-            "⚠ Smart Water Pump — Dry-Run Lockout Active",
-            `
-            <h2>Dry-Run Protection Triggered</h2>
-            <p>The pump has shut down due to no flow detected for 30 seconds. This protects the motor from running dry.</p>
-            <ul>
-              <li><strong>Flow:</strong> ${after.flow_rate_lpm.toFixed(1)} LPM</li>
-              <li><strong>Tank level:</strong> ${after.water_level_percent}%</li>
-            </ul>
-            <p><strong>Action:</strong> Check the pump and water source. Acknowledge the error in the dashboard to resume.</p>
-          `
-          );
-          if (sent) await recordSent(uid, "dryRun");
+          const body = `No flow detected. Tank: ${after.water_level_percent}%. Check pump and water source.`;
+          let delivered = false;
+          if (config.email && apiKey) {
+            const sent = await sendEmail(
+              apiKey,
+              config.email,
+              "⚠ Smart Water Pump — Dry-Run Lockout Active",
+              `<h2>Dry-Run Protection Triggered</h2><p>The pump has shut down due to no flow. Flow: ${after.flow_rate_lpm.toFixed(1)} LPM, Tank: ${after.water_level_percent}%.</p><p><strong>Action:</strong> Check the pump and water source. Acknowledge in the dashboard to resume.</p>`
+            );
+            if (sent) delivered = true;
+          }
+          if (tokens.length > 0) {
+            await sendPush(tokens, "⚠ Dry-Run Lockout", body, "dryRun");
+            delivered = true;
+          }
+          if (delivered) await recordSent(uid, "dryRun");
         }
       }
 
       // 1b. Overflow (max runtime exceeded) — Phase 2
       if (after.is_overflow_error && (config.overflowAlert ?? true)) {
         if (await canSend(uid, "overflow")) {
-          const sent = await sendEmail(
-            apiKey,
-            config.email as string,
-            "⚠ Smart Water Pump — Overflow Protection Triggered",
-            `
-            <h2>Max Runtime / Overflow Protection Triggered</h2>
-            <p>The pump has shut down because it ran longer than the configured max runtime without reaching stop level. This may indicate tank overflow, sensor failure, or a stuck fill.</p>
-            <ul>
-              <li><strong>Tank level:</strong> ${after.water_level_percent}%</li>
-              <li><strong>Flow:</strong> ${after.flow_rate_lpm.toFixed(1)} LPM</li>
-            </ul>
-            <p><strong>Action:</strong> Check the tank and ultrasonic sensor. Acknowledge the error in the dashboard to resume.</p>
-          `
-          );
-          if (sent) await recordSent(uid, "overflow");
+          const body = `Max runtime exceeded. Tank: ${after.water_level_percent}%. Check tank and sensor.`;
+          let delivered = false;
+          if (config.email && apiKey) {
+            const sent = await sendEmail(
+              apiKey,
+              config.email,
+              "⚠ Smart Water Pump — Overflow Protection Triggered",
+              `<h2>Max Runtime / Overflow Protection Triggered</h2><p>The pump has shut down. Tank: ${after.water_level_percent}%, Flow: ${after.flow_rate_lpm.toFixed(1)} LPM.</p><p><strong>Action:</strong> Check the tank and ultrasonic sensor. Acknowledge in the dashboard to resume.</p>`
+            );
+            if (sent) delivered = true;
+          }
+          if (tokens.length > 0) {
+            await sendPush(tokens, "⚠ Overflow Protection", body, "overflow");
+            delivered = true;
+          }
+          if (delivered) await recordSent(uid, "overflow");
         }
       }
 
       // 2. Low tank level warning
       if (after.water_level_percent <= threshold && (config.lowLevelAlert ?? true)) {
         if (await canSend(uid, "lowLevel")) {
-          const sent = await sendEmail(
-            apiKey,
-            config.email as string,
-            `⚠ Smart Water Pump — Low Tank Level (${after.water_level_percent}%)`,
-            `
-            <h2>Low Tank Level Warning</h2>
-            <p>Water level is at <strong>${after.water_level_percent}%</strong> (threshold: ${threshold}%).</p>
-            <ul>
-              <li><strong>Pump:</strong> ${after.is_running ? "Running" : "Stopped"}</li>
-              <li><strong>Flow:</strong> ${after.flow_rate_lpm.toFixed(1)} LPM</li>
-            </ul>
-            <p>Monitor the system. In AUTO mode, the pump starts when level drops to 30%.</p>
-          `
-          );
-          if (sent) await recordSent(uid, "lowLevel");
+          const body = `Water at ${after.water_level_percent}% (threshold: ${threshold}%).`;
+          let delivered = false;
+          if (config.email && apiKey) {
+            const sent = await sendEmail(
+              apiKey,
+              config.email,
+              `⚠ Smart Water Pump — Low Tank Level (${after.water_level_percent}%)`,
+              `<h2>Low Tank Level Warning</h2><p>Water level is at <strong>${after.water_level_percent}%</strong>. Pump: ${after.is_running ? "Running" : "Stopped"}, Flow: ${after.flow_rate_lpm.toFixed(1)} LPM.</p>`
+            );
+            if (sent) delivered = true;
+          }
+          if (tokens.length > 0) {
+            await sendPush(tokens, `⚠ Low Tank (${after.water_level_percent}%)`, body, "lowLevel");
+            delivered = true;
+          }
+          if (delivered) await recordSent(uid, "lowLevel");
         }
       }
 
       // 3. Pump just started (transition from off → on)
       if ((config.pumpStartedAlert ?? true) && after.is_running && before && !before.is_running) {
         if (await canSend(uid, "pumpStarted")) {
-          const sent = await sendEmail(
-            apiKey,
-            config.email as string,
-            "▶ Smart Water Pump — Pump Started",
-            `
-            <h2>Pump Started</h2>
-            <p>The pump is now running.</p>
-            <ul>
-              <li><strong>Tank level:</strong> ${after.water_level_percent}%</li>
-              <li><strong>Flow:</strong> ${after.flow_rate_lpm.toFixed(1)} LPM</li>
-            </ul>
-          `
-          );
-          if (sent) await recordSent(uid, "pumpStarted");
+          const body = `Tank: ${after.water_level_percent}%, Flow: ${after.flow_rate_lpm.toFixed(1)} LPM`;
+          let delivered = false;
+          if (config.email && apiKey) {
+            const sent = await sendEmail(
+              apiKey,
+              config.email,
+              "▶ Smart Water Pump — Pump Started",
+              `<h2>Pump Started</h2><p>The pump is now running. Tank: ${after.water_level_percent}%, Flow: ${after.flow_rate_lpm.toFixed(1)} LPM.</p>`
+            );
+            if (sent) delivered = true;
+          }
+          if (tokens.length > 0) {
+            await sendPush(tokens, "▶ Pump Started", body, "pumpStarted");
+            delivered = true;
+          }
+          if (delivered) await recordSent(uid, "pumpStarted");
         }
       }
     }
