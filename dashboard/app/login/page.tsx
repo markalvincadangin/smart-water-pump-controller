@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { signInWithGoogle } from "@/lib/auth";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import Logo from "@/components/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,14 +38,19 @@ export default function LoginPage() {
     <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-surface p-4 sm:p-6
                  pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
                  pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
-      <div className="card card-glow-cyan p-6 sm:p-10 flex flex-col items-center gap-6 w-full max-w-[20rem] sm:max-w-xs mx-auto min-w-0">
-        <div>
-          <p className="text-xs font-mono text-text-muted uppercase tracking-widest text-center mb-1">
-            Smart Water Pump System
-          </p>
-          <h1 className="font-display text-2xl font-bold text-text-primary text-center">
-            Control Dashboard
-          </h1>
+      <div className="card card-glow-cyan p-6 sm:p-10 flex flex-col items-center gap-6 w-full max-w-[22rem] sm:max-w-xs mx-auto min-w-0">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center rounded-2xl bg-accent-cyan/10 border border-accent-cyan/20">
+            <Logo size="lg" />
+          </div>
+          <div>
+            <p className="text-xs font-mono text-text-muted uppercase tracking-widest text-center mb-1">
+              Smart Water Pump System
+            </p>
+            <h1 className="font-display text-xl sm:text-2xl font-bold text-text-primary text-center">
+              Control Dashboard
+            </h1>
+          </div>
         </div>
 
         <button

@@ -12,6 +12,11 @@
     box-sizing: border-box;
   }
 
+  /* Remove tap highlight on mobile for cleaner UX */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   html {
     /* Prevent horizontal scroll on mobile */
     overflow-x: hidden;

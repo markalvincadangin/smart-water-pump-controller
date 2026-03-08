@@ -20,15 +20,23 @@ export function getFcmDeviceId(): string {
   return id;
 }
 
+export type PushSupportResult = { supported: true } | { supported: false; reason: string };
+
 /** Check if FCM is supported (HTTPS, service worker, Push API) */
-export async function isPushSupported(): Promise<boolean> {
-  if (typeof window === "undefined") return false;
+export async function isPushSupported(): Promise<PushSupportResult> {
+  if (typeof window === "undefined") return { supported: false, reason: "Not in browser" };
+  if (!VAPID_KEY) return { supported: false, reason: "NEXT_PUBLIC_FIREBASE_VAPID_KEY not set. Add it in .env.local and restart the dev server." };
   try {
     const { isSupported } = await import("firebase/messaging");
     const supported = await isSupported();
-    return supported && !!VAPID_KEY;
-  } catch {
-    return false;
+    if (supported) return { supported: true };
+    return {
+      supported: false,
+      reason: "Browser lacks push support (needs HTTPS, Chrome/Edge/Firefox, and service worker). Safari has limited support.",
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { supported: false, reason: msg };
   }
 }
 
