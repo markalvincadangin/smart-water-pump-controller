@@ -32,7 +32,14 @@ export default function DeviceConfigSettings({ onClose }: DeviceConfigSettingsPr
     if (form.pump_stop_level < 0 || form.pump_stop_level > 100) return "Pump stop: 0–100%.";
     if (form.dry_run_threshold_lpm < 0.1 || form.dry_run_threshold_lpm > 10) return "Dry-run threshold: 0.1–10 LPM.";
     if (form.dry_run_timeout_sec < 10 || form.dry_run_timeout_sec > 300) return "Dry-run timeout: 10–300 sec.";
-    if (form.flow_calibration_factor < 0.1 || form.flow_calibration_factor > 10) return "Flow factor: 0.1–10.";
+    if (form.flow_calibration_factor < 0.1 || form.flow_calibration_factor > 20) return "Flow factor: 0.1–20.";
+    if (form.max_pump_runtime_min < 30 || form.max_pump_runtime_min > 480) return "Max runtime: 30–480 minutes.";
+    if (form.sleep_start_hour < 0 || form.sleep_start_hour > 23) return "Sleep start: 0–23.";
+    if (form.sleep_end_hour < 0 || form.sleep_end_hour > 23) return "Sleep end: 0–23.";
+    if (form.sleep_emergency_level < 0 || form.sleep_emergency_level > 100) return "Emergency level: 0–100%.";
+    if (form.sensor_failure_threshold < 3 || form.sensor_failure_threshold > 20) return "Sensor failure threshold: 3–20.";
+    if (form.idle_sensor_interval_ms < 5000 || form.idle_sensor_interval_ms > 60000) return "Idle sensor interval: 5000–60000 ms.";
+    if (form.idle_firebase_interval_ms < 10000 || form.idle_firebase_interval_ms > 120000) return "Idle Firebase interval: 10000–120000 ms.";
     return null;
   }
 
@@ -104,48 +111,130 @@ export default function DeviceConfigSettings({ onClose }: DeviceConfigSettingsPr
         </div>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Tank empty (cm)</label>
-              <input type="number" min={5} max={200} value={form.tank_empty_cm} onChange={(e) => setForm((f) => ({ ...f, tank_empty_cm: parseInt(e.target.value, 10) || 0 }))}
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Tank full (cm)</label>
-              <input type="number" min={1} max={199} value={form.tank_full_cm} onChange={(e) => setForm((f) => ({ ...f, tank_full_cm: parseInt(e.target.value, 10) || 0 }))}
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Pump start (%)</label>
-              <input type="number" min={0} max={100} value={form.pump_start_level} onChange={(e) => setForm((f) => ({ ...f, pump_start_level: parseInt(e.target.value, 10) || 0 }))}
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Pump stop (%)</label>
-              <input type="number" min={0} max={100} value={form.pump_stop_level} onChange={(e) => setForm((f) => ({ ...f, pump_stop_level: parseInt(e.target.value, 10) || 0 }))}
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Dry-run threshold (LPM)</label>
-              <input type="number" step={0.1} min={0.1} max={10} value={form.dry_run_threshold_lpm} onChange={(e) => setForm((f) => ({ ...f, dry_run_threshold_lpm: parseFloat(e.target.value) || 0 }))}
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Dry-run timeout (sec)</label>
-              <input type="number" min={10} max={300} value={form.dry_run_timeout_sec} onChange={(e) => setForm((f) => ({ ...f, dry_run_timeout_sec: parseInt(e.target.value, 10) || 0 }))}
-                className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-            </div>
-          </div>
+          {/* Tank Calibration */}
           <div>
-            <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Flow calibration factor</label>
-            <input type="number" step={0.1} min={0.1} max={10} value={form.flow_calibration_factor} onChange={(e) => setForm((f) => ({ ...f, flow_calibration_factor: parseFloat(e.target.value) || 0 }))}
-              className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+            <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">Tank Calibration</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Tank empty (cm)</label>
+                <input type="number" min={5} max={200} value={form.tank_empty_cm} onChange={(e) => setForm((f) => ({ ...f, tank_empty_cm: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Tank full (cm)</label>
+                <input type="number" min={1} max={199} value={form.tank_full_cm} onChange={(e) => setForm((f) => ({ ...f, tank_full_cm: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+              </div>
+            </div>
           </div>
-          <p className="text-[10px] font-mono text-text-muted">ESP32 reads this every 3s when online. When offline it uses last-saved values from NVS. No reflash needed.</p>
+          {/* Pump Thresholds */}
+          <div>
+            <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">Pump Thresholds</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Start (%)</label>
+                <input type="number" min={0} max={100} value={form.pump_start_level} onChange={(e) => setForm((f) => ({ ...f, pump_start_level: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Stop (%)</label>
+                <input type="number" min={0} max={100} value={form.pump_stop_level} onChange={(e) => setForm((f) => ({ ...f, pump_stop_level: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Max runtime (min)</label>
+                <input type="number" min={30} max={480} value={form.max_pump_runtime_min} onChange={(e) => setForm((f) => ({ ...f, max_pump_runtime_min: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                <p className="text-[9px] font-mono text-text-muted mt-0.5">Overflow protection</p>
+              </div>
+            </div>
+          </div>
+          {/* Safety */}
+          <div>
+            <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">Safety</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Dry-run threshold (LPM)</label>
+                <input type="number" step={0.1} min={0.1} max={10} value={form.dry_run_threshold_lpm} onChange={(e) => setForm((f) => ({ ...f, dry_run_threshold_lpm: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Dry-run timeout (sec)</label>
+                <input type="number" min={10} max={300} value={form.dry_run_timeout_sec} onChange={(e) => setForm((f) => ({ ...f, dry_run_timeout_sec: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Flow calibration factor</label>
+                <input type="number" step={0.1} min={0.1} max={20} value={form.flow_calibration_factor} onChange={(e) => setForm((f) => ({ ...f, flow_calibration_factor: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                <p className="text-[9px] font-mono text-text-muted mt-0.5">YF-G1: 7.5 or 4.8. Verify with bucket test.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Sensor failure threshold</label>
+                <input type="number" min={3} max={20} value={form.sensor_failure_threshold} onChange={(e) => setForm((f) => ({ ...f, sensor_failure_threshold: parseInt(e.target.value, 10) || 5 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                <p className="text-[9px] font-mono text-text-muted mt-0.5">Consecutive ultrasonic timeouts before error</p>
+              </div>
+            </div>
+          </div>
+          {/* Sleep Schedule */}
+          <div className="border-t border-surface-3 pt-4">
+            <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">Sleep Schedule</p>
+            <div className="flex items-center gap-2 mb-2">
+              <input type="checkbox" id="sleep_enabled" checked={form.sleep_enabled}
+                onChange={(e) => setForm((f) => ({ ...f, sleep_enabled: e.target.checked }))}
+                className="w-4 h-4 rounded border-surface-4 text-accent-cyan focus:ring-accent-cyan/50" />
+              <label htmlFor="sleep_enabled" className="text-sm font-mono text-text-secondary">Enable sleep mode</label>
+            </div>
+            <p className="text-[9px] font-mono text-text-muted mb-2">During sleep: AUTO suppressed, {Math.round((form.idle_sensor_interval_ms ?? 10000) / 1000)}s poll. FORCE_ON and emergency override still work.</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Start (hour)</label>
+                <select value={form.sleep_start_hour} onChange={(e) => setForm((f) => ({ ...f, sleep_start_hour: parseInt(e.target.value, 10) }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm">
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">End (hour)</label>
+                <select value={form.sleep_end_hour} onChange={(e) => setForm((f) => ({ ...f, sleep_end_hour: parseInt(e.target.value, 10) }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm">
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Emergency %</label>
+                <input type="number" min={0} max={100} value={form.sleep_emergency_level}
+                  onChange={(e) => setForm((f) => ({ ...f, sleep_emergency_level: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                <p className="text-[9px] font-mono text-text-muted mt-0.5">Bypass sleep if level ≤ this %</p>
+              </div>
+            </div>
+          </div>
+          {/* Advanced */}
+          <div className="border-t border-surface-3 pt-4">
+            <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">Advanced</p>
+            <p className="text-[9px] font-mono text-text-muted mb-2">Slow-poll intervals when tank ≥90% and pump OFF for 5 min.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Idle sensor interval (ms)</label>
+                <input type="number" min={5000} max={60000} step={1000} value={form.idle_sensor_interval_ms}
+                  onChange={(e) => setForm((f) => ({ ...f, idle_sensor_interval_ms: parseInt(e.target.value, 10) || 10000 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Idle Firebase interval (ms)</label>
+                <input type="number" min={10000} max={120000} step={1000} value={form.idle_firebase_interval_ms}
+                  onChange={(e) => setForm((f) => ({ ...f, idle_firebase_interval_ms: parseInt(e.target.value, 10) || 30000 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] font-mono text-text-muted">ESP32 reads this every 30s when online. Offline: last-saved NVS values. No reflash needed.</p>
         </div>
 
         {saveError && (

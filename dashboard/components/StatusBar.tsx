@@ -2,16 +2,22 @@
 "use client";
 
 import clsx from "clsx";
-import { Wifi, WifiOff, Clock } from "lucide-react";
+import { Wifi, WifiOff, Clock, AlertTriangle } from "lucide-react";
 
 interface StatusBarProps {
   connected: boolean;
   esp32Online: boolean;
   updatedAt: number | null;
-  mode:      string;
+  mode: string;
+  isSensorError?: boolean;
+  isOverflowError?: boolean;
+  isSleeping?: boolean;  // Phase 3: scheduled sleep active
+  wifiRssi?: number;
+  bootReason?: string;
+  uptimeMinutes?: number; // Phase 5: Uptime
 }
 
-export default function StatusBar({ connected, esp32Online, updatedAt, mode }: StatusBarProps) {
+export default function StatusBar({ connected, esp32Online, updatedAt, mode, isSensorError, isOverflowError, isSleeping, wifiRssi, bootReason, uptimeMinutes }: StatusBarProps) {
   const timeAgo = updatedAt
     ? Math.round((Date.now() - updatedAt) / 1000)
     : null;
@@ -31,7 +37,29 @@ export default function StatusBar({ connected, esp32Online, updatedAt, mode }: S
           <>
             <div className="dot-live" />
             <Wifi size={12} className="sm:w-[13px] sm:h-[13px] text-accent-green" />
-            <span className="text-[10px] sm:text-xs font-mono text-accent-green">ESP32 online</span>
+            <span className="text-[10px] sm:text-xs font-mono text-accent-green"
+              title={bootReason ? `Boot: ${bootReason}` : undefined}>
+              ESP32 online
+            </span>
+            {uptimeMinutes !== undefined && (
+              <span className="text-[9px] font-mono text-text-muted ml-0.5 sm:ml-1 hidden sm:inline"
+                title="Uptime">
+                up {uptimeMinutes >= 1440
+                  ? `${Math.floor(uptimeMinutes / 1440)}d ${Math.floor((uptimeMinutes % 1440) / 60)}h`
+                  : uptimeMinutes >= 60
+                    ? `${Math.floor(uptimeMinutes / 60)}h ${uptimeMinutes % 60}m`
+                    : `${uptimeMinutes}m`}
+              </span>
+            )}
+            {wifiRssi !== undefined && wifiRssi !== 0 && (
+              <span className={clsx(
+                "text-[9px] font-mono ml-1 hidden sm:inline",
+                wifiRssi >= -60 ? "text-accent-green" :
+                  wifiRssi >= -75 ? "text-accent-amber" : "text-accent-red"
+              )}>
+                {wifiRssi}dBm
+              </span>
+            )}
           </>
         ) : (
           <>
@@ -68,12 +96,30 @@ export default function StatusBar({ connected, esp32Online, updatedAt, mode }: S
         </span>
         <span className={clsx(
           "badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0",
-          mode === "AUTO"      && "bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20",
-          mode === "FORCE_ON"  && "bg-accent-green/10 text-accent-green border border-accent-green/20",
+          mode === "AUTO" && "bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20",
+          mode === "FORCE_ON" && "bg-accent-green/10 text-accent-green border border-accent-green/20",
           mode === "FORCE_OFF" && "bg-accent-red/10 text-accent-red border border-accent-red/20"
         )}>
           {mode}
         </span>
+        {isSensorError && (
+          <span className="badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0 bg-accent-amber/10 text-accent-amber border border-accent-amber/20 flex items-center gap-0.5">
+            <AlertTriangle size={9} />
+            <span className="hidden sm:inline">SENSOR</span>
+          </span>
+        )}
+        {isOverflowError && (
+          <span className="badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0 bg-accent-red/10 text-accent-red border border-accent-red/20 flex items-center gap-0.5">
+            <AlertTriangle size={9} />
+            <span className="hidden sm:inline">OVERFLOW</span>
+          </span>
+        )}
+        {isSleeping && (
+          <span className="badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0 bg-surface-3 text-text-muted border border-surface-4 flex items-center gap-0.5">
+            <span aria-hidden>😴</span>
+            <span className="hidden sm:inline">Sleep</span>
+          </span>
+        )}
       </div>
     </div>
   );

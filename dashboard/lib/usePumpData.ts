@@ -2,37 +2,42 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ref, onValue, set, off }                   from "firebase/database";
-import { onAuthStateChanged }                        from "firebase/auth";
-import { db, auth }                                 from "./firebase";
+import { ref, onValue, set, off } from "firebase/database";
+import { onAuthStateChanged } from "firebase/auth";
+import { db, auth } from "./firebase";
 import type { PumpStatus, PumpControl, PumpSnapshot, HistoryEntry } from "./types";
 
-const STATUS_PATH  = "/pump_system/status";
+const STATUS_PATH = "/pump_system/status";
 const CONTROL_PATH = "/pump_system/control";
-const MAX_HISTORY  = 60; // Keep last 60 data points (~3 min at 3s intervals)
+const MAX_HISTORY = 60; // Keep last 60 data points (~3 min at 3s intervals)
 
 const DEFAULT_STATUS: PumpStatus = {
   water_level_percent: 0,
-  is_running:          false,
-  flow_rate_lpm:       0,
-  is_error:            false,
+  is_running: false,
+  flow_rate_lpm: 0,
+  is_error: false,
+  is_sensor_error: false,
+  is_overflow_error: false,
+  wifi_rssi: 0,
+  last_boot_reason: "",
+  uptime_minutes: 0,
 };
 
 const DEFAULT_CONTROL: PumpControl = {
-  mode:        "AUTO",
+  mode: "AUTO",
   clear_error: false,
 };
 
 export function usePumpData() {
-  const [snapshot,    setSnapshot]    = useState<PumpSnapshot | null>(null);
-  const [history,     setHistory]     = useState<HistoryEntry[]>([]);
-  const [connected,   setConnected]   = useState(false);
+  const [snapshot, setSnapshot] = useState<PumpSnapshot | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [connected, setConnected] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
-  const [authUser,    setAuthUser]    = useState<{ uid: string; email: string | null } | null>(null);
-  const [error,       setError]       = useState<string | null>(null);
+  const [authUser, setAuthUser] = useState<{ uid: string; email: string | null } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Keep refs so callbacks don't close over stale state
-  const statusRef  = useRef<PumpStatus>(DEFAULT_STATUS);
+  const statusRef = useRef<PumpStatus>(DEFAULT_STATUS);
   const controlRef = useRef<PumpControl>(DEFAULT_CONTROL);
 
   // authReady = Firebase auth has been checked AND we have a signed-in user
@@ -51,7 +56,7 @@ export function usePumpData() {
   useEffect(() => {
     if (!authReady) return;
 
-    const statusDbRef  = ref(db, STATUS_PATH);
+    const statusDbRef = ref(db, STATUS_PATH);
     const controlDbRef = ref(db, CONTROL_PATH);
 
     // Listen to /pump_system/status
@@ -71,17 +76,17 @@ export function usePumpData() {
             const next = [
               ...prev,
               {
-                time:  timeLabel,
+                time: timeLabel,
                 level: data.water_level_percent,
-                flow:  parseFloat(data.flow_rate_lpm.toFixed(2)),
+                flow: parseFloat(data.flow_rate_lpm.toFixed(2)),
               },
             ];
             return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
           });
 
           setSnapshot((prev) => ({
-            status:    data,
-            control:   controlRef.current,
+            status: data,
+            control: controlRef.current,
             updatedAt: Date.now(),
           }));
         }

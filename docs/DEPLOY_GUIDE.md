@@ -117,6 +117,7 @@ Before starting, confirm:
    firebase deploy --only functions
    ```
    - Confirm in Firebase Console → Functions that `onStatusChange` is deployed and region matches your database (e.g. asia-southeast1).
+   - **Alerts sent:** Dry-run lockout, low tank level, pump started, **overflow protection** (max runtime exceeded). Each is configurable in the dashboard bell icon.
 
 ---
 
@@ -207,9 +208,11 @@ Before starting, confirm:
    | Flash Frequency | 80MHz |
    | Flash Mode | QIO |
    | Flash Size | 4MB (32Mb) |
-   | Partition Scheme | Default 4MB with spiffs |
+   | Partition Scheme | **Huge APP (3MB No OTA/1MB SPIFFS)** |
    | PSRAM | Disabled |
    | Port | Your ESP32 COM port |
+
+   > **Partition scheme:** The firmware is ~1.25MB. The default scheme uses ~95% of the app partition, so use **Huge APP** to avoid compile/flash overflows and leave headroom for future changes. SPIFFS is unused (config is in NVS); 1MB SPIFFS is harmless.
 
 ### 6.3 Open, verify, upload
 
@@ -246,10 +249,11 @@ Use this checklist after everything is deployed.
 - [ ] Click **gear icon** (Device config).
 - [ ] **Seed defaults (if empty)** → **Save**.
 - [ ] When ESP32 is online, it picks up config within ~30 seconds (check Serial or next status update).
+- [ ] Verify StatCard labels (e.g. "Auto start ≤ 30% · stop ≥ 100%") update immediately after changing thresholds and saving.
 
 ### Notifications
 
-- [ ] Click **bell icon** → enable notifications, set your email, choose alert types → **Save**.
+- [ ] Click **bell icon** → enable notifications, set your email, choose alert types (dry-run, low level, pump started, **overflow**) → **Save**.
 - [ ] Trigger a test (see `docs/NOTIFICATIONS_SETUP.md`): e.g. in Firebase Console set `pump_system/status/is_running` to `true` (after setting to `false` first) for “Pump started” email.
 - [ ] Confirm email received and Resend dashboard shows delivery.
 
@@ -257,6 +261,7 @@ Use this checklist after everything is deployed.
 
 - [ ] Change mode (AUTO / FORCE_ON / FORCE_OFF) from dashboard.
 - [ ] Confirm ESP32 responds (Serial Monitor and/or relay state).
+- [ ] StatusBar shows **ESP32 online**, uptime (e.g. "up 2h 15m"), WiFi RSSI when connected.
 
 ### Pre-energization (before 220V)
 
@@ -299,8 +304,8 @@ cd dashboard && npm run build
 | Firmware calibration, Serial, troubleshooting | `firmware/README.md` |
 | Dashboard setup, env vars | `dashboard/README.md` |
 | Notifications (Resend, testing alerts) | `docs/NOTIFICATIONS_SETUP.md` |
-| Short deploy checklist | `docs/DEPLOY_CHECKLIST.md` |
 | Device config from DB | `docs/FIRMWARE_CONFIG_FROM_DATABASE.md` |
+| Enhancement plan & implementation status | `docs/ENHANCEMENT_PLAN.md`, `docs/IMPLEMENTATION_VERIFICATION.md` |
 
 ---
 

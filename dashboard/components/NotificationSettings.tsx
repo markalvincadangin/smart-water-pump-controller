@@ -21,6 +21,7 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
     lowLevelAlert: true,
     lowLevelThreshold: 20,
     pumpStartedAlert: true,
+    overflowAlert: true,
   });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -163,6 +164,15 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
                   className="w-4 h-4 rounded border-surface-4 bg-surface-2 text-accent-green focus:ring-accent-green/50"
                 />
                 <span className="text-sm font-mono text-text-primary">Pump started</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.overflowAlert}
+                  onChange={(e) => setForm((f) => ({ ...f, overflowAlert: e.target.checked }))}
+                  className="w-4 h-4 rounded border-surface-4 bg-surface-2 text-accent-red focus:ring-accent-red/50"
+                />
+                <span className="text-sm font-mono text-text-primary">Overflow alert (max runtime exceeded)</span>
               </label>
             </div>
           </div>

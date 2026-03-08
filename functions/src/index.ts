@@ -26,6 +26,7 @@ interface PumpStatus {
   is_running: boolean;
   flow_rate_lpm: number;
   is_error: boolean;
+  is_overflow_error?: boolean;  // Phase 2: max runtime exceeded
 }
 
 interface NotificationConfig {
@@ -35,12 +36,14 @@ interface NotificationConfig {
   lowLevelAlert?: boolean;
   lowLevelThreshold?: number;
   pumpStartedAlert?: boolean;
+  overflowAlert?: boolean;  // Phase 2: max runtime overflow
 }
 
 interface LastSent {
   dryRun?: number;
   lowLevel?: number;
   pumpStarted?: number;
+  overflow?: number;
 }
 
 async function canSend(uid: string, type: keyof LastSent): Promise<boolean> {
@@ -137,6 +140,27 @@ export const onStatusChange = onValueWritten(
           `
           );
           if (sent) await recordSent(uid, "dryRun");
+        }
+      }
+
+      // 1b. Overflow (max runtime exceeded) — Phase 2
+      if (after.is_overflow_error && (config.overflowAlert ?? true)) {
+        if (await canSend(uid, "overflow")) {
+          const sent = await sendEmail(
+            apiKey,
+            config.email as string,
+            "⚠ Smart Water Pump — Overflow Protection Triggered",
+            `
+            <h2>Max Runtime / Overflow Protection Triggered</h2>
+            <p>The pump has shut down because it ran longer than the configured max runtime without reaching stop level. This may indicate tank overflow, sensor failure, or a stuck fill.</p>
+            <ul>
+              <li><strong>Tank level:</strong> ${after.water_level_percent}%</li>
+              <li><strong>Flow:</strong> ${after.flow_rate_lpm.toFixed(1)} LPM</li>
+            </ul>
+            <p><strong>Action:</strong> Check the tank and ultrasonic sensor. Acknowledge the error in the dashboard to resume.</p>
+          `
+          );
+          if (sent) await recordSent(uid, "overflow");
         }
       }
 
