@@ -1,6 +1,6 @@
 # Firmware Config from Database
 
-**Status: Implemented.** Calibration and thresholds are stored in `/pump_system/config/device`; the ESP32 reads them every **30 s** when online and persists to NVS. The dashboard has a **Device config** (gear icon) modal to edit values; only authorized UIDs can write (same as control/mode).
+**Status: Implemented (v2.4.0).** Calibration and thresholds are stored in `/pump_system/config/device`; the ESP32 reads them every **30 s** when online and persists to NVS. The dashboard has a **Device config** (gear icon) modal with grouped sections: Tank Calibration, Pump Thresholds, Safety, Sleep Schedule, Advanced. Only authorized UIDs can write (same as control/mode).
 
 This document also covers: (1) a quick firmware correctness check, and (2) the design for DB-backed config and offline behaviour.
 
@@ -13,7 +13,7 @@ This document also covers: (1) a quick firmware correctness check, and (2) the d
 | **Pin mapping** | OK | GPIO 4 (relay), 5/18 (ultrasonic), 34 (flow) match docs and comments |
 | **Firebase paths** | OK | `/pump_system/status` (write), `/pump_system/control/mode` and `clear_error` (read) align with `database.rules.json` |
 | **Auth** | OK | Email/Password in code and README; `secrets.h.example` has the right defines |
-| **Safety** | OK | Dry-run: 0.5 LPM / 30 s; pump OFF on boot; lockout until `clear_error` |
+| **Safety** | OK | Dry-run (configurable); overflow protection; sensor failure detection; pump OFF on boot |
 | **AUTO logic** | OK | Hysteresis 30% start / 100% stop; FORCE_ON/FORCE_OFF respected |
 | **Docs** | OK | `libraries.txt` comment updated from "Anonymous Auth" to "Email/Password Auth" |
 
@@ -71,7 +71,7 @@ Technically straightforward:
 
 ### 5.1 Database schema
 
-Add a single object at **`/pump_system/config/device`** (or `pump_system/config/calibration`). Suggested shape:
+The implemented object at **`/pump_system/config/device`**:
 
 ```json
 {
@@ -81,11 +81,18 @@ Add a single object at **`/pump_system/config/device`** (or `pump_system/config/
   "pump_stop_level": 100,
   "dry_run_threshold_lpm": 0.5,
   "dry_run_timeout_sec": 30,
-  "flow_calibration_factor": 1.0
+  "flow_calibration_factor": 7.5,
+  "max_pump_runtime_min": 120,
+  "sleep_enabled": false,
+  "sleep_start_hour": 23,
+  "sleep_end_hour": 5,
+  "sleep_emergency_level": 5,
+  "sensor_failure_threshold": 5,
+  "idle_sensor_interval_ms": 10000,
+  "idle_firebase_interval_ms": 30000
 }
 ```
 
-- **Optional later:** `sensor_interval_ms`, `firebase_interval_ms` (keep timing in firmware initially to avoid accidental long intervals).
 - **Not in DB:** Pin definitions and safety-critical constants (e.g. relay active LOW) stay in firmware.
 
 ### 5.2 Database rules

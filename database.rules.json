@@ -8,7 +8,7 @@
       "control": {
         ".read": "auth != null",
         "mode": {
-          ".write": "auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_4' || auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_2'"
+          ".write": "auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_4' || auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_2' || auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_3' || auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_1'"
         },
         "clear_error": {
           ".write": "auth != null"
@@ -17,7 +17,7 @@
       "config": {
         "device": {
           ".read": "auth != null",
-          ".write": "auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_4' || auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_2'"
+          ".write": "auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_4' || auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_2' || auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_3' || auth.uid === 'REDACTED_DEPLOYMENT_IDENTIFIER_1'"
         },
         "notifications_by_user": {
           "$uid": {

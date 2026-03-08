@@ -4,9 +4,10 @@ The Smart Water Pump System can send email alerts for high-risk events:
 
 | Event | Description |
 |-------|-------------|
-| **Dry-Run Lockout** | No flow detected for 30s while pump was running |
+| **Dry-Run Lockout** | No flow detected (configurable, default 30s) while pump was running |
 | **Low Tank Level** | Water level drops to your threshold (default 20%) |
 | **Pump Started** | Pump transitions from off to on |
+| **Overflow Protection** | Max runtime exceeded — pump ran beyond limit without reaching stop level |
 
 ---
 
@@ -74,7 +75,7 @@ See `docs/DEPLOY_CHECKLIST.md` and `docs/DEPLOY_GUIDE.md` for full rules and UID
 1. Open the dashboard and sign in with your Google account
 2. Click the **bell icon** (🔔) in the header
 3. Enable notifications and enter **your** email
-4. Choose which alerts you want (dry-run, low level, pump started)
+4. Choose which alerts you want (dry-run, low level, pump started, overflow)
 5. Set low-level threshold (default 20%)
 6. Click **Save**
 
@@ -102,6 +103,7 @@ The Cloud Function runs when `/pump_system/status` is written. You can trigger e
 3. **Pump Started** — Set `is_running` to `false`, then after a moment set it to `true`. The function fires on the off→on transition.
 4. **Low Tank** — Set `water_level_percent` to a value at or below your threshold (e.g. `15` if threshold is 20%)
 5. **Dry-Run** — Set `is_error` to `true` (with notifications enabled and Dry-Run alert checked)
+6. **Overflow** — Set `is_overflow_error` to `true` (with notifications enabled and Overflow alert checked)
 
 > **Throttling:** Each alert type sends at most once per 15 minutes. Wait between tests or use different alert types.
 

@@ -34,8 +34,8 @@ compromises the physical safety of the motor:
 **Normal AUTO operation:**
 1. JSN-SR04T ultrasonic sensor measures water level in the tank
 2. YF-G1 flow sensor monitors water flow in the discharge pipe
-3. When tank drops to ≤ 30% → ESP32 closes relay → contactor energizes → pump starts
-4. When tank reaches 100% → ESP32 opens relay → contactor releases → pump stops
+3. When tank drops to configured start level (default ≤30%) → ESP32 closes relay → contactor energizes → pump starts
+4. When tank reaches configured stop level (default ≥100%) → ESP32 opens relay → contactor releases → pump stops
 5. Live status streams to Firebase and appears on the dashboard in real time
 
 ---
@@ -92,7 +92,7 @@ in an outer layer does not disable the inner layers.
 | Priority | Layer | Mechanism | Always Active? |
 |----------|-------|-----------|----------------|
 | 1 (highest) | Hardware | LR2-D13 TOR trips if motor current > FLA (~8–9A) | ✅ Yes |
-| 2 | Firmware | Dry-run lockout after 30s of flow < 0.5 LPM | ✅ Yes (when powered) |
+| 2 | Firmware | Dry-run lockout (configurable, default 30s of flow < 0.5 LPM); overflow cutoff (max runtime); sensor failure detection | ✅ Yes (when powered) |
 | 3 | Manual | Physical bypass switch energizes contactor directly | User-activated |
 
 > ⚠ When the **manual bypass switch** is ON, all software protections (dry-run
@@ -145,7 +145,7 @@ Phase 4 is fully checked off.
 1. Open `firmware/smart_pump_controller/smart_pump_controller.ino` in Arduino IDE
 2. Copy `secrets.h.example` to `secrets.h` and fill in WiFi, Firebase, and Email/Password credentials (see `firmware/README.md`)
 3. Set board: **Tools → Board → ESP32 Dev Module**
-4. Set upload speed: **115200**, Flash Mode: **QIO**, PSRAM: **Disabled**
+4. Set board: **ESP32 Dev Module**; upload speed **115200**; Partition Scheme **Huge APP (3MB No OTA/1MB SPIFFS)**; Flash Mode **QIO**; PSRAM **Disabled**
 5. Click **Upload**
 6. Open Serial Monitor at **115200 baud** — confirm boot output shows WiFi connected
    and Firebase initialized before closing
@@ -215,7 +215,11 @@ For a single, end-to-end deployment guide (Firebase, Functions, Dashboard, ESP32
 
 ## Notifications (Optional)
 
-Email alerts for dry-run lockout, low tank level, and pump started. See `docs/NOTIFICATIONS_SETUP.md`.
+Email alerts for dry-run lockout, low tank level, pump started, and overflow protection. See `docs/NOTIFICATIONS_SETUP.md`.
+
+## Implemented Enhancements
+
+The system includes safety, resilience, and power-saving features. See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for the full list and status.
 
 ---
 
@@ -228,18 +232,28 @@ Email alerts for dry-run lockout, low tank level, and pump started. See `docs/NO
     is_running:          true      bool
     flow_rate_lpm:       12.4      float  L/min
     is_error:            false     bool   true = dry-run lockout active
+    is_sensor_error:     false     bool   ultrasonic/flow sensor failure
+    is_overflow_error:   false     bool   max runtime exceeded (overflow protection)
+    is_sleeping:         false     bool   scheduled sleep mode active
+    wifi_rssi:           -65       int    dBm, signal strength
+    last_boot_reason:    "Power-on" string e.g. Power-on, Task watchdog
+    uptime_minutes:      125       int    minutes since boot
 
   control/                         ← Dashboard writes, ESP32 reads every 3 seconds
     mode:        "AUTO"            string  AUTO | FORCE_ON | FORCE_OFF
-    clear_error: false             bool    set true to acknowledge dry-run lockout
+    clear_error: false             bool    set true to acknowledge dry-run/sensor/overflow errors
 
   config/
     device/                        ← Dashboard writes, ESP32 reads every 30 seconds
       tank_empty_cm, tank_full_cm, pump_start_level, pump_stop_level,
-      dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor
+      dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor,
+      max_pump_runtime_min, sleep_enabled, sleep_start_hour, sleep_end_hour,
+      sleep_emergency_level, sensor_failure_threshold, idle_sensor_interval_ms,
+      idle_firebase_interval_ms
     notifications_by_user/        ← Per-user notification settings (Dashboard ↔ Cloud Function)
       $uid/
-        enabled, email, dryRunAlert, lowLevelAlert, lowLevelThreshold, pumpStartedAlert
+        enabled, email, dryRunAlert, lowLevelAlert, lowLevelThreshold,
+        pumpStartedAlert, overflowAlert
     notification_last_sent/       ← Functions only (throttling); no client access
 ```
 
@@ -303,4 +317,4 @@ Email alerts for dry-run lockout, low tank level, and pump started. See `docs/NO
 ---
 
 *Smart Water Pump Controller — Leon, Iloilo*
-*Documentation version 1.0*
+*Documentation v2.4 — aligned with ENHANCEMENT_PLAN Phases 1–5*

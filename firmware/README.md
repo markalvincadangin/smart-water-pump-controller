@@ -1,7 +1,7 @@
 # Firmware — Smart Water Pump Controller
 **Platform:** ESP32 DevKit V1 (38-pin)
 **Framework:** Arduino (via Arduino IDE or VS Code + Arduino extension)
-**Version:** 1.0.0
+**Version:** 2.4.0
 
 ---
 
@@ -9,12 +9,16 @@
 
 The firmware runs a non-blocking state machine on the ESP32 that:
 
-- Reads tank water level every **1 second** via JSN-SR04T ultrasonic sensor
+- Reads tank water level every **1 second** via JSN-SR04T ultrasonic sensor (5-sample median, EMA smoothing)
 - Reads pipe flow rate every **1 second** via YF-G1 hall-effect sensor (hardware interrupt)
 - Syncs status to Firebase Realtime Database every **3 seconds**
 - Reads control commands from Firebase every **3 seconds**
+- Reads device config from Firebase every **30 seconds** (or uses NVS when offline)
 - Automatically starts/stops the pump based on tank level thresholds (AUTO mode)
-- Detects dry-run conditions and triggers a safety lockout after 30 seconds of low flow
+- Detects dry-run conditions (configurable threshold and timeout, default 30s of flow < 0.5 LPM)
+- Overflow protection: max runtime cutoff in AUTO mode (default 120 min)
+- Sensor failure detection: consecutive ultrasonic/flow errors → pump OFF in AUTO
+- Scheduled sleep mode (optional): Light Sleep during idle hours to reduce power/heat
 - Auto-reconnects to WiFi and Firebase if the router reboots
 
 ---
@@ -113,9 +117,11 @@ In Arduino IDE Tools menu, set exactly:
 | Flash Frequency | 80MHz |
 | Flash Mode | QIO |
 | Flash Size | 4MB (32Mb) |
-| Partition Scheme | Default 4MB with spiffs |
+| Partition Scheme | **Huge APP (3MB No OTA/1MB SPIFFS)** |
 | PSRAM | Disabled |
 | Port | Your COM port (check Device Manager) |
+
+> **Partition scheme:** Use **Huge APP** — firmware is ~1.25MB and the default scheme is too tight.
 
 ### Step 6 — Flash
 1. Connect ESP32 to laptop via USB
@@ -152,21 +158,14 @@ The default calibration is for **Bestank WT660** (660L, sensor on lid):
 ### Flow Rate (Section 4 in firmware)
 
 ```cpp
-#define FLOW_CALIBRATION_FACTOR  1.0f   // Q (L/min) ≈ Pulses/second ÷ factor
+#define FLOW_CALIBRATION_FACTOR  7.5f   // Q (L/min) = F (Hz) / 7.5 per YF-G1 datasheet
 ```
 
-The YF-G1 1-inch sensor specification states approximately 1 pulse per litre per minute.
-If your measured flow rate differs from a reference measurement (e.g., bucket + stopwatch),
-adjust this factor. A value of `0.8` means the sensor pulses slightly fast; `1.2` means slightly slow.
+The YF-G1 1-inch sensor datasheet cites ~7.5 pulses per L/min (some variants use 4.8). The default `7.5` is tunable via dashboard **Device config → Flow calibration factor** without reflashing. Verify with a bucket + stopwatch test.
 
 ### AUTO Mode Thresholds (Section 3 in firmware)
 
-```cpp
-#define PUMP_START_LEVEL  30   // % — pump starts when level drops to this
-#define PUMP_STOP_LEVEL  100   // % — pump stops when level reaches this
-```
-
-Adjust these to your preferred hysteresis range.
+Pump start/stop levels are configurable via the dashboard **Device config** (gear icon). Defaults: start 30%, stop 100%. The ESP32 reads these from Firebase; compiled defaults apply only before the first successful read.
 
 ---
 
@@ -188,11 +187,22 @@ The firmware reads `/pump_system/control/mode` from Firebase every 3 seconds.
 ## Safety Logic
 
 ### Dry-Run Lockout (Level 2 — Software)
-- **Trigger:** Pump is running but flow rate < 0.5 LPM for more than 30 continuous seconds
+- **Trigger:** Pump is running but flow rate below threshold (default < 0.5 LPM) for more than timeout (default 30s)
 - **Action:** Relay opens (pump off), `is_error = true` pushed to Firebase
 - **Reset:** Only via dashboard — user clicks ACK button, which sets
   `/pump_system/control/clear_error = true` in Firebase
 - **Why it matters:** Running a jet pump dry destroys the pump head and impeller within minutes
+
+### Overflow Protection (Level 2 — Software)
+- **Trigger:** Pump runs in AUTO mode longer than `max_pump_runtime_min` (default 120 min) without reaching stop level
+- **Action:** Relay opens, `is_overflow_error = true` pushed to Firebase
+- **Reset:** Via dashboard `clear_error` or when pump stops normally
+- **Why it matters:** Prevents tank overflow if the sensor fails during fill
+
+### Sensor Failure (Level 2 — Software)
+- **Trigger:** Consecutive ultrasonic timeouts (default 5) or flow sensor stuck (pump OFF + flow > 2 LPM for 5s)
+- **Action:** Pump OFF in AUTO; `is_sensor_error = true` pushed to Firebase
+- **Reset:** Auto-clears when valid readings resume
 
 ### TOR Thermal Overload (Level 1 — Hardware)
 - Handled entirely in hardware by the LR2-D13 relay
@@ -215,17 +225,25 @@ The firmware reads `/pump_system/control/mode` from Firebase every 3 seconds.
     water_level_percent: 85      (int,   0–100)
     is_running:          true    (bool)
     flow_rate_lpm:       12.4    (float, L/min)
-    is_error:            false   (bool,  dry-run lockout flag)
+    is_error:            false   (bool,  dry-run lockout)
+    is_sensor_error:     false   (bool,  ultrasonic/flow sensor failure)
+    is_overflow_error:   false   (bool,  max runtime exceeded)
+    is_sleeping:         false   (bool,  scheduled sleep active)
+    wifi_rssi:           -65     (int,   dBm)
+    last_boot_reason:    "Power-on" (string)
+    uptime_minutes:      125     (int)
 
   control/                       ← Dashboard writes, ESP32 reads every 3s
     mode:        "AUTO"          (string: "AUTO" | "FORCE_ON" | "FORCE_OFF")
-    clear_error: false           (bool:  set true to acknowledge dry-run error)
+    clear_error: false           (bool:  set true to acknowledge errors)
 
   config/
-    device/                      ← Dashboard writes, ESP32 reads every 30s (optional)
+    device/                      ← Dashboard writes, ESP32 reads every 30s
       tank_empty_cm, tank_full_cm, pump_start_level, pump_stop_level,
-      dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor
-      (If present and valid, ESP32 uses these instead of compiled defaults; saves to NVS only when values change.)
+      dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor,
+      max_pump_runtime_min, sleep_enabled, sleep_start_hour, sleep_end_hour,
+      sleep_emergency_level, sensor_failure_threshold, idle_sensor_interval_ms,
+      idle_firebase_interval_ms
 ```
 
 ---
@@ -284,4 +302,4 @@ the connection; on the next sync cycle the ESP32 reads `/pump_system/config/devi
 
 ---
 
-*Firmware version 1.0.0 — generated from Hardware Documentation v1.0 and Software & Firmware Documentation v1.0*
+*Firmware version 2.4.0 — see `docs/ENHANCEMENT_PLAN.md` for implemented phases (safety, resilience, sleep, config expansion, uptime).*

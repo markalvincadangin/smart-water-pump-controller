@@ -8,6 +8,7 @@ import type { PumpControl } from "@/lib/types";
 interface ModeControlsProps {
   currentMode: PumpControl["mode"];
   isError: boolean;
+  dryRunTimeoutSec?: number;  // from device config, default 30
   onSetMode: (mode: PumpControl["mode"]) => void;
   onAcknowledge: () => void;
 }
@@ -49,6 +50,7 @@ const MODES: {
 export default function ModeControls({
   currentMode,
   isError,
+  dryRunTimeoutSec = 30,
   onSetMode,
   onAcknowledge,
 }: ModeControlsProps) {
@@ -107,7 +109,7 @@ export default function ModeControls({
                 ⚠ Dry-Run Lockout Active
               </p>
               <p className="text-text-secondary text-xs mt-0.5">
-                No flow detected for 30s. Check pump and water source, then acknowledge to resume.
+                No flow detected for {dryRunTimeoutSec}s. Check pump and water source, then acknowledge to resume.
               </p>
             </div>
             <button
