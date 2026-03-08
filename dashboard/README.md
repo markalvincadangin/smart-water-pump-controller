@@ -41,7 +41,7 @@ The dashboard reads/writes the same paths as the ESP32 firmware:
       dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor,
       max_pump_runtime_min, sleep_*, sensor_failure_threshold, idle_*_ms
     notifications_by_user/   ← Per-user notification settings (bell icon)
-      $uid/  enabled, email, dryRunAlert, lowLevelAlert, lowLevelThreshold,
+      $uid/  enabled, email, fcmTokens, dryRunAlert, lowLevelAlert, lowLevelThreshold,
              pumpStartedAlert, overflowAlert
 ```
 
@@ -73,6 +73,8 @@ Edit `.env.local` and fill in your Firebase credentials. Optionally set `NEXT_PU
 **Where to find Firebase values:**  
 Firebase Console → Project Settings → General → Your apps → Web → SDK setup and configuration
 
+**Push notifications (optional):** Add `NEXT_PUBLIC_FIREBASE_VAPID_KEY` from Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair. See `docs/NOTIFICATIONS_SETUP.md` section 4b.
+
 ### 5. Enable Firebase services
 In the Firebase Console:
 1. **Realtime Database** → Create database → Start in test mode
@@ -100,7 +102,9 @@ Visit [http://localhost:3000](http://localhost:3000)
 ```
 dashboard/
 ├── app/
+│   ├── api/firebase-messaging-sw/  # Dynamic FCM service worker
 │   ├── layout.tsx          # Root layout (fonts, metadata)
+│   ├── manifest.ts         # PWA manifest (installable app)
 │   ├── page.tsx            # Main dashboard page
 │   └── globals.css         # Global styles + Tailwind
 ├── components/
@@ -109,13 +113,18 @@ dashboard/
 │   ├── HistoryChart.tsx    # Recharts area chart (level + flow)
 │   ├── StatCard.tsx        # Metric display card
 │   ├── StatusBar.tsx       # Top connection status bar (uptime, WiFi, badges)
-│   ├── DeviceConfigSettings.tsx  # Gear icon — calibration & thresholds
-│   └── NotificationSettings.tsx # Bell icon — email alert preferences
+│   ├── DeviceConfigSettings.tsx  # Gear icon — calibration & thresholds (with tooltips)
+│   ├── NotificationSettings.tsx # Bell icon — email + push alert preferences (with tooltips)
+│   ├── InfoTooltip.tsx     # Reusable help tooltip (hover/tap)
+│   └── InstallPrompt.tsx   # PWA install banner
 ├── lib/
 │   ├── firebase.ts         # Firebase init + Google Auth
+│   ├── fcm.ts              # FCM push token helpers
 │   ├── types.ts            # TypeScript interfaces
 │   ├── usePumpData.ts      # Real-time data hook
-│   └── useDeviceConfig.ts  # Device config read/write
+│   ├── useDeviceConfig.ts  # Device config read/write
+│   └── useNotificationConfig.ts
+├── public/icons/           # PWA icons (72, 192, 512px)
 ├── .env.local.example      # Environment variable template
 └── README.md
 ```
@@ -148,12 +157,13 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 | Flow rate              | YF-G1 sensor data; low-flow warning uses configurable threshold   |
 | Mode control           | AUTO / FORCE ON / FORCE OFF with instant Firebase push            |
 | Dry-run acknowledge    | Red alert banner with ACK; message shows configured timeout (s)   |
-| Device config (gear)   | Tank calibration, pump thresholds, safety, sleep schedule, advanced |
-| Notifications (bell)   | Dry-run, low level, pump started, overflow alerts                |
+| Device config (gear)   | Tank calibration, pump thresholds, safety, sleep schedule, advanced — with **tooltips** (hover/tap for help) |
+| Notifications (bell)   | Email + **push** (phone/browser); dry-run, low level, pump started, overflow alerts — with **tooltips** |
 | StatusBar              | ESP32 online/offline, uptime, WiFi RSSI, SENSOR/OVERFLOW badges  |
 | History chart          | 60-point rolling area chart (level + flow)                        |
 | Connection status      | Live/disconnected indicator with last-update time                |
 | Responsive layout      | Works on mobile, tablet, and desktop                              |
+| **PWA (installable)**  | Add to Home Screen / Install app — native-like experience on mobile |
 
 ---
 
@@ -171,4 +181,4 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 
 ---
 
-*See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for implemented features.*
+*See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for implemented features. Phase 6 adds tooltips, push notifications (FCM), and PWA installability.*

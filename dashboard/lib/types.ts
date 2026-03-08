@@ -39,6 +39,10 @@ export interface HistoryEntry {
 export interface NotificationConfig {
   enabled: boolean;
   email: string;
+  /** Enable push notifications to phone/browser (FCM). Stored per device. */
+  pushEnabled?: boolean;
+  /** FCM tokens: deviceId -> token. Cloud Functions sends push to these. */
+  fcmTokens?: Record<string, string>;
   dryRunAlert: boolean;
   lowLevelAlert: boolean;
   lowLevelThreshold: number;  // 0–50

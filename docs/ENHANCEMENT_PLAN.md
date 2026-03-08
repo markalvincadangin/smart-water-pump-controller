@@ -355,6 +355,50 @@ Add NVS keys for new config fields so they persist across reboot when offline.
 
 ---
 
+---
+
+## Phase 6 — Dashboard UX, Push Notifications & PWA (March 2026)
+
+> **Goal:** Improve usability, add phone/browser push notifications (like YouTube, Facebook), and make the dashboard installable as a mobile app.
+
+### 6A. Firebase Data Optimization
+
+- **Assessment document** — `docs/FIREBASE_OPTIMIZATION.md` documents current RTDB usage patterns and long-term suitability
+- **Verdict:** Current architecture is well-optimized for single-pump use; no changes required for normal operation
+- **Recommendations:** Optional improvements for multi-device scaling or offline persistence
+
+### 6B. Dashboard Settings UX
+
+- **InfoTooltip component** — Reusable popover showing help text on hover (desktop) or tap (mobile)
+- **DeviceConfigSettings** — Tooltips on every section and key field: Tank Calibration, Pump Thresholds, Safety, Sleep Schedule, Advanced
+- **NotificationSettings** — Tooltips on delivery methods, alert types, and push configuration
+- **Modern approach:** No additional UI library; lightweight, accessible Info icon + popover pattern
+
+### 6C. Push Notifications (FCM)
+
+- **Firebase Cloud Messaging** — Alerts sent directly to phone/browser, like YouTube/Facebook/Instagram
+- **Dashboard:** "Enable push on this device" button in Notification Settings; stores FCM token in `notifications_by_user/{uid}/fcmTokens/{deviceId}`
+- **Cloud Functions:** Sends push to all stored FCM tokens for each user (in addition to email when configured)
+- **Service worker:** Dynamic `/firebase-messaging-sw.js` served by API route with injected Firebase config
+- **Setup:** `NEXT_PUBLIC_FIREBASE_VAPID_KEY` from Firebase Console → Cloud Messaging → Web Push certificates
+
+### 6D. Progressive Web App (PWA)
+
+- **Installable app** — Users can add the dashboard to the home screen on Android, iOS, and desktop
+- **Manifest** — `app/manifest.ts` with name, icons, theme colors, display standalone
+- **Service worker** — `@ducanh2912/next-pwa` generates `sw.js` for caching and installability
+- **Install prompt** — `InstallPrompt` component shows banner when `beforeinstallprompt` fires
+- **Icons** — 72×72, 192×192, 512×512 in `dashboard/public/icons/`
+
+### Verification
+
+1. Tooltips appear on hover/tap in Device and Notification settings
+2. Push: Set VAPID key → Enable push in dashboard → Save → Trigger alert → Receive push on device
+3. PWA: Deploy over HTTPS → On mobile, "Add to Home Screen" or install icon appears
+4. Firebase optimization doc exists and describes current usage
+
+---
+
 ## Recommendations (Future — not in current phases)
 
 1. **Multi-SSID** — `WiFiMulti` for backup WiFi AP
@@ -365,4 +409,4 @@ Add NVS keys for new config fields so they persist across reboot when offline.
 
 ---
 
-*Plan version 4. Includes Phases 1-5. Dashboard inconsistencies table added — March 2026.*
+*Plan version 5. Phase 6 added — March 2026.*

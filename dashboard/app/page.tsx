@@ -25,6 +25,7 @@ import HistoryChart from "@/components/HistoryChart";
 import StatCard from "@/components/StatCard";
 import StatusBar from "@/components/StatusBar";
 import AuthGuard from "@/components/AuthGuard";
+import InstallPrompt from "@/components/InstallPrompt";
 import { signOut } from "@/lib/auth";
 
 export default function DashboardPage() {
@@ -101,7 +102,7 @@ export default function DashboardPage() {
         />
 
         {/* ── Page header ───────────────────────────────────────────────────── */}
-        <header className="px-4 sm:px-6 pt-4 sm:pt-8 pb-4">
+        <header className="px-3 sm:px-6 pt-4 sm:pt-8 pb-4">
           <div className="max-w-6xl mx-auto">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
@@ -183,7 +184,7 @@ export default function DashboardPage() {
         </header>
 
         {/* ── Main layout ───────────────────────────────────────────────────── */}
-        <main className="flex-1 px-4 sm:px-6 pb-6 sm:pb-8 min-w-0">
+        <main className="flex-1 px-3 sm:px-6 pb-6 sm:pb-8 min-w-0">
           <div className="max-w-6xl mx-auto space-y-3 sm:space-y-4">
 
             {/* Connection error banner */}
@@ -196,7 +197,7 @@ export default function DashboardPage() {
             )}
 
             {/* ── Row 1: Tank + Stats + Controls ─────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
 
               {/* Tank visual */}
               <div className={clsx(
@@ -304,6 +305,7 @@ export default function DashboardPage() {
       {showDeviceConfig && (
         <DeviceConfigSettings onClose={() => setShowDeviceConfig(false)} />
       )}
+      <InstallPrompt />
     </AuthGuard>
   );
 }

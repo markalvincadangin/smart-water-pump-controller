@@ -49,7 +49,13 @@ export function useNotificationConfig(uid: string | null) {
     }
 
     const configRef = ref(db, `/pump_system/config/notifications_by_user/${uid}`);
-    const merged = { ...DEFAULT_NOTIFICATION_CONFIG, ...config, ...next };
+    const merged = {
+      ...DEFAULT_NOTIFICATION_CONFIG,
+      ...config,
+      ...next,
+      // Preserve fcmTokens when merging (they're device-specific)
+      fcmTokens: next.fcmTokens ?? config?.fcmTokens ?? {},
+    };
     await set(configRef, merged);
   }, [config, uid]);
 

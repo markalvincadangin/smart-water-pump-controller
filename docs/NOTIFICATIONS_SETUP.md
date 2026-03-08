@@ -1,6 +1,6 @@
-# Email Notifications Setup
+# Notifications Setup
 
-The Smart Water Pump System can send email alerts for high-risk events:
+The Smart Water Pump System can send alerts via **email** and/or **push notifications** (directly to your phone or browser, like YouTube or Facebook) for high-risk events:
 
 | Event | Description |
 |-------|-------------|
@@ -74,10 +74,11 @@ See `docs/DEPLOY_CHECKLIST.md` and `docs/DEPLOY_GUIDE.md` for full rules and UID
 
 1. Open the dashboard and sign in with your Google account
 2. Click the **bell icon** (🔔) in the header
-3. Enable notifications and enter **your** email
-4. Choose which alerts you want (dry-run, low level, pump started, overflow)
-5. Set low-level threshold (default 20%)
-6. Click **Save**
+3. Enable notifications and enter **your** email (for email alerts)
+4. **Push notifications (optional):** Click "Enable push on this device" — allow notifications when prompted — then **Save**. Alerts will appear on your phone/browser even when the app is closed.
+5. Choose which alerts you want (dry-run, low level, pump started, overflow)
+6. Set low-level threshold (default 20%)
+7. Click **Save**
 
 Each signed-in user has their **own** notification settings stored under:
 
@@ -88,7 +89,33 @@ pump_system/config/notifications_by_user/{uid}
 Alerts are sent to every user who has:
 
 - `enabled: true`
-- A non-empty `email`
+- At least one of: non-empty `email`, or `fcmTokens` with at least one device
+
+---
+
+## 4b. Push Notifications (FCM) — Optional
+
+Push notifications are sent directly to your phone or browser. **Requirements:** HTTPS, supported browser (Chrome, Firefox, Safari 16+, Edge), and `NEXT_PUBLIC_FIREBASE_VAPID_KEY` configured.
+
+### Setup
+
+1. **Firebase Console** → Project Settings → **Cloud Messaging** → **Web Push certificates**
+2. If no key pair exists, click **Generate key pair** — copy the VAPID key
+3. Add to `dashboard/.env.local`:
+   ```env
+   NEXT_PUBLIC_FIREBASE_VAPID_KEY=your_vapid_key_here
+   ```
+4. Add the same variable in Vercel (or your host) if deployed
+5. Rebuild and redeploy the dashboard
+6. Deploy Cloud Functions: `firebase deploy --only functions` (Functions send push alongside email)
+
+### Enable on Device
+
+1. Open the dashboard in a supported browser (HTTPS required)
+2. Bell icon → **Enable push on this device** → allow notifications when prompted
+3. Click **Save**
+
+Push works best when the dashboard is **installed as an app** (Add to Home Screen). See `docs/DEPLOY_GUIDE.md` Phase 5 step 7 for PWA install.
 
 ---
 
@@ -134,7 +161,9 @@ To avoid spam, each alert type is limited to **once per 15 minutes** per user. F
 | No emails received | Resend dashboard delivery status; Cloud Function logs in Firebase Console |
 | "RESEND_API_KEY not set" in logs | Run `firebase functions:secrets:set RESEND_API_KEY` and redeploy with `firebase deploy --only functions` |
 | Sign-in fails on Vercel | Ensure `NEXT_PUBLIC_AUTHORIZED_UIDS` is set (or empty to allow any signed-in user) and Firebase Authorized domains includes your dashboard host |
+| Push not working | `NEXT_PUBLIC_FIREBASE_VAPID_KEY` set; dashboard on HTTPS; browser allows notifications; check DevTools → Application → Service Workers |
+| "Enable push" greyed out or missing | Browser may not support FCM (HTTPS + Push API); VAPID key not set |
 
 ---
 
-*See `docs/DEPLOY_GUIDE.md` for full deployment order including Functions and dashboard.*
+*See `docs/DEPLOY_GUIDE.md` for full deployment order including Functions and dashboard. See `docs/FIREBASE_OPTIMIZATION.md` for RTDB usage assessment.*
