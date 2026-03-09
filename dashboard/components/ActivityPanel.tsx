@@ -60,8 +60,13 @@ export default function ActivityPanel() {
       </div>
 
       {events.length === 0 ? (
-        <div className="text-xs font-mono text-text-muted py-6 text-center">
-          No recent activity
+        <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
+          <p className="text-xs font-mono text-text-muted">
+            No recent activity yet
+          </p>
+          <p className="text-[10px] font-mono text-text-muted max-w-xs">
+            Changes you make to modes or settings will show up here so you can see who did what and when.
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
