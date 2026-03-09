@@ -15,12 +15,13 @@ import NotificationSettings from "@/components/NotificationSettings";
 import StatusBar from "@/components/StatusBar";
 import AuthGuard from "@/components/AuthGuard";
 import InstallPrompt from "@/components/InstallPrompt";
-import { isUidAdmin, signOut } from "@/lib/auth";
+import { signOut } from "@/lib/auth";
 import { DEFAULT_DEVICE_CONFIG } from "@/lib/types";
 import { toast } from "@/lib/toast";
 import { usePresence } from "@/lib/usePresence";
 import ActivityPanel from "@/components/ActivityPanel";
 import { usePendingControl } from "@/lib/usePendingControl";
+import { useIsAdmin } from "@/lib/useIsAdmin";
 import DashboardHeader from "@/components/DashboardHeader";
 import DashboardMainGrid from "@/components/DashboardMainGrid";
 import DashboardHistorySection from "@/components/DashboardHistorySection";
@@ -40,7 +41,7 @@ export default function DashboardPage() {
   } = usePumpData();
 
   const { config } = useDeviceConfig();
-  const isAdmin = authUser?.uid ? isUidAdmin(authUser.uid) : false;
+  const isAdmin = useIsAdmin(authUser?.uid ?? null);
   const { onlineCount } = usePresence(authUser?.uid ?? null, authUser?.email ?? null);
 
   // Ticker for "time ago" refresh

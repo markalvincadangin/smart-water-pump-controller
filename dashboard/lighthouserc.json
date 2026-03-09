@@ -1,10 +1,9 @@
 {
   "ci": {
     "collect": {
-      "staticDistDir": ".next",
       "url": [
-        "http://localhost:3000/",
-        "http://localhost:3000/login"
+        "/",
+        "/login"
       ],
       "startServerCommand": "npm run start",
       "startServerReadyPattern": "started server",

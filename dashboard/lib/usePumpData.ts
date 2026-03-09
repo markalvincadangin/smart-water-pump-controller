@@ -44,6 +44,9 @@ export function usePumpData() {
   // authReady = Firebase auth has been checked AND we have a signed-in user
   const authReady = authChecked && !!authUser;
 
+  // Locale for timestamps — prefer browser setting when available
+  const [timeLocale, setTimeLocale] = useState<string>("en-PH");
+
   // ── Wait for signed-in user (Google Auth via login page) ───────────────────
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -51,6 +54,15 @@ export function usePumpData() {
       setAuthUser(user ? { uid: user.uid, email: user.email ?? null } : null);
     });
     return () => unsub();
+  }, []);
+
+  // Determine locale for chart timestamps (client-side only)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const locale = window.navigator?.language || window.navigator?.languages?.[0];
+    if (locale && typeof locale === "string") {
+      setTimeLocale(locale);
+    }
   }, []);
 
   // ── Real-time listeners ──────────────────────────────────────────────────
@@ -72,7 +84,7 @@ export function usePumpData() {
 
           // Append to rolling history
           const now = new Date();
-          const timeLabel = now.toLocaleTimeString("en-PH", { hour12: false });
+          const timeLabel = now.toLocaleTimeString(timeLocale, { hour12: false });
           setHistory((prev) => {
             const next = [
               ...prev,
@@ -114,7 +126,7 @@ export function usePumpData() {
       unsubStatus();
       unsubControl();
     };
-  }, [authReady]);
+  }, [authReady, timeLocale]);
 
   // ── Control writers ──────────────────────────────────────────────────────
 

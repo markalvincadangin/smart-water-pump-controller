@@ -2,7 +2,9 @@
 
 import clsx from "clsx";
 import { Bell, Settings } from "lucide-react";
-import Logo from "@/components/Logo";
+
+const TANK_LABEL =
+  process.env.NEXT_PUBLIC_TANK_LABEL ?? "Deep Well Pump · 660L Tank";
 
 interface DashboardHeaderProps {
   userEmail: string;
@@ -26,12 +28,9 @@ export default function DashboardHeader({
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-xl bg-accent-cyan/10 border border-accent-cyan/20">
-              <Logo size="md" />
-            </div>
             <div className="min-w-0">
               <p className="text-[10px] sm:text-xs font-mono text-text-muted uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-0.5 sm:mb-1">
-                Deep Well Pump · 660L Tank
+                {TANK_LABEL}
               </p>
               <h1 className="font-display text-lg sm:text-2xl md:text-3xl font-bold text-text-primary truncate leading-tight">
                 Smart Water Pump <span className="text-gradient-cyan">System</span>

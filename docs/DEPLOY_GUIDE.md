@@ -72,14 +72,14 @@ Before starting, confirm:
    ```
 
 2. **Configure admin access (recommended)**
-   - The dashboard now supports **admin vs standard users**, and the database rules support an admin allowlist at:
+   - The dashboard now supports **admin vs standard users**, and the database rules use an admin allowlist at:
      - `pump_system/config/admins/{uid}: true`
    - **Bootstrap:** `database.rules.json` also contains a hardcoded UID allowlist (legacy) so you can deploy rules safely even before the admins map exists.
 
-   **What to do:**
+   **What to do (recommended):**
    - Open `database.rules.json`
    - Ensure your Google UID is present in the existing hardcoded allowlist (so you can write device config / mode immediately after deploying rules)
-   - After deploying rules, set your admins map in Realtime Database:
+   - After deploying rules, set your admins map in Realtime Database (this is the single source of truth for admin status used by both rules and UI):
      - `pump_system/config/admins/<YOUR_UID> = true`
      - (Optional) Add more admin UIDs the same way
 
@@ -142,7 +142,7 @@ Before starting, confirm:
    cp .env.local.example .env.local
    ```
 
-2. **Edit `.env.local`** with values from Firebase Console (Phase 1 & 2):
+2. **Edit `.env.local`** with values from Firebase Console (Phase 1 & 2) and any optional overrides:
 
    | Variable | Where to get it |
    |----------|------------------|
@@ -151,11 +151,11 @@ Before starting, confirm:
    | `NEXT_PUBLIC_FIREBASE_DATABASE_URL` | Realtime Database URL (Phase 1) |
    | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | projectId |
    | `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | storageBucket |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | messagingSenderId |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | appId |
-| `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | **Push notifications:** Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair |
-| `NEXT_PUBLIC_AUTHORIZED_UIDS` | Optional: comma-separated Firebase UIDs, or leave empty to allow any signed-in user |
-| `NEXT_PUBLIC_ADMIN_UIDS` | Optional: comma-separated Firebase UIDs that can see Advanced settings + privileged controls (e.g. FORCE ON) |
+   | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | messagingSenderId |
+   | `NEXT_PUBLIC_FIREBASE_APP_ID` | appId |
+   | `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | **Push notifications:** Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair |
+   | `NEXT_PUBLIC_AUTHORIZED_UIDS` | Optional: comma-separated Firebase UIDs, or leave empty to allow any signed-in user |
+   | `NEXT_PUBLIC_TANK_LABEL` | Optional: custom tank label text under the logo (defaults to `Deep Well Pump · 660L Tank`) |
 
 3. **Verify build**
    ```bash

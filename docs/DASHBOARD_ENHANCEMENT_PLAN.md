@@ -1,3 +1,63 @@
+## 9. Recent UX Review (March 2026)
+
+This section captures a focused 2026 UX review of the current dashboard, with emphasis on first-load experience, perceived performance, and accessibility for real-time monitoring/control use cases.
+
+### 9.1 Authentication & First-Load Experience
+
+- **Finding**: Initial load currently shows two sequential blocking loaders (one in `DashboardPage` waiting on `authChecked`, and another in `AuthGuard` checking authorization), each potentially attaching its own auth listener.
+- **Impact**: Users experience a “blank, spinner-only” screen for longer than necessary on first load, which feels slow and brittle for a critical control dashboard.
+- **Recommendation**:
+  - Consolidate auth/authorization into a single guard (ideally `AuthGuard`) and remove redundant auth effects from `page.tsx`.
+  - Render the **shell** (`StatusBar`, `DashboardHeader`, main layout) immediately, with skeletons in place of live data, rather than a fully blank blocking loader.
+  - (Optional) Cache the last-known safe snapshot locally (e.g. IndexedDB/localStorage) to show “Last known state as of HH:MM” while live data connects.
+
+### 9.2 Progressive Loading & Perceived Performance
+
+- **Finding**: Main content appears largely “all at once” after data is ready; `HistoryChart`, `ActivityPanel`, and some cards lack skeleton or staged states.
+- **Impact**: On slower networks or cold starts, the UI can feel like it “pops in” suddenly, which is suboptimal for an always-on operational console.
+- **Recommendation**:
+  - Add lightweight skeletons for `DashboardMainGrid` (tank card, stat cards, mode controls), `HistoryChart`, and `ActivityPanel`.
+  - Use `usePumpData` to progressively enable controls as soon as minimal status/control data is present, instead of gating entire sections behind a single loading flag.
+  - Lean on existing `usePendingControl` to provide clear inline “in flight” and “confirmed” micro-feedback when changing modes (e.g. subtle color pulse on confirmation).
+
+### 9.3 Modal UX & Accessibility
+
+- **Finding**: `NotificationSettings` and `DeviceConfigSettings` modals are visually strong but lack explicit dialog semantics and robust focus handling.
+- **Impact**: Keyboard and screen reader users may have difficulty understanding that a modal dialog has opened, and focus can escape behind the overlay.
+- **Recommendation**:
+  - Add `role="dialog"`, `aria-modal="true"`, and `aria-labelledby` pointing to the modal title.
+  - Implement focus trapping within each modal and restore focus to the triggering control on close; support Esc to close.
+  - Keep the existing Basic/Advanced split but reinforce task-based groupings (e.g. “Safe operating envelope”, “Alert timing”) and add small “What does this do?” tooltips on advanced fields.
+
+### 9.4 Information Architecture & “Attention First” Design
+
+- **Finding**: The current layout already follows a strong “bento” pattern (status → header → live cards → history → system info → activity), but urgent issues are not summarized in one place.
+- **Impact**: Operators may scan multiple sections to understand what needs attention right now, rather than seeing a single, clear “attention” strip.
+- **Recommendation**:
+  - Introduce a compact **“Attention” summary band** near the top of `main` that aggregates pump errors, connectivity issues, and critical alerts into one, color-coded card.
+  - Make time ranges and data windows explicit in `HistoryChart` (e.g. “Last 3 minutes”, or add simple 15m/1h/24h presets).
+  - On large screens, consider placing Activity/System Info alongside History to keep “what just happened” in the same scan path as telemetry.
+
+### 9.5 Status & Error Communication
+
+- **Finding**: Connection issues are surfaced via a banner, but with minimal guidance; several secondary features (presence, audit log) fail silently by design.
+- **Impact**: Users may not know whether to retry, wait, or check hardware; silent degradation can undermine trust in the dashboard.
+- **Recommendation**:
+  - Make the connection error banner actionable (Retry button, brief “If this persists >2 minutes…” helper text).
+  - When presence or audit queries fail, show a small inline notice (“Activity temporarily unavailable. Commands still work; logs will resume when connection recovers.”).
+  - Add a mild escalation when `updatedAt` is stale but the app is “connected” (e.g. amber state in `StatusBar`: “No telemetry received for 5+ minutes”).
+
+### 9.6 Visual & Interaction Polish
+
+- **Finding**: The dark/glassmorphism aesthetic, neon accents, and mono typography are well-aligned with a telemetry/control-room feel.
+- **Impact**: The design is strong; most remaining gains are in subtle consistency and motion.
+- **Recommendation**:
+  - Standardize paddings and gaps across all cards/sections to reduce visual noise.
+  - Use consistent accent color semantics (cyan for normal/live, amber for warnings, red for errors).
+  - Add small, consistent hover/press animations (150–200ms) on high-impact controls (mode buttons, acknowledge, save) and short confirmation microcopy where actions directly affect hardware.
+
+---
+
 # Dashboard Frontend Enhancement Plan
 
 **Date:** March 2026  
@@ -161,11 +221,12 @@ The Smart Water Pump dashboard is well-structured with a consistent dark theme, 
 
 ## 4. Visual Design, Interactivity & UX Enhancements
 
-### 4.1 Visual Hierarchy & Layout
+### 4.1 Visual Hierarchy, Layout & Typography
 
 - **Primary state card**: Introduce a single, prominent **system status card** at the top (e.g. “System healthy”, “Check tank soon”, “Immediate attention required”), using consistent iconography and color (green / amber / red) so users instantly understand overall health.
 - **Consistent sectioning**: Organize the page into clear sections with headings like **Live status**, **Tank & flow**, **Controls**, **History & insights**, **Alerts & safety**; use consistent heading sizes and spacing to improve scan-ability.
 - **Spacing & density**: Slightly increase vertical spacing between rows on desktop and ensure a mostly **single-column flow on mobile** (Status → Tank → Stats → Controls → History → Alerts).
+- **Typography consistency**: Define a small, explicit **type scale** (e.g. `text-xs/sm/base/lg/xl`) and apply it consistently across the dashboard (headers, cards, modals, tooltips). Avoid mixing many font sizes/weights for similar elements so the hierarchy is clearer at a glance.
 
 ### 4.2 Controls & Advanced Features
 
@@ -201,6 +262,25 @@ The Smart Water Pump dashboard is well-structured with a consistent dark theme, 
   - Document where to use the **rounded-square icon** (app icon, favicon, home-screen) vs. the bare drop (inline branding).
 - **Accessibility**: Ensure that when the logo is the primary brand text, it has an accessible name (e.g. `aria-label="Smart Water Pump System"` or adjacent text), and is only `aria-hidden` when purely decorative.
 
+### 4.6 Ongoing UI/UX Research & Evaluation
+
+- **Heuristic review**: Periodically review the dashboard against standard usability heuristics (visibility of system status, match with real-world language, error prevention, recognition vs recall) and log findings back into this plan.
+- **Role-based walkthroughs**: Do separate end-to-end walkthroughs as **admin** and as **standard user** to confirm the layout, wording, and visible controls match each role’s mental model (no confusing “admin-only” noise for non-admins).
+- **User feedback loop**: When possible, collect quick feedback from real users (or yourself on different devices/browsers) about clarity of labels, readability, and ease of finding common actions, and iteratively refine typography, layout, and copy.
+
+### 4.7 Navigation, Discoverability & Information Architecture
+
+- **Entry points for settings**: Ensure that key actions (mode control, device config, notifications) are clearly labeled and visually grouped, so first-time users know where to go for “change how the pump behaves” vs “change how I get alerts”.
+- **Scannable dashboard**: Aim for a top-to-bottom storyline: **“Is everything OK?” → “What’s the tank doing now?” → “What happened recently?” → “Do I need to change anything?”**. Re-order or visually emphasize sections to support this mental flow.
+- **Progressive disclosure**: Hide rarely used or expert-only controls behind secondary affordances (Advanced, “More details”, collapsible sections) to keep the main view calm and focused.
+
+### 4.8 States, Errors & Empty States
+
+- **Loading/skeleton states**: Where possible, replace generic spinners with lightweight skeletons or placeholders that match the final layout (for StatusBar, cards, chart) so the page feels more stable while data is loading.
+- **Empty history & first-run**: When there is little or no history yet, show an explanation (e.g. “History will appear here after the pump has run for a while”) instead of an almost-empty chart.
+- **Inline validation & helper text**: For configuration fields (levels, thresholds, timeouts), show inline guidance and validation (e.g. “Stop level must be higher than start level”) to prevent invalid combinations before users hit Save.
+- **Clear recovery paths**: For error banners and connection issues, always pair the status text with a concrete next step (e.g. “Retry”, “Check Wi-Fi on the controller”, “Open Troubleshoot guide”).
+
 ---
 
 ## 5. PWA & Mobile App Enhancements
@@ -227,6 +307,7 @@ The Smart Water Pump dashboard is well-structured with a consistent dark theme, 
   - Introduce a simple role concept in auth (e.g. via a small `/roles/{uid}` node or `customClaims`) and expose it to the dashboard through an auth hook.
   - Implement **conditional rendering** of advanced sections in DeviceConfigSettings and NotificationSettings based on role.
   - In the UI, avoid cluttering the standard user experience with advanced fields; expose them only when the user is an admin.
+  - For non-admin users, **prefer hiding** Advanced settings entirely instead of showing disabled controls with “Advanced settings are admin-only” on every advanced field; where needed, use a single, subtle note in the settings entry point.
 
 ### 6.2 Concurrent Users & Multi-Session Behavior
 
@@ -271,11 +352,16 @@ The Smart Water Pump dashboard is well-structured with a consistent dark theme, 
 
 ### Phase D — Optional Enhancements
 
-13. Tank label "660L Tank" — Derive from config or add display name in DeviceConfig
+13. Tank label "660L Tank" — Move label into configuration so it's not hardcoded in the component
+    - **Implemented ✅** via `NEXT_PUBLIC_TANK_LABEL` env var used in `DashboardHeader`. Default remains `"Deep Well Pump · 660L Tank"` when the env var is not set. This keeps firmware config schema unchanged while allowing per-deployment customization.
 14. Locale — Use `navigator.language` or config for date/time formatting
+    - **Implemented ✅**: `usePumpData` now derives a `timeLocale` from `window.navigator.language` (with `"en-PH"` as a safe default) for chart timestamps.
 15. Chart tick interval — Responsive based on container width
+    - **Implemented ✅**: `HistoryChart` uses a `ResizeObserver` + container width to choose tick density for small vs large viewports.
 16. Role-based views — Introduce admin vs standard user roles and gate advanced settings accordingly
+    - **Implemented ✅** (see Section 6): admin vs standard users are differentiated via `/pump_system/config/admins/{uid}` and reflected in both Firebase rules and UI (Advanced tabs, FORCE ON, etc.).
 17. Concurrent users — Document and (optionally) visualize presence or last-change info for multi-user scenarios
+    - **Implemented ✅**: Online presence and recent actions are surfaced via `usePresence`, `useAuditEvents`, and `ActivityPanel`; rules and docs describe concurrent usage behavior.
 
 ### Phase E — Validation & QA (30–60 minutes)
 

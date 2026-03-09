@@ -68,7 +68,10 @@ npm install
 ```bash
 cp .env.local.example .env.local
 ```
-Edit `.env.local` and fill in your Firebase credentials. Optionally set `NEXT_PUBLIC_AUTHORIZED_UIDS` (comma-separated Firebase UIDs) to restrict which Google accounts can sign in. Optionally set `NEXT_PUBLIC_ADMIN_UIDS` (comma-separated Firebase UIDs) to enable **admin-only** advanced settings and privileged controls (e.g. FORCE ON).
+Edit `.env.local` and fill in your Firebase credentials. Optionally:
+
+- Set `NEXT_PUBLIC_AUTHORIZED_UIDS` (comma-separated Firebase UIDs) to restrict which Google accounts can sign in.
+- Set `NEXT_PUBLIC_TANK_LABEL` to customize the tank label text shown under the logo (defaults to `"Deep Well Pump · 660L Tank"` if omitted).
 
 **Where to find Firebase values:**  
 Firebase Console → Project Settings → General → Your apps → Web → SDK setup and configuration
@@ -85,19 +88,16 @@ In the Firebase Console:
 ### 6. Set Firebase security rules
 Deploy rules from project root: `firebase deploy --only database`
 
-Before deploying, edit `database.rules.json` and replace `YOUR_GOOGLE_UID` with your UID from Authentication → Users. For multiple UIDs, use `auth.uid === 'uid1' || auth.uid === 'uid2'` in the `control/mode` rule.
+Before deploying, review `database.rules.json`. The recommended setup is:
 
-Only admin UIDs can write to `control/mode/` and `control/clear_error`. ESP32 (Email/Password) can read control and write status.
+- Admin access is controlled via the admins map:
 
-#### Admins map (recommended)
+  ```
+  pump_system/config/admins/{uid} = true
+  ```
 
-The rules support an admins allowlist at:
-
-```
-pump_system/config/admins/{uid} = true
-```
-
-Use this to manage admin users without editing rules repeatedly. Keep the hardcoded UID allowlist for initial bootstrap, then add admins in the database.
+- Only admin UIDs can write to `control/mode/` and `control/clear_error`. ESP32 (Email/Password) can read control and write status.
+- A small, hardcoded UID allowlist may be kept temporarily for bootstrap, but the admins map should be the long-term single source of truth.
 
 ### 7. Run locally
 ```bash
@@ -191,8 +191,7 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 
 - Dashboard access requires **Google sign-in**. Unauthorized users are redirected to `/login`.
 - Firebase rules restrict **control writes** to admin UIDs; ESP32 (Email/Password) can read control and write status.
-- Optional: Set `NEXT_PUBLIC_AUTHORIZED_UIDS` to restrict which Google accounts can sign in.
-- Optional: Set `NEXT_PUBLIC_ADMIN_UIDS` to restrict who can access advanced settings and privileged controls.
+- Optional: Set `NEXT_PUBLIC_AUTHORIZED_UIDS` to restrict which Google accounts can sign in. Admins for advanced settings and privileged controls are managed via the Realtime Database at `pump_system/config/admins/{uid} = true`.
 
 ## Safety Notes
 

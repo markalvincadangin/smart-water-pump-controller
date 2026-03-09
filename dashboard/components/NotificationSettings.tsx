@@ -157,31 +157,26 @@ export default function NotificationSettings({ userUid, userEmail, isAdmin = fal
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between gap-2 mb-4">
-            <div className="inline-flex rounded-xl border border-surface-4 bg-surface-2 p-1">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(false)}
-                className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${!showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"}`}
-              >
-                Basic
-              </button>
-              <button
-                type="button"
-                onClick={() => isAdmin && setShowAdvanced(true)}
-                disabled={!isAdmin}
-                title={isAdmin ? "Advanced settings" : "Admin only"}
-                className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"} disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                Advanced
-              </button>
+          {isAdmin && (
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="inline-flex rounded-xl border border-surface-4 bg-surface-2 p-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(false)}
+                  className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${!showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+                >
+                  Basic
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(true)}
+                  className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+                >
+                  Advanced
+                </button>
+              </div>
             </div>
-            {!isAdmin && (
-              <span className="text-[10px] font-mono text-text-muted">
-                Advanced settings are admin-only
-              </span>
-            )}
-          </div>
+          )}
 
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
@@ -301,7 +296,7 @@ export default function NotificationSettings({ userUid, userEmail, isAdmin = fal
                   onChange={(e) => setForm((f) => ({ ...f, lowLevelThreshold: parseInt(e.target.value, 10) }))}
                   className="px-2 py-1 rounded bg-surface-2 border border-surface-4 text-text-primary text-xs font-mono"
                 >
-                  {[10, 15, 20, 25, 30].map((n) => (
+                  {[5, 10, 15, 20, 25, 30, 40, 50].map((n) => (
                     <option key={n} value={n}>{n}%</option>
                   ))}
                 </select>
