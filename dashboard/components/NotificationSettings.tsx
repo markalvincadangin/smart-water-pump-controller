@@ -7,14 +7,17 @@ import { useNotificationConfig } from "@/lib/useNotificationConfig";
 import InfoTooltip from "./InfoTooltip";
 import { isPushSupported, requestPushToken, getFcmDeviceId, type PushSupportResult } from "@/lib/fcm";
 import type { NotificationConfig } from "@/lib/types";
+import { toast } from "@/lib/toast";
+import { writeAuditEvent } from "@/lib/audit";
 
 interface NotificationSettingsProps {
   userUid: string | null;
   userEmail: string | null;
+  isAdmin?: boolean;
   onClose: () => void;
 }
 
-export default function NotificationSettings({ userUid, userEmail, onClose }: NotificationSettingsProps) {
+export default function NotificationSettings({ userUid, userEmail, isAdmin = false, onClose }: NotificationSettingsProps) {
   const { config, loading, saveConfig } = useNotificationConfig(userUid);
   const [form, setForm] = useState<NotificationConfig>({
     enabled: false,
@@ -32,6 +35,16 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [pushSupport, setPushSupport] = useState<PushSupportResult | null>(null);
   const [enablingPush, setEnablingPush] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const sectionTitleClass =
+    "text-sm font-display font-semibold text-text-primary";
+  const sectionSubtitleClass =
+    "text-[11px] font-mono text-text-muted mt-0.5";
+  const fieldLabelClass =
+    "flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-mono text-text-secondary mb-1.5";
+  const helperTextClass =
+    "text-[10px] font-mono text-text-muted";
 
   useEffect(() => {
     if (config) {
@@ -80,6 +93,14 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
     try {
       await saveConfig(form);
       setSaveSuccess(true);
+      toast({ kind: "success", title: "Alert settings saved" });
+      if (userUid) {
+        await writeAuditEvent({
+          action: "config.notifications.save",
+          uid: userUid,
+          email: userEmail,
+        });
+      }
       setTimeout(() => onClose(), 800);
     } catch (err: unknown) {
       let msg = "Failed to save. Check your connection and try again.";
@@ -136,11 +157,40 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <div className="inline-flex rounded-xl border border-surface-4 bg-surface-2 p-1">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(false)}
+                className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${!showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+              >
+                Basic
+              </button>
+              <button
+                type="button"
+                onClick={() => isAdmin && setShowAdvanced(true)}
+                disabled={!isAdmin}
+                title={isAdmin ? "Advanced settings" : "Admin only"}
+                className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Advanced
+              </button>
+            </div>
+            {!isAdmin && (
+              <span className="text-[10px] font-mono text-text-muted">
+                Advanced settings are admin-only
+              </span>
+            )}
+          </div>
+
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-            <p className="text-xs font-mono text-text-muted uppercase tracking-widest">How to receive alerts</p>
-            <InfoTooltip content="Choose how you want to receive alerts: by email, push on your phone or browser, or both." />
-          </div>
+              <div>
+                <p className={sectionTitleClass}>How to receive alerts</p>
+                <p className={sectionSubtitleClass}>Choose email, push, or both.</p>
+              </div>
+              <InfoTooltip content="Choose how you want to receive alerts: by email, push on your phone or browser, or both." />
+            </div>
 
           <label className="flex items-center gap-3 cursor-pointer min-h-[44px] py-1">
             <input
@@ -154,7 +204,7 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
           </label>
 
           <div>
-            <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1.5">
+            <label className={fieldLabelClass}>
               Email address
               <InfoTooltip content="Where to send alerts. Use any address you check regularly." side="right" />
             </label>
@@ -173,13 +223,16 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
           <div className="pt-2 border-t border-surface-3">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
               <Smartphone size={16} className="text-accent-cyan" />
-              <span className="text-sm font-mono text-text-primary">Push notifications</span>
+              <div className="min-w-0">
+                <p className={sectionTitleClass}>Push notifications</p>
+                <p className={sectionSubtitleClass}>Best when installed as an app.</p>
+              </div>
               <InfoTooltip content="Get alerts on your phone or browser, even when the app is closed. Add to Home Screen for the best experience." maxWidth="300px" />
             </div>
             {pushSupport === null ? (
-              <p className="text-xs font-mono text-text-muted py-1">Checking browser support…</p>
+              <p className={`${helperTextClass} py-1`}>Checking browser support…</p>
             ) : !pushSupport.supported ? (
-              <p className="text-xs font-mono text-text-muted py-1">{pushSupport.reason}</p>
+              <p className={`${helperTextClass} py-1`}>{pushSupport.reason}</p>
             ) : (() => {
                 const deviceId = getFcmDeviceId();
                 const hasToken = Boolean(form.fcmTokens?.[deviceId]);
@@ -214,7 +267,10 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
 
           <div className="pt-2 border-t border-surface-3">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-3">
-              <p className="text-xs font-mono text-text-muted uppercase tracking-widest">When to alert</p>
+              <div>
+                <p className={sectionTitleClass}>When to alert</p>
+                <p className={sectionSubtitleClass}>Pick events that should notify you.</p>
+              </div>
               <InfoTooltip content="Pick which events trigger alerts. We recommend keeping critical ones on." side="right" />
             </div>
             <div className="space-y-2.5">
@@ -239,7 +295,7 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
                 <InfoTooltip content="Alert when water drops to or below your threshold. Helps avoid running out." side="right" />
               </label>
               <div className="pl-7 flex items-center gap-2">
-                <span className="text-xs text-text-muted">Threshold:</span>
+                <span className="text-xs text-text-muted font-mono">Low-water threshold</span>
                 <select
                   value={form.lowLevelThreshold}
                   onChange={(e) => setForm((f) => ({ ...f, lowLevelThreshold: parseInt(e.target.value, 10) }))}
@@ -273,9 +329,17 @@ export default function NotificationSettings({ userUid, userEmail, onClose }: No
             </div>
           </div>
 
-          <p className="text-[10px] font-mono text-text-muted pt-2">
-            Each alert type is sent at most once every 15 minutes. Email and push need to be set up first.
-          </p>
+          {showAdvanced && isAdmin && (
+            <div className="pt-2 border-t border-surface-3">
+              <p className={sectionTitleClass}>Advanced</p>
+              <p className={`${helperTextClass} mt-1`}>
+                Each alert type is sent at most once every 15 minutes. Email and push need to be set up first.
+              </p>
+              <p className={`${helperTextClass} mt-1`}>
+                Recommended: keep dry-run and overflow alerts enabled.
+              </p>
+            </div>
+          )}
           </div>
 
           {saveError && (

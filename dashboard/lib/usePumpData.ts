@@ -2,10 +2,11 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ref, onValue, set, off } from "firebase/database";
+import { ref, onValue, set } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
 import type { PumpStatus, PumpControl, PumpSnapshot, HistoryEntry } from "./types";
+import { writeAuditEvent } from "@/lib/audit";
 
 const STATUS_PATH = "/pump_system/status";
 const CONTROL_PATH = "/pump_system/control";
@@ -84,7 +85,7 @@ export function usePumpData() {
             return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
           });
 
-          setSnapshot((prev) => ({
+          setSnapshot(() => ({
             status: data,
             control: controlRef.current,
             updatedAt: Date.now(),
@@ -110,8 +111,8 @@ export function usePumpData() {
     });
 
     return () => {
-      off(statusDbRef);
-      off(controlDbRef);
+      unsubStatus();
+      unsubControl();
     };
   }, [authReady]);
 
@@ -120,18 +121,33 @@ export function usePumpData() {
   const setMode = useCallback(async (mode: PumpControl["mode"]) => {
     try {
       await set(ref(db, `${CONTROL_PATH}/mode`), mode);
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.set_mode",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+          meta: { mode },
+        });
+      }
     } catch (err) {
       console.error("[RTDB] setMode failed:", err);
     }
-  }, []);
+  }, [authUser?.email, authUser?.uid]);
 
   const acknowledgeError = useCallback(async () => {
     try {
       await set(ref(db, `${CONTROL_PATH}/clear_error`), true);
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.ack_error",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+        });
+      }
     } catch (err) {
       console.error("[RTDB] acknowledgeError failed:", err);
     }
-  }, []);
+  }, [authUser?.email, authUser?.uid]);
 
   return {
     snapshot,

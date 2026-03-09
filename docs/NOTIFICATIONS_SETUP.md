@@ -65,6 +65,7 @@ Ensure `database.rules.json` includes:
 
 - `pump_system/config/notifications_by_user/$uid` — read/write for `auth.uid === $uid`
 - `pump_system/config/notification_last_sent` — no client read/write (Functions only)
+- `pump_system/audit/events` and `pump_system/presence` — optional but recommended for multi-user activity/presence indicators (dashboard writes best-effort)
 
 See `docs/DEPLOY_CHECKLIST.md` and `docs/DEPLOY_GUIDE.md` for full rules and UID setup.
 

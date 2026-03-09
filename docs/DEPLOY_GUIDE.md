@@ -71,17 +71,26 @@ Before starting, confirm:
    firebase use your-project-id
    ```
 
-2. **Edit UIDs in rules**
-   - Open `database.rules.json`.
-   - Replace the example UIDs in `control/mode` and `config/device` with your own.
-   - To get your UID: **Firebase Console → Authentication → Users** → copy the UID of your Google account(s) that may control the pump.
-   - Format: `auth.uid === 'YOUR_UID_1' || auth.uid === 'YOUR_UID_2'` (add more if needed).
+2. **Configure admin access (recommended)**
+   - The dashboard now supports **admin vs standard users**, and the database rules support an admin allowlist at:
+     - `pump_system/config/admins/{uid}: true`
+   - **Bootstrap:** `database.rules.json` also contains a hardcoded UID allowlist (legacy) so you can deploy rules safely even before the admins map exists.
+
+   **What to do:**
+   - Open `database.rules.json`
+   - Ensure your Google UID is present in the existing hardcoded allowlist (so you can write device config / mode immediately after deploying rules)
+   - After deploying rules, set your admins map in Realtime Database:
+     - `pump_system/config/admins/<YOUR_UID> = true`
+     - (Optional) Add more admin UIDs the same way
+
+   > Once `admins/{uid}` is set, you can remove the hardcoded allowlist later if you want.
 
 3. **Deploy rules**
    ```bash
    firebase deploy --only database
    ```
    - Confirm in Firebase Console → Realtime Database → Rules that the new rules are active.
+   - **Important:** `/pump_system/status` writes are now restricted to **Email/Password** sign-in (ESP32). This prevents Google dashboard users from spoofing device status.
 
 ---
 
@@ -146,6 +155,7 @@ Before starting, confirm:
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | appId |
 | `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | **Push notifications:** Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair |
 | `NEXT_PUBLIC_AUTHORIZED_UIDS` | Optional: comma-separated Firebase UIDs, or leave empty to allow any signed-in user |
+| `NEXT_PUBLIC_ADMIN_UIDS` | Optional: comma-separated Firebase UIDs that can see Advanced settings + privileged controls (e.g. FORCE ON) |
 
 3. **Verify build**
    ```bash
@@ -173,6 +183,14 @@ Before starting, confirm:
 
 7. **Install as app (PWA)**
    On mobile, users can add the dashboard to the home screen for an app-like experience. Chrome and Safari show an "Install" or "Add to Home Screen" option. The dashboard is a Progressive Web App (PWA).
+
+8. **Validation (recommended)**
+   ```bash
+   cd dashboard
+   npm run validate
+   ```
+   - Runs lint + production build + Lighthouse CI against `/` and `/login`.
+   - Use the generated report URL(s) to confirm PWA metadata and basic accessibility are picked up correctly.
 
 ---
 

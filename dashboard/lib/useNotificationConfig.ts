@@ -57,6 +57,8 @@ export function useNotificationConfig(uid: string | null) {
       fcmTokens: next.fcmTokens ?? config?.fcmTokens ?? {},
     };
     await set(configRef, merged);
+    // Optimistic update so UI reflects changes immediately
+    setConfig(merged);
   }, [config, uid]);
 
   return { config, loading, saveConfig };

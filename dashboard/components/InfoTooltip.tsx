@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useId } from "react";
 import { createPortal } from "react-dom";
 import { HelpCircle, X } from "lucide-react";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 interface InfoTooltipProps {
   content: string | React.ReactNode;
@@ -24,8 +25,24 @@ export default function InfoTooltip({ content, side = "top", maxWidth = "320px",
   const tooltipId = `tooltip-${id.replace(/:/g, "-")}`;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const isDesktop = useMediaQuery("(min-width: 640px)", true);
+  const closeTimerRef = useRef<number | null>(null);
 
   const close = useCallback(() => setOpen(false), []);
+  const cancelCloseTimer = useCallback(() => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+  const scheduleClose = useCallback(() => {
+    if (!isDesktop) return;
+    cancelCloseTimer();
+    closeTimerRef.current = window.setTimeout(() => {
+      setOpen(false);
+      closeTimerRef.current = null;
+    }, 120);
+  }, [cancelCloseTimer, isDesktop]);
 
   useEffect(() => {
     if (!open) return;
@@ -45,6 +62,14 @@ export default function InfoTooltip({ content, side = "top", maxWidth = "320px",
     };
   }, [open, close]);
 
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
+
   const position = useCallback(() => {
     const trigger = triggerRef.current;
     const popover = popoverRef.current;
@@ -58,7 +83,7 @@ export default function InfoTooltip({ content, side = "top", maxWidth = "320px",
     let top = 0;
     let left = tr.left + tr.width / 2 - pr.width / 2;
 
-    if (vw < 640) {
+    if (!isDesktop) {
       popover.style.position = "fixed";
       popover.style.left = `${PAD}px`;
       popover.style.right = `${PAD}px`;
@@ -96,7 +121,7 @@ export default function InfoTooltip({ content, side = "top", maxWidth = "320px",
     popover.style.width = "";
     popover.style.right = "";
     popover.style.maxWidth = maxWidth;
-  }, [side, maxWidth]);
+  }, [side, maxWidth, isDesktop]);
 
   useEffect(() => {
     if (!open || !popoverRef.current || !triggerRef.current) return;
@@ -125,9 +150,19 @@ export default function InfoTooltip({ content, side = "top", maxWidth = "320px",
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setOpen((o) => !o);
+          if (!isDesktop) {
+            setOpen((o) => !o);
+          }
         }}
-        onMouseEnter={() => typeof window !== "undefined" && window.innerWidth >= 640 && setOpen(true)}
+        onMouseEnter={() => {
+          if (!isDesktop) return;
+          cancelCloseTimer();
+          setOpen(true);
+        }}
+        onMouseLeave={() => {
+          if (!isDesktop) return;
+          scheduleClose();
+        }}
         className={`inline-flex items-center justify-center w-8 h-8 sm:w-5 sm:h-5 rounded-full shrink-0
           text-text-muted hover:text-accent-cyan hover:bg-accent-cyan/10
           focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1
@@ -146,12 +181,20 @@ export default function InfoTooltip({ content, side = "top", maxWidth = "320px",
             <div
               className="fixed inset-0 z-[9998] bg-black/50 sm:bg-transparent sm:pointer-events-none"
               aria-hidden="true"
-              onClick={() => { if (typeof window !== "undefined" && window.innerWidth < 640) close(); }}
+              onClick={() => { if (!isDesktop) close(); }}
             />
             <div
               ref={popoverRef}
               id={tooltipId}
               role="tooltip"
+              onMouseEnter={() => {
+                if (!isDesktop) return;
+                cancelCloseTimer();
+              }}
+              onMouseLeave={() => {
+                if (!isDesktop) return;
+                scheduleClose();
+              }}
               className="z-[9999] px-4 py-3 rounded-xl bg-surface-2 border border-surface-4 text-text-primary text-sm font-mono leading-relaxed
                 shadow-xl shadow-black/50 min-w-[200px] max-w-[min(320px,calc(100vw-32px))] tooltip-enter"
               style={{
@@ -159,7 +202,7 @@ export default function InfoTooltip({ content, side = "top", maxWidth = "320px",
                 left: "50%",
                 top: "50%",
                 transform: "translate(-50%, -50%)",
-                maxWidth: typeof window !== "undefined" && window.innerWidth < 640 ? "none" : maxWidth,
+                maxWidth: isDesktop ? maxWidth : "none",
               }}
             >
               <div className="flex items-start gap-2">

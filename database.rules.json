@@ -1,23 +1,24 @@
 {
   "rules": {
     "pump_system": {
+      ".read": "auth != null",
       "status": {
         ".read": "auth != null",
-        ".write": "auth != null"
+        ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password'"
       },
       "control": {
         ".read": "auth != null",
         "mode": {
-          ".write": "auth.uid === 'ZScmJXQg2tZSVDiZ1YxTUxN36xw1' || auth.uid === 'vQ4s0FyCmjMgoeltwcZR7WfckXZ2' || auth.uid === 'YxW81aIiuJh0quHZZGnwqEM2oEa2' || auth.uid === 'EjnknA8f5LYbclL0xAmLPM1Prvx1'"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || auth.uid === 'ZScmJXQg2tZSVDiZ1YxTUxN36xw1' || auth.uid === 'vQ4s0FyCmjMgoeltwcZR7WfckXZ2' || auth.uid === 'YxW81aIiuJh0quHZZGnwqEM2oEa2' || auth.uid === 'EjnknA8f5LYbclL0xAmLPM1Prvx1')"
         },
         "clear_error": {
-          ".write": "auth != null"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || auth.uid === 'ZScmJXQg2tZSVDiZ1YxTUxN36xw1' || auth.uid === 'vQ4s0FyCmjMgoeltwcZR7WfckXZ2' || auth.uid === 'YxW81aIiuJh0quHZZGnwqEM2oEa2' || auth.uid === 'EjnknA8f5LYbclL0xAmLPM1Prvx1')"
         }
       },
       "config": {
         "device": {
           ".read": "auth != null",
-          ".write": "auth.uid === 'ZScmJXQg2tZSVDiZ1YxTUxN36xw1' || auth.uid === 'vQ4s0FyCmjMgoeltwcZR7WfckXZ2' || auth.uid === 'YxW81aIiuJh0quHZZGnwqEM2oEa2' || auth.uid === 'EjnknA8f5LYbclL0xAmLPM1Prvx1'"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || auth.uid === 'ZScmJXQg2tZSVDiZ1YxTUxN36xw1' || auth.uid === 'vQ4s0FyCmjMgoeltwcZR7WfckXZ2' || auth.uid === 'YxW81aIiuJh0quHZZGnwqEM2oEa2' || auth.uid === 'EjnknA8f5LYbclL0xAmLPM1Prvx1')"
         },
         "notifications_by_user": {
           "$uid": {
@@ -29,6 +30,28 @@
           "$uid": {
             ".read": false,
             ".write": false
+          }
+        },
+        "admins": {
+          ".read": "auth != null",
+          "$uid": {
+            ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || auth.uid === 'ZScmJXQg2tZSVDiZ1YxTUxN36xw1' || auth.uid === 'vQ4s0FyCmjMgoeltwcZR7WfckXZ2')"
+          }
+        }
+      },
+      "presence": {
+        ".read": "auth != null",
+        "$session": {
+          ".write": "auth != null && (newData.child('uid').val() === auth.uid) && (newData.child('email').isString() || newData.child('email').val() === null) && newData.child('at').exists()",
+          ".validate": "newData.hasChildren(['uid','at'])"
+        }
+      },
+      "audit": {
+        "events": {
+          ".read": "auth != null",
+          "$eventId": {
+            ".write": "auth != null && newData.child('uid').val() === auth.uid",
+            ".validate": "newData.hasChildren(['action','uid','deviceId','at'])"
           }
         }
       }
