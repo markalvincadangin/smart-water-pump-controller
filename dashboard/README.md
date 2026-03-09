@@ -68,7 +68,7 @@ npm install
 ```bash
 cp .env.local.example .env.local
 ```
-Edit `.env.local` and fill in your Firebase credentials. Optionally set `NEXT_PUBLIC_AUTHORIZED_UIDS` (comma-separated Firebase UIDs) to restrict which Google accounts can sign in.
+Edit `.env.local` and fill in your Firebase credentials. Optionally set `NEXT_PUBLIC_AUTHORIZED_UIDS` (comma-separated Firebase UIDs) to restrict which Google accounts can sign in. Optionally set `NEXT_PUBLIC_ADMIN_UIDS` (comma-separated Firebase UIDs) to enable **admin-only** advanced settings and privileged controls (e.g. FORCE ON).
 
 **Where to find Firebase values:**  
 Firebase Console → Project Settings → General → Your apps → Web → SDK setup and configuration
@@ -87,13 +87,33 @@ Deploy rules from project root: `firebase deploy --only database`
 
 Before deploying, edit `database.rules.json` and replace `YOUR_GOOGLE_UID` with your UID from Authentication → Users. For multiple UIDs, use `auth.uid === 'uid1' || auth.uid === 'uid2'` in the `control/mode` rule.
 
-Only your Google UID can write to `control/mode/`. ESP32 (Email/Password) can read control and write to `control/clear_error`.
+Only admin UIDs can write to `control/mode/` and `control/clear_error`. ESP32 (Email/Password) can read control and write status.
+
+#### Admins map (recommended)
+
+The rules support an admins allowlist at:
+
+```
+pump_system/config/admins/{uid} = true
+```
+
+Use this to manage admin users without editing rules repeatedly. Keep the hardcoded UID allowlist for initial bootstrap, then add admins in the database.
 
 ### 7. Run locally
 ```bash
 npm run dev
 ```
 Visit [http://localhost:3000](http://localhost:3000)
+
+---
+
+## Validation (recommended)
+
+Run the full local validation (lint + build + Lighthouse CI):
+
+```bash
+npm run validate
+```
 
 ---
 
@@ -170,8 +190,9 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 ## Security
 
 - Dashboard access requires **Google sign-in**. Unauthorized users are redirected to `/login`.
-- Firebase rules restrict **control writes** to your Google UID; ESP32 (Email/Password) can read control and write status.
+- Firebase rules restrict **control writes** to admin UIDs; ESP32 (Email/Password) can read control and write status.
 - Optional: Set `NEXT_PUBLIC_AUTHORIZED_UIDS` to restrict which Google accounts can sign in.
+- Optional: Set `NEXT_PUBLIC_ADMIN_UIDS` to restrict who can access advanced settings and privileged controls.
 
 ## Safety Notes
 

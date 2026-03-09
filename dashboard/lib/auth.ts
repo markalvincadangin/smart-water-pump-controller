@@ -17,6 +17,12 @@ const AUTHORIZED_UIDS = (process.env.NEXT_PUBLIC_AUTHORIZED_UIDS ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+/** Comma-separated Firebase UIDs with admin access (advanced settings). */
+const ADMIN_UIDS = (process.env.NEXT_PUBLIC_ADMIN_UIDS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 export async function signInWithGoogle(): Promise<boolean> {
   try {
     const provider = new GoogleAuthProvider();
@@ -47,4 +53,9 @@ export async function signOut(): Promise<void> {
 export function isUidAuthorized(uid: string): boolean {
   if (AUTHORIZED_UIDS.length === 0) return true;
   return AUTHORIZED_UIDS.includes(uid);
+}
+
+export function isUidAdmin(uid: string): boolean {
+  if (ADMIN_UIDS.length === 0) return isUidAuthorized(uid);
+  return ADMIN_UIDS.includes(uid);
 }

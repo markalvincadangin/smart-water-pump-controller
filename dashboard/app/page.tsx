@@ -3,15 +3,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import clsx from "clsx";
 import {
-  Droplets,
-  Wind,
-  Activity,
   AlertTriangle,
-  RefreshCw,
-  Bell,
-  Settings,
 } from "lucide-react";
 
 import { usePumpData } from "@/lib/usePumpData";
@@ -19,15 +12,19 @@ import DeviceConfigSettings from "@/components/DeviceConfigSettings";
 import { ESP32_STALE_SEC } from "@/lib/constants";
 import { useDeviceConfig } from "@/lib/useDeviceConfig";
 import NotificationSettings from "@/components/NotificationSettings";
-import TankVisual from "@/components/TankVisual";
-import ModeControls from "@/components/ModeControls";
-import HistoryChart from "@/components/HistoryChart";
-import StatCard from "@/components/StatCard";
 import StatusBar from "@/components/StatusBar";
 import AuthGuard from "@/components/AuthGuard";
 import InstallPrompt from "@/components/InstallPrompt";
-import Logo from "@/components/Logo";
-import { signOut } from "@/lib/auth";
+import { isUidAdmin, signOut } from "@/lib/auth";
+import { DEFAULT_DEVICE_CONFIG } from "@/lib/types";
+import { toast } from "@/lib/toast";
+import { usePresence } from "@/lib/usePresence";
+import ActivityPanel from "@/components/ActivityPanel";
+import { usePendingControl } from "@/lib/usePendingControl";
+import DashboardHeader from "@/components/DashboardHeader";
+import DashboardMainGrid from "@/components/DashboardMainGrid";
+import DashboardHistorySection from "@/components/DashboardHistorySection";
+import DashboardSystemInfo from "@/components/DashboardSystemInfo";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -35,7 +32,6 @@ export default function DashboardPage() {
     snapshot,
     history,
     connected,
-    authReady,
     authChecked,
     authUser,
     error,
@@ -44,16 +40,12 @@ export default function DashboardPage() {
   } = usePumpData();
 
   const { config } = useDeviceConfig();
-
-  // Redirect to login when auth is checked but no user
-  useEffect(() => {
-    if (authChecked && !authUser) {
-      router.replace("/login");
-    }
-  }, [authChecked, authUser, router]);
+  const isAdmin = authUser?.uid ? isUidAdmin(authUser.uid) : false;
+  const { onlineCount } = usePresence(authUser?.uid ?? null, authUser?.email ?? null);
 
   // Ticker for "time ago" refresh
   const [tick, setTick] = useState(0);
+  void tick;
   const [showNotifications, setShowNotifications] = useState(false);
   const [showDeviceConfig, setShowDeviceConfig] = useState(false);
   useEffect(() => {
@@ -67,13 +59,25 @@ export default function DashboardPage() {
   const running = snapshot?.status.is_running ?? false;
   const isError = snapshot?.status.is_error ?? false;
   const mode = snapshot?.control.mode ?? "AUTO";
+  const isSleeping = snapshot?.status.is_sleeping ?? false;
+
+  const { pendingMode, setPendingMode, pendingAck, setPendingAck } = usePendingControl(mode);
+
+  const idleUpdateSec = Math.round((config?.idle_firebase_interval_ms ?? DEFAULT_DEVICE_CONFIG.idle_firebase_interval_ms) / 1000);
+  const updateLabel = running
+    ? "updated every 3s"
+    : isSleeping
+      ? `updated every ~${idleUpdateSec}s (sleep)`
+      : `updated every ~${idleUpdateSec}s when idle`;
 
   // ESP32 online = we have received a status update within the last STALE_SEC seconds
   const updatedAt = snapshot?.updatedAt ?? null;
   const esp32Online = updatedAt != null && (Date.now() - updatedAt) / 1000 < ESP32_STALE_SEC;
 
   // ── Loading state ─────────────────────────────────────────────────────────
-  if (!authChecked || !authReady) {
+  // Only block while Firebase auth is still initializing.
+  // Once authChecked is true, AuthGuard will redirect unauthenticated/unauthorized users.
+  if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -100,97 +104,20 @@ export default function DashboardPage() {
           wifiRssi={snapshot?.status.wifi_rssi}
           bootReason={snapshot?.status.last_boot_reason}
           uptimeMinutes={snapshot?.status.uptime_minutes}
+          onlineUsers={onlineCount}
         />
 
-        {/* ── Page header ───────────────────────────────────────────────────── */}
-        <header className="px-4 sm:px-6 pt-4 sm:pt-8 pb-4">
-          <div className="max-w-6xl mx-auto">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-xl bg-accent-cyan/10 border border-accent-cyan/20">
-                  <Logo size="md" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] sm:text-xs font-mono text-text-muted uppercase tracking-[0.2em] sm:tracking-[0.3em] mb-0.5 sm:mb-1">
-                    Deep Well Pump · 660L Tank
-                  </p>
-                  <h1 className="font-display text-lg sm:text-2xl md:text-3xl font-bold text-text-primary truncate leading-tight">
-                    Smart Water Pump{" "}
-                    <span className="text-gradient-cyan">System</span>
-                  </h1>
-                </div>
-              </div>
-
-              {/* User + Sign out + Pump running indicator */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
-                <span className="text-xs font-mono text-text-muted hidden md:block truncate max-w-[140px]">
-                  {authUser?.email ?? ""}
-                </span>
-                <button
-                  onClick={() => setShowDeviceConfig(true)}
-                  title="Device settings"
-                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-lg border border-surface-3 text-text-secondary
-                           hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
-                           focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1"
-                >
-                  <Settings size={18} />
-                </button>
-                <button
-                  onClick={() => setShowNotifications(true)}
-                  title="Alert preferences"
-                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-lg border border-surface-3 text-text-secondary
-                           hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
-                           focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1"
-                >
-                  <Bell size={18} />
-                </button>
-                <button
-                  onClick={() => signOut().then(() => window.location.assign("/login"))}
-                  className="px-3 py-2 min-h-[44px] sm:min-h-0 sm:py-1.5 rounded-lg border border-surface-3 text-text-secondary
-                           text-xs font-mono hover:border-accent-red/40 hover:text-accent-red
-                           transition-colors shrink-0 touch-manipulation
-                           focus:outline-none focus:ring-2 focus:ring-accent-red/50 focus:ring-offset-2 focus:ring-offset-surface-1"
-                >
-                  Sign out
-                </button>
-                {/* Pump running indicator — compact label on small screens */}
-                <div className={clsx(
-                  "flex items-center gap-2 sm:gap-2.5 px-3 sm:px-4 py-2 rounded-xl border transition-all duration-500 min-h-[44px] sm:min-h-0",
-                  running && !isError
-                    ? "bg-accent-green/10 border-accent-green/30 shadow-[0_0_20px_rgba(0,255,136,0.15)]"
-                    : isError
-                      ? "bg-accent-red/10 border-accent-red/30"
-                      : "bg-surface-2 border-surface-3"
-                )}>
-                  {running && !isError && <div className="dot-live" />}
-                  {isError && <div className="dot-error" />}
-                  {!running && !isError && (
-                    <div className="w-2 h-2 rounded-full bg-text-muted" />
-                  )}
-                  <span className={clsx(
-                    "font-mono text-xs sm:text-sm font-semibold uppercase tracking-wider hidden sm:inline",
-                    running && !isError ? "text-accent-green"
-                      : isError ? "text-accent-red"
-                        : "text-text-secondary"
-                  )}>
-                    {isError ? "ERROR" : running ? "RUNNING" : "IDLE"}
-                  </span>
-                  <span className={clsx(
-                    "font-mono text-xs font-semibold uppercase tracking-wider sm:hidden",
-                    running && !isError ? "text-accent-green"
-                      : isError ? "text-accent-red"
-                        : "text-text-secondary"
-                  )}>
-                    {isError ? "ERR" : running ? "RUN" : "IDLE"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
+        <DashboardHeader
+          userEmail={authUser?.email ?? ""}
+          running={running}
+          isError={isError}
+          onOpenDeviceConfig={() => setShowDeviceConfig(true)}
+          onOpenNotifications={() => setShowNotifications(true)}
+          onSignOut={() => signOut().then(() => router.replace("/login"))}
+        />
 
         {/* ── Main layout ───────────────────────────────────────────────────── */}
-        <main className="flex-1 px-4 sm:px-6 pb-6 sm:pb-8 min-w-0">
+        <main id="main" className="flex-1 px-4 sm:px-6 pb-6 sm:pb-8 min-w-0">
           <div className="max-w-6xl mx-auto space-y-3 sm:space-y-4">
 
             {/* Connection error banner */}
@@ -202,102 +129,40 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* ── Row 1: Tank + Stats + Controls ─────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            <DashboardMainGrid
+              level={level}
+              flow={flow}
+              running={running}
+              isError={isError}
+              mode={mode}
+              config={config}
+              isAdmin={isAdmin}
+              pendingMode={pendingMode}
+              pendingAck={pendingAck}
+              onSetMode={(nextMode) => {
+                if (nextMode === "FORCE_ON" && !isAdmin) {
+                  toast({ kind: "warning", title: "FORCE ON is admin-only" });
+                  return;
+                }
+                setPendingMode(nextMode);
+                toast({ kind: "info", title: `Sending mode: ${nextMode}` });
+                setMode(nextMode);
+                window.setTimeout(() => setPendingMode(null), 8000);
+              }}
+              onAcknowledge={() => {
+                setPendingAck(true);
+                toast({ kind: "info", title: "Sending acknowledge…" });
+                acknowledgeError();
+                window.setTimeout(() => setPendingAck(false), 6000);
+              }}
+            />
 
-              {/* Tank visual */}
-              <div className={clsx(
-                "card p-4 sm:p-6 flex flex-col items-center justify-center gap-2 min-h-[200px] sm:min-h-0",
-                isError ? "card-glow-red"
-                  : running ? "card-glow-green"
-                    : "card-glow-cyan"
-              )}>
-                <h3 className="font-display font-semibold text-sm uppercase tracking-widest
-                             text-text-secondary self-start">
-                  Tank Level
-                </h3>
-                <TankVisual level={level} isRunning={running} isError={isError} />
-              </div>
+            <DashboardHistorySection connected={connected} updateLabel={updateLabel} history={history} />
 
-              {/* Stats column */}
-              <div className="flex flex-col gap-2 sm:gap-3 min-w-0">
-                <StatCard
-                  label="Tank Water Level"
-                  value={level.toString()}
-                  unit="%"
-                  Icon={Droplets}
-                  color={level <= (config?.pump_start_level ?? 30) ? "amber" : "cyan"}
-                  sub={`Pump on at ≤${config?.pump_start_level ?? 30}%, off at ≥${config?.pump_stop_level ?? 100}%`}
-                />
-                <StatCard
-                  label="Flow Rate"
-                  value={flow.toFixed(1)}
-                  unit="LPM"
-                  Icon={Wind}
-                  color={running && flow < (config?.dry_run_threshold_lpm ?? 0.5) ? "red" : "green"}
-                  sub={running ? (flow < (config?.dry_run_threshold_lpm ?? 0.5) ? "⚠ Low flow — pump may stop" : "Normal flow") : "Pump idle"}
-                  animate={running}
-                />
-                <StatCard
-                  label="Pump Status"
-                  value={isError ? "ERROR" : running ? "ON" : "OFF"}
-                  Icon={Activity}
-                  color={isError ? "red" : running ? "green" : "cyan"}
-                  sub={`Mode: ${mode}`}
-                />
-              </div>
+            <DashboardSystemInfo />
 
-              {/* Mode controls */}
-              <div className="card p-4 sm:p-5 card-glow-cyan md:col-span-2 lg:col-span-1">
-                <ModeControls
-                  currentMode={mode}
-                  isError={isError}
-                  dryRunTimeoutSec={config?.dry_run_timeout_sec ?? 30}
-                  onSetMode={setMode}
-                  onAcknowledge={acknowledgeError}
-                />
-              </div>
-            </div>
-
-            {/* ── Row 2: History chart ─────────────────────────────────────── */}
-            <div className="card p-4 sm:p-5 card-glow-cyan min-w-0 overflow-hidden">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 sm:mb-4">
-                <div>
-                  <h3 className="font-display font-semibold text-sm uppercase tracking-widest
-                               text-text-primary">
-                    Level & Flow History
-                  </h3>
-                  <p className="text-[10px] sm:text-xs font-mono text-text-muted mt-0.5">
-                    Last {history.length} readings · updated every 3s
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 text-text-muted">
-                  <RefreshCw size={12} className={clsx(connected && "animate-spin-slow")} />
-                  <span className="text-xs font-mono">Real-time</span>
-                </div>
-              </div>
-              <HistoryChart data={history} />
-            </div>
-
-            {/* ── Row 3: System info footer ────────────────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 min-w-0">
-              {[
-                { label: "Controller", value: "ESP32" },
-                { label: "Sensors", value: "Level · Flow" },
-                { label: "Protection", value: "Overload · No-flow shutdown" },
-                { label: "Sync", value: "Real-time" },
-              ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  className="card p-3 border-surface-3 min-w-0"
-                >
-                  <p className="text-[10px] font-mono text-text-muted uppercase tracking-widest">
-                    {label}
-                  </p>
-                  <p className="text-xs font-mono text-text-secondary mt-1 break-words">{value}</p>
-                </div>
-              ))}
-            </div>
+            {/* ── Row 4: Activity (multi-user) ─────────────────────────────── */}
+            <ActivityPanel />
           </div>
         </main>
       </div>
@@ -305,11 +170,17 @@ export default function DashboardPage() {
         <NotificationSettings
           userUid={authUser?.uid ?? null}
           userEmail={authUser?.email ?? null}
+          isAdmin={isAdmin}
           onClose={() => setShowNotifications(false)}
         />
       )}
       {showDeviceConfig && (
-        <DeviceConfigSettings onClose={() => setShowDeviceConfig(false)} />
+        <DeviceConfigSettings
+          isAdmin={isAdmin}
+          actorUid={authUser?.uid ?? null}
+          actorEmail={authUser?.email ?? null}
+          onClose={() => setShowDeviceConfig(false)}
+        />
       )}
       <InstallPrompt />
     </AuthGuard>

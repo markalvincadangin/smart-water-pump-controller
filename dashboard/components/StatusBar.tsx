@@ -15,9 +15,10 @@ interface StatusBarProps {
   wifiRssi?: number;
   bootReason?: string;
   uptimeMinutes?: number; // Phase 5: Uptime
+  onlineUsers?: number;
 }
 
-export default function StatusBar({ connected, esp32Online, updatedAt, mode, isSensorError, isOverflowError, isSleeping, wifiRssi, bootReason, uptimeMinutes }: StatusBarProps) {
+export default function StatusBar({ connected, esp32Online, updatedAt, mode, isSensorError, isOverflowError, isSleeping, wifiRssi, bootReason, uptimeMinutes, onlineUsers }: StatusBarProps) {
   const timeAgo = updatedAt
     ? Math.round((Date.now() - updatedAt) / 1000)
     : null;
@@ -102,6 +103,11 @@ export default function StatusBar({ connected, esp32Online, updatedAt, mode, isS
         )}>
           {mode}
         </span>
+        {typeof onlineUsers === "number" && onlineUsers > 0 && (
+          <span className="badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0 bg-surface-3 text-text-muted border border-surface-4">
+            {onlineUsers} user{onlineUsers === 1 ? "" : "s"}
+          </span>
+        )}
         {isSensorError && (
           <span className="badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0 bg-accent-amber/10 text-accent-amber border border-accent-amber/20 flex items-center gap-0.5">
             <AlertTriangle size={9} />

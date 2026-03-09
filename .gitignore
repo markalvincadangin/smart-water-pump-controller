@@ -10,6 +10,7 @@ build/
 dist/
 functions/lib/
 dashboard/tsconfig.tsbuildinfo
+dashboard/.lighthouseci/
 
 # Task/resolution files
 *.resolved

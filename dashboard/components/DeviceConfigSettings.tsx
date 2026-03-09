@@ -7,18 +7,33 @@ import { useDeviceConfig } from "@/lib/useDeviceConfig";
 import InfoTooltip from "./InfoTooltip";
 import type { DeviceConfig } from "@/lib/types";
 import { DEFAULT_DEVICE_CONFIG } from "@/lib/types";
+import { toast } from "@/lib/toast";
+import { writeAuditEvent } from "@/lib/audit";
 
 interface DeviceConfigSettingsProps {
   onClose: () => void;
+  isAdmin?: boolean;
+  actorUid?: string | null;
+  actorEmail?: string | null;
 }
 
-export default function DeviceConfigSettings({ onClose }: DeviceConfigSettingsProps) {
+export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUid = null, actorEmail = null }: DeviceConfigSettingsProps) {
   const { config, loading, saveConfig, seedDefaultsIfEmpty } = useDeviceConfig();
   const [form, setForm] = useState<DeviceConfig>({ ...DEFAULT_DEVICE_CONFIG });
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const sectionTitleClass =
+    "text-sm font-display font-semibold text-text-primary";
+  const sectionSubtitleClass =
+    "text-[11px] font-mono text-text-muted mt-0.5";
+  const fieldLabelClass =
+    "flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-mono text-text-secondary mb-1";
+  const helperTextClass =
+    "text-[10px] font-mono text-text-muted mt-1";
 
   useEffect(() => {
     if (config) setForm(config);
@@ -55,6 +70,14 @@ export default function DeviceConfigSettings({ onClose }: DeviceConfigSettingsPr
     try {
       await saveConfig(form);
       setSaveSuccess(true);
+      toast({ kind: "success", title: "Device settings saved", detail: "Changes will sync when the controller is online." });
+      if (actorUid) {
+        await writeAuditEvent({
+          action: "config.device.save",
+          uid: actorUid,
+          email: actorEmail,
+        });
+      }
       setTimeout(() => onClose(), 800);
     } catch (e: unknown) {
       let msg = "Failed to save. Check your connection.";
@@ -114,41 +137,75 @@ export default function DeviceConfigSettings({ onClose }: DeviceConfigSettingsPr
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <div className="inline-flex rounded-xl border border-surface-4 bg-surface-2 p-1">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(false)}
+                className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${!showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+              >
+                Basic
+              </button>
+              <button
+                type="button"
+                onClick={() => isAdmin && setShowAdvanced(true)}
+                disabled={!isAdmin}
+                title={isAdmin ? "Advanced settings" : "Admin only"}
+                className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Advanced
+              </button>
+            </div>
+            {!isAdmin && (
+              <span className="text-[10px] font-mono text-text-muted">
+                Advanced settings are admin-only
+              </span>
+            )}
+          </div>
+
           <div className="space-y-4">
           {/* Tank Calibration */}
           <div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-              <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Tank size</p>
+              <div>
+                <p className={sectionTitleClass}>Tank size</p>
+                <p className={sectionSubtitleClass}>Calibrate empty/full distances for accurate level.</p>
+              </div>
               <InfoTooltip content="Measure with a tape measure. Enter the distance from the sensor to the water when empty and when full. This sets how we show the water level." />
             </div>
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                <label className={fieldLabelClass}>
                   Empty (cm)
                   <InfoTooltip content="Distance from sensor to water when the tank is empty. Taller tanks use a larger number." side="right" />
                 </label>
                 <input type="number" min={5} max={200} value={form.tank_empty_cm} onChange={(e) => setForm((f) => ({ ...f, tank_empty_cm: parseInt(e.target.value, 10) || 0 }))}
                   className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                <p className={helperTextClass}>Typical: 50–150 cm (depends on tank height).</p>
               </div>
               <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                <label className={fieldLabelClass}>
                   Full (cm)
                   <InfoTooltip content="Distance from sensor to water when the tank is completely full. Must be less than empty." side="right" />
                 </label>
                 <input type="number" min={1} max={199} value={form.tank_full_cm} onChange={(e) => setForm((f) => ({ ...f, tank_full_cm: parseInt(e.target.value, 10) || 0 }))}
                   className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                <p className={helperTextClass}>Must be less than Empty.</p>
               </div>
             </div>
           </div>
           {/* Pump Thresholds */}
           <div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-              <p className="text-xs font-mono text-text-muted uppercase tracking-widest">When to run the pump</p>
+              <div>
+                <p className={sectionTitleClass}>When to run the pump</p>
+                <p className={sectionSubtitleClass}>AUTO mode turns ON at Start and OFF at Stop.</p>
+              </div>
               <InfoTooltip content="In automatic mode, the pump turns on when water drops to Start % and off when it reaches Stop %. Example: Start 30%, Stop 100% fills the tank completely." />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
               <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                <label className={fieldLabelClass}>
                   Start at (%)
                   <InfoTooltip content="Pump turns on when water reaches this level or below. Lower means waiting longer before refilling." side="right" />
                 </label>
@@ -156,7 +213,7 @@ export default function DeviceConfigSettings({ onClose }: DeviceConfigSettingsPr
                   className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
               </div>
               <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                <label className={fieldLabelClass}>
                   Stop at (%)
                   <InfoTooltip content="Pump turns off when water reaches this level. Usually 100% for a full tank." side="right" />
                 </label>
@@ -164,25 +221,28 @@ export default function DeviceConfigSettings({ onClose }: DeviceConfigSettingsPr
                   className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
               </div>
               <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                <label className={fieldLabelClass}>
                   Max runtime (min)
                   <InfoTooltip content="Safety limit: pump stops if it runs longer than this without filling. Helps prevent overflow if something goes wrong." side="right" />
                 </label>
                 <input type="number" min={30} max={480} value={form.max_pump_runtime_min} onChange={(e) => setForm((f) => ({ ...f, max_pump_runtime_min: parseInt(e.target.value, 10) || 0 }))}
                   className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                <p className="text-[9px] font-mono text-text-muted mt-0.5">Overflow protection</p>
+                <p className={helperTextClass}>Overflow protection.</p>
               </div>
             </div>
           </div>
-          {/* Safety */}
+          {/* Basic safety */}
           <div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-              <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Pump protection</p>
-              <InfoTooltip content="Settings to protect the pump from running without water and to match the flow meter to your setup." />
+              <div>
+                <p className={sectionTitleClass}>Pump protection</p>
+                <p className={sectionSubtitleClass}>Dry-run protection based on low flow.</p>
+              </div>
+              <InfoTooltip content="Settings to protect the pump from running without water." />
             </div>
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                <label className={fieldLabelClass}>
                   No-flow threshold (L/min)
                   <InfoTooltip content="If water flow stays below this while the pump is on, it will shut off. Protects the pump from running dry." side="right" />
                 </label>
@@ -190,112 +250,129 @@ export default function DeviceConfigSettings({ onClose }: DeviceConfigSettingsPr
                   className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
               </div>
               <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                <label className={fieldLabelClass}>
                   Shutdown delay (sec)
                   <InfoTooltip content="How long low flow must continue before the pump shuts off. 30 seconds is typical. Shorter = faster protection." side="right" />
                 </label>
                 <input type="number" min={10} max={300} value={form.dry_run_timeout_sec} onChange={(e) => setForm((f) => ({ ...f, dry_run_timeout_sec: parseInt(e.target.value, 10) || 0 }))}
                   className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
               </div>
-              <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                  Flow meter adjustment
-                  <InfoTooltip content="Matches the flow meter to your setup. Check the sensor manual for the value (often 7.5 or 4.8). Test with a bucket to verify." side="right" />
-                </label>
-                <input type="number" step={0.1} min={0.1} max={20} value={form.flow_calibration_factor} onChange={(e) => setForm((f) => ({ ...f, flow_calibration_factor: parseFloat(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                <p className="text-[9px] font-mono text-text-muted mt-0.5">Check sensor manual for typical value</p>
-              </div>
-              <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                  Sensor error threshold
-                  <InfoTooltip content="After this many failed readings in a row, we show a sensor error. Default is 5." side="right" />
-                </label>
-                <input type="number" min={3} max={20} value={form.sensor_failure_threshold} onChange={(e) => setForm((f) => ({ ...f, sensor_failure_threshold: parseInt(e.target.value, 10) || 5 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                <p className="text-[9px] font-mono text-text-muted mt-0.5">Failed readings before showing error</p>
-              </div>
             </div>
           </div>
-          {/* Sleep Schedule */}
-          <div className="border-t border-surface-3 pt-4">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-              <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Quiet hours</p>
-              <InfoTooltip content="Pause automatic pumping during set hours. Manual control and emergency fill still work. Useful to avoid pump noise at night." />
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-              <input type="checkbox" id="sleep_enabled" checked={form.sleep_enabled}
-                onChange={(e) => setForm((f) => ({ ...f, sleep_enabled: e.target.checked }))}
-                className="w-4 h-4 rounded border-surface-4 text-accent-cyan focus:ring-accent-cyan/50" />
-              <label htmlFor="sleep_enabled" className="text-sm font-mono text-text-secondary">Enable quiet hours</label>
-            </div>
-            <p className="text-[9px] font-mono text-text-muted mb-2">During quiet hours: auto mode is paused. Manual control and low-water override still work.</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-              <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                  Start (hour)
-                  <InfoTooltip content="When quiet hours begin. Example: 23 = 11 PM." side="right" />
-                </label>
-                <select value={form.sleep_start_hour} onChange={(e) => setForm((f) => ({ ...f, sleep_start_hour: parseInt(e.target.value, 10) }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm">
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <option key={i} value={i}>{i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}</option>
-                  ))}
-                </select>
+
+          {/* Advanced-only sections */}
+          {showAdvanced && isAdmin && (
+            <>
+              <div className="border-t border-surface-3 pt-4">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+                  <div>
+                    <p className={sectionTitleClass}>Calibration & diagnostics</p>
+                    <p className={sectionSubtitleClass}>Admin-only. Adjust only if you know what you’re doing.</p>
+                  </div>
+                  <InfoTooltip content="Advanced calibration values. Change only if you know what you’re doing." />
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  <div>
+                    <label className={fieldLabelClass}>
+                      Flow meter adjustment
+                      <InfoTooltip content="Matches the flow meter to your setup. Check the sensor manual for the value (often 7.5 or 4.8). Test with a bucket to verify." side="right" />
+                    </label>
+                    <input type="number" step={0.1} min={0.1} max={20} value={form.flow_calibration_factor} onChange={(e) => setForm((f) => ({ ...f, flow_calibration_factor: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                    <p className={helperTextClass}>Check sensor manual; verify with bucket test.</p>
+                  </div>
+                  <div>
+                    <label className={fieldLabelClass}>
+                      Sensor error threshold
+                      <InfoTooltip content="After this many failed readings in a row, we show a sensor error. Default is 5." side="right" />
+                    </label>
+                    <input type="number" min={3} max={20} value={form.sensor_failure_threshold} onChange={(e) => setForm((f) => ({ ...f, sensor_failure_threshold: parseInt(e.target.value, 10) || 5 }))}
+                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                    <p className={helperTextClass}>Consecutive failed readings before error.</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                  End (hour)
-                  <InfoTooltip content="When quiet hours end. Example: 5 = 5 AM." side="right" />
-                </label>
-                <select value={form.sleep_end_hour} onChange={(e) => setForm((f) => ({ ...f, sleep_end_hour: parseInt(e.target.value, 10) }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm">
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <option key={i} value={i}>{i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}</option>
-                  ))}
-                </select>
+
+              <div className="border-t border-surface-3 pt-4">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+                  <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Quiet hours</p>
+                  <InfoTooltip content="Pause automatic pumping during set hours. Manual control and emergency fill still work. Useful to avoid pump noise at night." />
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+                  <input type="checkbox" id="sleep_enabled" checked={form.sleep_enabled}
+                    onChange={(e) => setForm((f) => ({ ...f, sleep_enabled: e.target.checked }))}
+                    className="w-4 h-4 rounded border-surface-4 text-accent-cyan focus:ring-accent-cyan/50" />
+                  <label htmlFor="sleep_enabled" className="text-sm font-mono text-text-secondary">Enable quiet hours</label>
+                </div>
+                <p className="text-[9px] font-mono text-text-muted mb-2">During quiet hours: auto mode is paused. Manual control and low-water override still work.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                  <div>
+                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                      Start (hour)
+                      <InfoTooltip content="When quiet hours begin. Example: 23 = 11 PM." side="right" />
+                    </label>
+                    <select value={form.sleep_start_hour} onChange={(e) => setForm((f) => ({ ...f, sleep_start_hour: parseInt(e.target.value, 10) }))}
+                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm">
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                      End (hour)
+                      <InfoTooltip content="When quiet hours end. Example: 5 = 5 AM." side="right" />
+                    </label>
+                    <select value={form.sleep_end_hour} onChange={(e) => setForm((f) => ({ ...f, sleep_end_hour: parseInt(e.target.value, 10) }))}
+                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm">
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                      Low-water override (%)
+                      <InfoTooltip content="If water drops to this level during quiet hours, the pump runs anyway. Prevents running out overnight." side="right" />
+                    </label>
+                    <input type="number" min={0} max={100} value={form.sleep_emergency_level}
+                      onChange={(e) => setForm((f) => ({ ...f, sleep_emergency_level: parseInt(e.target.value, 10) || 0 }))}
+                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                    <p className="text-[9px] font-mono text-text-muted mt-0.5">Pump runs regardless of quiet hours when this low</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                  Low-water override (%)
-                  <InfoTooltip content="If water drops to this level during quiet hours, the pump runs anyway. Prevents running out overnight." side="right" />
-                </label>
-                <input type="number" min={0} max={100} value={form.sleep_emergency_level}
-                  onChange={(e) => setForm((f) => ({ ...f, sleep_emergency_level: parseInt(e.target.value, 10) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                <p className="text-[9px] font-mono text-text-muted mt-0.5">Pump runs regardless of quiet hours when this low</p>
+
+              <div className="border-t border-surface-3 pt-4">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+                  <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Power saving</p>
+                  <InfoTooltip content="When the tank is full and the pump has been off for 5+ minutes, we check the water level less often to save power." />
+                </div>
+                <p className="text-[9px] font-mono text-text-muted mb-2">Used when tank is 90%+ full and pump is off for 5+ min.</p>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  <div>
+                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                      Level check (ms)
+                      <InfoTooltip content="How often we measure the water level when idle. 10000 = 10 seconds. Higher = less power, slower updates." side="right" />
+                    </label>
+                    <input type="number" min={5000} max={60000} step={1000} value={form.idle_sensor_interval_ms}
+                      onChange={(e) => setForm((f) => ({ ...f, idle_sensor_interval_ms: parseInt(e.target.value, 10) || 10000 }))}
+                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                  </div>
+                  <div>
+                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
+                      Sync interval (ms)
+                      <InfoTooltip content="How often we update the dashboard when idle. 30000 = 30 seconds. Higher = less data usage." side="right" />
+                    </label>
+                    <input type="number" min={10000} max={120000} step={1000} value={form.idle_firebase_interval_ms}
+                      onChange={(e) => setForm((f) => ({ ...f, idle_firebase_interval_ms: parseInt(e.target.value, 10) || 30000 }))}
+                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          {/* Advanced */}
-          <div className="border-t border-surface-3 pt-4">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-              <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Power saving</p>
-              <InfoTooltip content="When the tank is full and the pump has been off for 5+ minutes, we check the water level less often to save power." />
-            </div>
-            <p className="text-[9px] font-mono text-text-muted mb-2">Used when tank is 90%+ full and pump is off for 5+ min.</p>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
-              <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                  Level check (ms)
-                  <InfoTooltip content="How often we measure the water level when idle. 10000 = 10 seconds. Higher = less power, slower updates." side="right" />
-                </label>
-                <input type="number" min={5000} max={60000} step={1000} value={form.idle_sensor_interval_ms}
-                  onChange={(e) => setForm((f) => ({ ...f, idle_sensor_interval_ms: parseInt(e.target.value, 10) || 10000 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-              </div>
-              <div>
-                <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                  Sync interval (ms)
-                  <InfoTooltip content="How often we update the dashboard when idle. 30000 = 30 seconds. Higher = less data usage." side="right" />
-                </label>
-                <input type="number" min={10000} max={120000} step={1000} value={form.idle_firebase_interval_ms}
-                  onChange={(e) => setForm((f) => ({ ...f, idle_firebase_interval_ms: parseInt(e.target.value, 10) || 30000 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-              </div>
-            </div>
-          </div>
-          <p className="text-[10px] font-mono text-text-muted">Settings sync to your controller when it's online. When offline, it uses the last saved values—no restart needed.</p>
+            </>
+          )}
+          <p className="text-[10px] font-mono text-text-muted">Settings sync to your controller when it&apos;s online. When offline, it uses the last saved values—no restart needed.</p>
           </div>
 
           {saveError && (

@@ -1,6 +1,7 @@
 // components/HistoryChart.tsx
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -17,16 +18,28 @@ interface HistoryChartProps {
   data: HistoryEntry[];
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+type TooltipPayloadItem = {
+  name?: string;
+  value?: number;
+  color?: string;
+};
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipPayloadItem[];
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null;
   const formatValue = (name: string, value: number) =>
     name.includes("Level") ? `${value}%` : `${value} LPM`;
   return (
     <div className="bg-surface-2 border border-surface-4 rounded-lg p-2.5 text-xs font-mono">
       <p className="text-text-secondary mb-1.5">{label}</p>
-      {payload.map((p: any) => (
-        <p key={p.name} style={{ color: p.color }}>
-          {p.name}: {formatValue(p.name, p.value)}
+      {payload.map((p, idx) => (
+        <p key={p.name ?? idx} style={{ color: p.color }}>
+          {p.name}: {formatValue(p.name ?? "Value", Number(p.value ?? 0))}
         </p>
       ))}
     </div>
@@ -34,20 +47,41 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function HistoryChart({ data }: HistoryChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setContainerWidth(el.clientWidth));
+    ro.observe(el);
+    setContainerWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  const tickInterval = useMemo(() => {
+    // Heuristic: fewer X ticks on narrow screens to prevent overlap
+    // interval means "show every Nth tick"
+    const desiredTicks =
+      containerWidth <= 0 ? 6
+      : containerWidth < 360 ? 3
+      : containerWidth < 520 ? 4
+      : 6;
+
+    return Math.max(1, Math.floor(data.length / desiredTicks));
+  }, [containerWidth, data.length]);
+
   if (data.length < 2) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[160px] h-[180px] sm:h-[200px] gap-2 text-text-muted text-sm font-mono">
+      <div className="flex flex-col items-center justify-center min-h-[160px] h-[clamp(160px,35vh,220px)] gap-2 text-text-muted text-sm font-mono">
         <p>Waiting for data…</p>
         <div className="w-full max-w-[200px] h-24 rounded-lg border border-surface-4 bg-surface-2/50 animate-pulse" aria-hidden />
       </div>
     );
   }
 
-  // Show only every N-th label on X axis to avoid crowding
-  const tickInterval = Math.max(1, Math.floor(data.length / 6));
-
   return (
-    <div className="min-h-[160px] h-[180px] sm:h-[200px] w-full min-w-0">
+    <div ref={containerRef} className="min-h-[160px] h-[clamp(160px,35vh,220px)] w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 8, right: 4, left: -24, bottom: 0 }}>
         <defs>

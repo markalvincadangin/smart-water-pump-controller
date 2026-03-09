@@ -9,6 +9,9 @@ interface ModeControlsProps {
   currentMode: PumpControl["mode"];
   isError: boolean;
   dryRunTimeoutSec?: number;  // from device config, default 30
+  pendingMode?: PumpControl["mode"] | null;
+  pendingAcknowledge?: boolean;
+  allowForceOn?: boolean;
   onSetMode: (mode: PumpControl["mode"]) => void;
   onAcknowledge: () => void;
 }
@@ -51,6 +54,9 @@ export default function ModeControls({
   currentMode,
   isError,
   dryRunTimeoutSec = 30,
+  pendingMode = null,
+  pendingAcknowledge = false,
+  allowForceOn = true,
   onSetMode,
   onAcknowledge,
 }: ModeControlsProps) {
@@ -60,23 +66,32 @@ export default function ModeControls({
         <h3 className="font-display font-semibold text-text-primary text-sm uppercase tracking-widest">
           Mode Control
         </h3>
-        <span className="badge bg-surface-3 text-text-secondary border border-surface-4" title="Controls sync to your pump via the cloud">
-          Synced
-        </span>
+        {pendingMode ? (
+          <span className="badge bg-accent-amber/10 text-accent-amber border border-accent-amber/20" title="Waiting for controller to confirm">
+            Sending…
+          </span>
+        ) : (
+          <span className="badge bg-surface-3 text-text-secondary border border-surface-4" title="Controls sync to your pump via the cloud">
+            Synced
+          </span>
+        )}
       </div>
 
       {/* Mode buttons — touch-friendly 44px min on mobile */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {MODES.map(({ id, label, sub, Icon, active, hover }) => {
           const isActive = currentMode === id;
+          const isPending = pendingMode === id;
+          const isDisabledByRole = id === "FORCE_ON" && !allowForceOn;
           return (
             <button
               key={id}
               onClick={() => onSetMode(id)}
               title={`${label}: ${sub}`}
+              disabled={pendingMode !== null || isDisabledByRole}
               className={clsx(
                 "flex flex-col items-center justify-center gap-1 sm:gap-2 p-2.5 sm:p-3 min-h-[64px] sm:min-h-0 rounded-xl border transition-all duration-200 touch-manipulation active:scale-[0.98]",
-                "cursor-pointer select-none touch-manipulation active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1",
+                "cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1",
                 isActive
                   ? active
                   : clsx("border-surface-3 text-text-secondary", hover)
@@ -93,7 +108,9 @@ export default function ModeControls({
               />
               <div className="text-center min-w-0">
                 <div className="text-[10px] sm:text-xs font-mono font-semibold leading-none">{label}</div>
-                <div className="text-[9px] sm:text-[10px] text-text-muted mt-0.5 leading-tight line-clamp-2">{sub}</div>
+                <div className={clsx("text-[9px] sm:text-[10px] text-text-muted mt-0.5 leading-tight line-clamp-2", isPending && "text-accent-amber")}>
+                  {isDisabledByRole ? "Admin only" : isPending ? "Sending…" : sub}
+                </div>
               </div>
             </button>
           );
@@ -115,12 +132,13 @@ export default function ModeControls({
             <button
               onClick={onAcknowledge}
               title="Acknowledge and resume normal operation"
+              disabled={pendingAcknowledge}
               className="shrink-0 px-4 py-3 min-h-[44px] sm:min-h-0 sm:py-1.5 rounded-lg bg-accent-red/20 border border-accent-red/50
                          text-accent-red text-xs font-mono font-semibold
-                         hover:bg-accent-red/30 active:bg-accent-red/30 transition-colors touch-manipulation
+                         hover:bg-accent-red/30 active:bg-accent-red/30 transition-colors touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed
                          focus:outline-none focus:ring-2 focus:ring-accent-red/50 focus:ring-offset-2 focus:ring-offset-surface-1"
             >
-              Acknowledge
+              {pendingAcknowledge ? "Sending…" : "Acknowledge"}
             </button>
           </div>
         </div>
