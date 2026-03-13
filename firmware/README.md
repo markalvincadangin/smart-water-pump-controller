@@ -10,6 +10,8 @@
 The firmware runs a non-blocking state machine on the ESP32 that:
 
 - Reads tank water level every **1 second** via JSN-SR04T ultrasonic sensor (5-sample median, EMA smoothing)
+  - In long-run installations, the JSN-SR04T is driven by a small NodeMCU v3 (ESP8266) "tank node" near the tank and
+    reported over RS-485 to the main enclosure.
 - Reads pipe flow rate every **1 second** via YF-G1 hall-effect sensor (hardware interrupt)
 - Syncs status to Firebase Realtime Database every **3 seconds**
 - Reads control commands from Firebase every **3 seconds**
@@ -28,15 +30,22 @@ The firmware runs a non-blocking state machine on the ESP32 that:
 ```
 firmware/
 ├── smart_pump_controller/
-│   ├── smart_pump_controller.ino   ← Main firmware (open this in Arduino IDE)
+│   ├── 01_config.ino               ← Includes, constants, globals
+│   ├── 02_sensors.ino              ← Flow ISR + ultrasonic + flow calc
+│   ├── 03_safety_pump.ino          ← Safety checks + pump state machine
+│   ├── 04_persistence.ino          ← NVS config/state + crash loop helpers
+│   ├── 05_connectivity_cloud.ino   ← WiFi/NTP/Firebase helpers
+│   ├── smart_pump_controller.ino   ← Entry points only (open this in Arduino IDE)
 │   ├── secrets.h.example           ← Template for credentials (copy to secrets.h)
 │   └── secrets.h                  ← Your credentials (create from example, gitignored)
 ├── libraries.txt                   ← Required libraries and install instructions
 └── README.md                       ← This file
 ```
 
-> **Arduino IDE requirement:** The `.ino` file must be inside a folder of the
-> exact same name. Do not rename or move the file out of `smart_pump_controller/`.
+> **Arduino IDE requirement:** The sketch must live in a folder named
+> `smart_pump_controller/` and you should open `smart_pump_controller.ino`.
+> Arduino concatenates all `.ino` tabs **alphabetically**, so the numeric prefixes
+> (`01_...05_`) lock in the build order.
 
 ---
 
@@ -155,6 +164,47 @@ The default calibration is for **Bestank WT660** (660L, sensor on lid):
 > The sensor measures distance to the water surface — closer distance = higher water level.
 > `TANK_FULL_CM` will always be a smaller number than `TANK_EMPTY_CM`.
 
+When using the **remote tank node**, the same calibration values are applied on the NodeMCU near the tank.
+The main ESP32 only receives an already-calibrated percentage value over RS-485.
+
+---
+
+## Remote Ultrasonic Tank Node (RS-485)
+
+For long runs (≈20–30m) between the main enclosure and the tank, the JSN-SR04T sensor is driven by a
+small NodeMCU v3 (ESP8266) node mounted near the tank. This node:
+
+- Drives JSN TRIG/ECHO locally (short wires, level-shifted ECHO).
+- Applies the same 5-sample median + EMA smoothing and tank calibration.
+- Sends a short ASCII status line over RS-485 every 1–2 seconds.
+
+### Frame format
+
+Each status update is a single line terminated by `\r\n`:
+
+```text
+LVL:<percent>;ERR:<flag>\r\n
+```
+
+- `LVL`: integer 0–100, current water level percentage.
+- `ERR`: `0` = JSN healthy, `1` = JSN error (e.g. repeated timeouts, invalid echoes).
+
+Examples:
+
+```text
+LVL:87;ERR:0\r\n
+LVL:12;ERR:1\r\n
+```
+
+The main ESP32:
+
+- Reads these lines from a UART connected via RS-485.
+- Parses `LVL` into `waterLevelPct`.
+- Treats `ERR` as the ultrasonic sensor health flag (sets/clears `isSensorError` accordingly).
+
+All existing pump control, safety, and Firebase telemetry logic continues to use `waterLevelPct` and
+`isSensorError` in exactly the same way as when the JSN was wired directly.
+
 ### Flow Rate (Section 4 in firmware)
 
 ```cpp
@@ -181,6 +231,19 @@ The firmware reads `/pump_system/control/mode` from Firebase every 3 seconds.
 
 > **Safety override:** If `isDryRunError` is active, the pump will not run in
 > any mode until the error is acknowledged via the dashboard (`clear_error = true`).
+
+### Smart manual & timed runs (Phase 7)
+
+Phase 7 in `docs/ENHANCEMENT_PLAN.md` adds an extension where the ESP32 tracks a run mode (`AUTO`, `MANUAL`, `TIMED`, `OFF`) alongside the existing `mode` field:
+
+- Dashboard can request:
+  - A **manual run** (“run now until I press Stop”) via a `manual_start` control flag.
+  - A **timed run** (“run for N minutes, then stop”) via a `timed_start_sec` control value.
+- Firmware:
+  - Starts/stops the pump according to the requested run, but **never bypasses** the existing protections (dry-run, overflow, sensor failure, sleep/emergency rules).
+  - Reports `run_mode` and `run_remaining_sec` in status so the dashboard can show clear, organized controls and countdowns.
+
+This keeps the current `AUTO` / `FORCE_ON` / `FORCE_OFF` contract intact while allowing smarter, safer manual operation.
 
 ---
 
@@ -229,13 +292,27 @@ The firmware reads `/pump_system/control/mode` from Firebase every 3 seconds.
     is_sensor_error:     false   (bool,  ultrasonic/flow sensor failure)
     is_overflow_error:   false   (bool,  max runtime exceeded)
     is_sleeping:         false   (bool,  scheduled sleep active)
+    last_reboot_request_id: 0    (int,   last processed reboot request)
+    last_reboot_at:      0       (int,   seconds since boot when last reboot acknowledged)
     wifi_rssi:           -65     (int,   dBm)
     last_boot_reason:    "Power-on" (string)
     uptime_minutes:      125     (int)
+    ultrasonic_cycles_ok:      120  (int,   cycles with >=1 valid ultrasonic sample)
+    ultrasonic_cycles_timeout: 0    (int,   cycles with 0 valid ultrasonic samples)
+    ultrasonic_last_good_cm:   35.2 (float, last good median distance)
+    flow_discard_max_sane:     0    (int,   discarded flow readings due to max-sane guard)
+    flow_stuck_high_events:    0    (int,   stuck-high detections)
+    free_heap_bytes:           182000 (int)
+    min_free_heap_bytes:       175000 (int, ESP32)
+    max_alloc_heap_bytes:      82000  (int, ESP32)
+    min_free_heap_observed_bytes: 175000 (int)
+    firebase_consecutive_failures: 0  (int)
+    firebase_last_error:       ""   (string)
 
   control/                       ← Dashboard writes, ESP32 reads every 3s
     mode:        "AUTO"          (string: "AUTO" | "FORCE_ON" | "FORCE_OFF")
     clear_error: false           (bool:  set true to acknowledge errors)
+    reboot_request_id: 0         (int:   bump to request a soft reboot)
 
   config/
     device/                      ← Dashboard writes, ESP32 reads every 30s
@@ -302,4 +379,20 @@ the connection; on the next sync cycle the ESP32 reads `/pump_system/config/devi
 
 ---
 
-*Firmware version 2.4.0 — see `docs/ENHANCEMENT_PLAN.md` for implemented phases (safety, resilience, sleep, config expansion, uptime).*
+## Soak-test checklist (recommended)
+
+- **Noise soak (2–6 hours, pump OFF)**:
+  - Leave the 20–30m UTP sensor runs connected (ultrasonic + flow).
+  - Watch Serial logs for `[TELEM]` once per minute.
+  - Expect `ultrasonic_cycles_timeout` near 0 and `flow_discard_max_sane` near 0.
+- **WiFi flap (3–5 reconnects)**:
+  - Toggle router/AP or power-cycle it.
+  - Confirm the firmware resumes Firebase sync without token loops.
+  - During cooldown you may see `[FIREBASE] Cooling down...` but the loop should continue running sensors/safety.
+- **Sensor fault injection**:
+  - Disconnect ultrasonic ECHO to force timeouts; AUTO must fail-safe (pump OFF) and recover when reconnected.
+  - With pump OFF, confirm no false “flow stuck-high” events; if you see any, check grounding/shielding on the long run.
+
+---
+
+*Firmware version 2.4.0 — for end-to-end rollout (Firebase + Functions + Dashboard + ESP32), use `docs/DEPLOY_GUIDE.md`.*

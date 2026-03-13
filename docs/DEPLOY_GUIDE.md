@@ -242,6 +242,7 @@ Before starting, confirm:
 1. **Open**  
    **File → Open** → `firmware/smart_pump_controller/smart_pump_controller.ino`  
    (The `.ino` must stay inside the folder of the same name.)
+   - Note: this sketch uses Arduino multi-tab `.ino` files (`01_...05_*.ino`) which are concatenated alphabetically by the Arduino build system.
 
 2. **Verify**  
    Click **Verify** (✓). Resolve any compile errors (e.g. wrong ArduinoJson version, missing `secrets.h`).
@@ -255,6 +256,46 @@ Before starting, confirm:
 4. **Serial Monitor**
    - **Tools → Serial Monitor** → 115200 baud.
    - Confirm: `[WIFI] Connected!`, `[FIREBASE] Initialized`, and periodic `[SENSOR]` / `[FIREBASE] Status pushed` before closing.
+
+---
+
+### 6.4 Remote Tank Ultrasonic Node (optional but recommended for long runs)
+
+If the JSN-SR04T is more than a few meters from the main enclosure, use the remote tank node:
+
+1. **Wire CAT6 for 5V + RS-485**
+
+   - Terminate CAT6 in the main enclosure per `hardware/wiring_notes.md`:
+     - Paralleled +5V pairs (Orange/Orange-White) with an inline 500 mA fuse.
+     - Paralleled GND pairs (Blue/Blue-White) tied to ESP32 GND.
+     - Flow signal (Brown) to the existing divider and GPIO 34.
+     - RS-485 A/B (Green/Green-White) to the main RS-485 module.
+
+2. **Assemble the tank-side enclosure**
+
+   - Mount the NodeMCU v3 (ESP8266), JSN-SR04T module PCB, RS-485 module, and a small terminal block.
+   - Connect CAT6 cores to 5V, GND, A, B as per `hardware/wiring_notes.md`.
+   - Wire JSN TRIG/ECHO locally to the NodeMCU, with a 10 kΩ / 20 kΩ divider on ECHO.
+   - Add a 100–470 µF capacitor (and 100 nF ceramic) across 5V/GND near the NodeMCU.
+
+3. **Flash the tank node firmware**
+
+   - Upload the small NodeMCU (ESP8266) sketch that:
+     - Reads JSN distance and converts to percent using the same tank calibration.
+     - Sends `LVL:<percent>;ERR:<flag>\r\n` over UART (RS-485) every 1–2 seconds.
+
+4. **Configure the main firmware**
+
+   - Enable UART/RS-485 receive in the main sketch.
+   - Parse incoming lines and update `waterLevelPct` and `isSensorError`.
+   - Disable the old direct JSN TRIG/ECHO pins if you previously used them.
+
+5. **Tank node bring-up checklist**
+
+   - [ ] With main panel powered, measure ~5V at the tank box 5V/GND terminals.
+   - [ ] Confirm NodeMCU boots (LED, or USB serial if accessible).
+   - [ ] On the main ESP32 Serial Monitor, confirm it logs RS-485 frames and water level changes when tank level changes.
+   - [ ] Verify the dashboard shows a reasonable water level (within a few % of actual).
 
 ---
 
@@ -329,7 +370,7 @@ cd dashboard && npm run build
 | Notifications (email, push, testing alerts) | `docs/NOTIFICATIONS_SETUP.md` |
 | Device config from DB | `docs/FIRMWARE_CONFIG_FROM_DATABASE.md` |
 | Firebase RTDB optimization & long-term assessment | `docs/FIREBASE_OPTIMIZATION.md` |
-| Enhancement plan & implementation status | `docs/ENHANCEMENT_PLAN.md`, `docs/IMPLEMENTATION_VERIFICATION.md` |
+| Enhancement plan & implementation status | `docs/ENHANCEMENT_PLAN.md`, `docs/IMPLEMENTATION_VERIFICATION.md` (project history + phase tracking) |
 
 ---
 

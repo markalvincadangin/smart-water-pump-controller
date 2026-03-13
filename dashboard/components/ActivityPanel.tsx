@@ -1,7 +1,8 @@
 "use client";
 
 import clsx from "clsx";
-import { Clock, Settings, Bell, Zap, ShieldCheck } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Clock, Settings, Bell, Zap, ShieldCheck, Timer, Square, RotateCw, Activity } from "lucide-react";
 import { useAuditEvents } from "@/lib/useAuditEvents";
 import type { AuditAction } from "@/lib/audit";
 
@@ -13,17 +14,27 @@ function formatAction(action: AuditAction) {
   switch (action) {
     case "control.set_mode": return "Changed mode";
     case "control.ack_error": return "Acknowledged error";
+    case "control.request_reboot": return "Requested reboot";
+    case "control.run_manual_start": return "Started manual run";
+    case "control.run_timed_start": return "Started timed run";
+    case "control.run_stop": return "Stopped run";
     case "config.device.save": return "Saved device settings";
     case "config.notifications.save": return "Saved alert settings";
+    default: return "Activity";
   }
 }
 
-function iconFor(action: AuditAction) {
+function iconFor(action: AuditAction): LucideIcon {
   switch (action) {
     case "control.set_mode": return Zap;
     case "control.ack_error": return ShieldCheck;
+    case "control.request_reboot": return RotateCw;
+    case "control.run_manual_start": return Activity;
+    case "control.run_timed_start": return Timer;
+    case "control.run_stop": return Square;
     case "config.device.save": return Settings;
     case "config.notifications.save": return Bell;
+    default: return Activity;
   }
 }
 

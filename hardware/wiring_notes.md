@@ -138,81 +138,133 @@ Single wire, any color distinct from power wires (suggested: orange).
 
 ## Section D — Voltage Dividers (5V → 3.3V)
 
-Both sensor signal lines output 5V but the ESP32 GPIO pins are 3.3V maximum. Two independent voltage dividers are required — one per signal line.
+Some sensor outputs are 5V but the ESP32 GPIO pins are 3.3V maximum. Two separate voltage dividers are used:
+
+- One for the **YF-G1** flow sensor signal (in the main enclosure)
+- One for the **JSN-SR04T ECHO** signal (inside the tank-side node enclosure)
 
 ### Divider Formula
-`V_out = V_in × R2 / (R1 + R2) = 5V × 2000 / (1000 + 2000) = 3.33V ✓`
+`V_out = V_in × R2 / (R1 + R2) = 5V × 20000 / (10000 + 20000) ≈ 3.33V ✓`
 
-### D1. Flow Sensor Signal Divider (GPIO 34)
+### D1. Flow Sensor Signal Divider (GPIO 34, main enclosure)
 
 ```
 YF-G1 Signal wire (Yellow)
-  → CAT6 Solid Brown pair (40m run)
+  → CAT6 Solid Brown pair (30–40m run)
     → At enclosure end:
-      → 1kΩ resistor (series, inline) ─┐
-                                        ├──→ ESP32 GPIO 34
-      → 2kΩ resistor (shunt to GND) ───┘
+      → 10 kΩ resistor (series, inline) ─┐
+                                         ├──→ ESP32 GPIO 34
+      → 20 kΩ resistor (shunt to GND) ───┘
 ```
 
 Label this divider: **"G34 — Flow Signal"**
 
-### D2. Ultrasonic ECHO Divider (GPIO 18)
+### D2. Ultrasonic ECHO Divider (Tank node, NodeMCU ESP8266)
 
 ```
-JSN-SR04T ECHO pin
-  → CAT6 Green/White pair (40m run)
-    → At enclosure end:
-      → 1kΩ resistor (series, inline) ─┐
-                                        ├──→ ESP32 GPIO 18
-      → 2kΩ resistor (shunt to GND) ───┘
+JSN-SR04T ECHO pin (5V, at tank)
+  → Local 10 kΩ resistor (series, inline) ─┐
+                                           ├──→ NodeMCU GPIO (e.g. D2 / GPIO4)
+  → Local 20 kΩ resistor (shunt to GND) ───┘
 ```
 
-Label this divider: **"G18 — Echo Signal"**
+This divider now lives **inside the tank-side enclosure**, very close to the JSN-SR04T module and NodeMCU.
+The long CAT6 run no longer carries the raw ECHO signal.
 
-### D3. Ultrasonic TRIG (No Divider Needed)
-
-```
-ESP32 GPIO 5 ──→ CAT6 Solid Green pair ──→ JSN-SR04T TRIG pin
-```
-
-TRIG is an **output** from the ESP32 (3.3V), not an input. No voltage divider needed.
+> **TRIG note:** JSN TRIG is a 3.3V output from the NodeMCU. It does not need a divider.
 
 ---
 
-## Section E — CAT6 UTP Cable Pinout (40m Run)
+## Section E — CAT6 UTP Cable Pinout (30–40m Run)
 
 Entry: **PG9-C gland** (bottom-right of enclosure).
 
+The single outdoor CAT6 cable now carries:
+
+- Shared **+5V** and **GND** rails for both sensors and the tank node electronics
+- **YF-G1 flow signal** (to the main enclosure)
+- **RS-485 A/B differential pair** between main enclosure and tank node
+
+> Two pairs are paralleled for +5V and two for GND to reduce voltage drop over 30–40m.
+
+### E1. Termination at Main Enclosure (panel) end
+
 | CAT6 Pair | Wire Color | Signal | Termination at Enclosure End |
 |-----------|-----------|--------|------------------------------|
-| Power Pair | Solid Orange | +5V | → YF-G1 VCC (Red wire) |
-| Power Pair | Orange/White | +5V | → JSN-SR04T VCC |
-| Ground Pair | Solid Blue | GND | → YF-G1 GND (Black wire) |
-| Ground Pair | Blue/White | GND | → JSN-SR04T GND |
-| Flow Signal | Solid Brown | YF-G1 Signal | → 1kΩ series → GPIO 34 → 2kΩ → GND |
+| Power Pair | Solid Orange | +5V rail | Join with Orange/White → fused 5V branch from power adapter |
+| Power Pair | Orange/White | +5V rail | Join with Solid Orange (same 5V rail) |
+| Ground Pair | Solid Blue | GND rail | Join with Blue/White → ESP32 GND and RS-485 GND reference |
+| Ground Pair | Blue/White | GND rail | Join with Solid Blue (same GND rail) |
+| Flow Signal | Solid Brown | YF-G1 Signal | → 10 kΩ series → GPIO 34 → 20 kΩ → GND |
 | (Spare) | Brown/White | — | Tape off both ends |
-| Ultrasonic TRIG | Solid Green | TRIG | → GPIO 5 (direct, no resistor) |
-| Ultrasonic ECHO | Green/White | ECHO | → 1kΩ series → GPIO 18 → 2kΩ → GND |
+| RS-485 | Solid Green | RS-485 A | → Main RS-485 module A terminal |
+| RS-485 | Green/White | RS-485 B | → Main RS-485 module B terminal |
 
-**At the tank end**, connect:
+### E2. Termination at Tank-Side Enclosure end
 
 | Wire Color | Connects To |
 |-----------|------------|
-| Solid Orange | YF-G1 Red (VCC) |
-| Orange/White | JSN-SR04T VCC |
-| Solid Blue | YF-G1 Black (GND) |
-| Blue/White | JSN-SR04T GND |
+| Solid Orange | 5V busbar (+5V) inside tank box (feeds YF-G1, JSN, NodeMCU, RS-485) |
+| Orange/White | 5V busbar (+5V) — tied together with Solid Orange |
+| Solid Blue | GND busbar (0V) inside tank box |
+| Blue/White | GND busbar (0V) — tied together with Solid Blue |
 | Solid Brown | YF-G1 Yellow (Signal) |
-| Solid Green | JSN-SR04T TRIG |
-| Green/White | JSN-SR04T ECHO |
-| Brown/White | Leave unterminated (spare) |
+| Brown/White | Spare (tape off) |
+| Solid Green | RS-485 A on tank RS-485 module |
+| Green/White | RS-485 B on tank RS-485 module |
 
-> **YF-G1 wire colors:** Red = VCC, Black = GND, Yellow = Signal
-> **JSN-SR04T connector:** Pin order on PCB is VCC, TRIG, ECHO, GND (left to right)
+> **Shared power note:** The existing 5V adapter in the main enclosure feeds this 5V/GND rail through a
+> small inline fuse or polyfuse (~500 mA). All tank-side electronics (YF-G1, JSN-SR04T module, NodeMCU,
+> and RS-485 module) share this rail.
+>
+> **JSN wiring note:** JSN-SR04T TRIG/ECHO are now short local wires inside the tank box between the JSN
+> module and the NodeMCU. They do **not** run over CAT6 anymore.
 
 ---
 
-## Section F — Cable Gland Specifications
+## Section F — Remote Tank Sensor Node (RS-485)
+
+The tank-side mini enclosure contains:
+
+- **NodeMCU v3 (ESP8266)** (runs a small firmware that reads JSN-SR04T and sends water level over RS-485)
+- **JSN-SR04T module PCB** (waterproof ultrasonic probe on a short cable)
+- **RS-485 transceiver module** (3.3V logic)
+- **CAT6 terminal block** (5V, GND, RS-485 A/B)
+- Local **5V/GND busbars** and decoupling capacitors
+
+### F1. Internal wiring (tank box)
+
+```text
+CAT6 Solid Orange + Orange/White
+  → join at terminal block → 5V bus → NodeMCU VIN/5V, JSN VCC, RS-485 VCC
+
+CAT6 Solid Blue + Blue/White
+  → join at terminal block → GND bus → NodeMCU GND, JSN GND, RS-485 GND
+
+CAT6 Solid Green   → RS-485 A terminal (tank module)
+CAT6 Green/White   → RS-485 B terminal (tank module)
+
+JSN-SR04T module:
+  VCC  → 5V bus
+  GND  → GND bus
+  TRIG → NodeMCU GPIO (output, e.g. D1 / GPIO5)
+  ECHO → 10 kΩ series → NodeMCU GPIO (input, e.g. D2 / GPIO4), with 20 kΩ from GPIO to GND
+
+NodeMCU UART:
+  TX   → RS-485 DI
+  RX   → RS-485 RO
+  GPIO (e.g. D5 / GPIO14) → RS-485 DE & RE (tied together)
+```
+
+The tank node sends a short ASCII status line (e.g. `LVL:87;ERR:0`) over RS-485 every 1–2 seconds. The main
+ESP32 reads these lines, updates `waterLevelPct`, and treats `ERR` as the ultrasonic sensor health flag.
+
+> **Flow sensor note:** YF-G1 remains a simple 5V → CAT6 → divider → ESP32 GPIO 34 path. Only the JSN
+> ultrasonic sensor moved behind the tank-side NodeMCU node.
+
+---
+
+## Section G — Cable Gland Specifications
 
 | Gland | Type | Cable OD | Location | Sealed With |
 |-------|------|----------|----------|-------------|

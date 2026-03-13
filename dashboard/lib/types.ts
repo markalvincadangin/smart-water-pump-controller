@@ -13,12 +13,23 @@ export interface PumpStatus {
   wifi_rssi: number;   // Phase 2: WiFi signal strength (dBm)
   last_boot_reason: string;  // Phase 2: e.g. 'Power-on', 'Task watchdog'
   uptime_minutes?: number; // Phase 5: Uptime counter (prevents 49-day rollover)
+  // Phase 7: Smart manual & timed runs (additive; older firmware may omit)
+  run_mode?: "OFF" | "AUTO" | "MANUAL" | "TIMED";
+  run_remaining_sec?: number;
+  last_fault_code?: string;
+  last_fault_message?: string;
 }
 
 /** /pump_system/control — Cloud → ESP32 */
 export interface PumpControl {
   mode: "AUTO" | "FORCE_ON" | "FORCE_OFF";
   clear_error: boolean;
+  /** Bump to request ESP32 soft reboot (firmware watches this and calls ESP.restart()). */
+  reboot_request_id?: number;
+  // Phase 7: Smart manual & timed runs (additive; older firmware may ignore)
+  manual_start?: boolean;
+  manual_stop?: boolean;
+  timed_start_sec?: number;
 }
 
 /** Combined snapshot used by the dashboard UI */

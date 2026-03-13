@@ -7,6 +7,8 @@ import { DEFAULT_DEVICE_CONFIG } from "@/lib/types";
 import TankVisual from "@/components/TankVisual";
 import StatCard from "@/components/StatCard";
 import ModeControls from "@/components/ModeControls";
+import RunControls from "@/components/RunControls";
+import type { PumpStatus } from "@/lib/types";
 
 interface DashboardMainGridProps {
   level: number;
@@ -14,12 +16,16 @@ interface DashboardMainGridProps {
   running: boolean;
   isError: boolean;
   mode: PumpControl["mode"];
+  status?: PumpStatus | null;
   config: DeviceConfig | null;
   isAdmin: boolean;
   pendingMode: PumpControl["mode"] | null;
   pendingAck: boolean;
   onSetMode: (mode: PumpControl["mode"]) => void;
   onAcknowledge: () => void;
+  onStartManualRun: () => void;
+  onStartTimedRun: (durationSec: number) => void;
+  onStopRun: () => void;
 }
 
 export default function DashboardMainGrid({
@@ -28,13 +34,20 @@ export default function DashboardMainGrid({
   running,
   isError,
   mode,
+  status = null,
   config,
   isAdmin,
   pendingMode,
   pendingAck,
   onSetMode,
   onAcknowledge,
+  onStartManualRun,
+  onStartTimedRun,
+  onStopRun,
 }: DashboardMainGridProps) {
+  const runMode = status?.run_mode ?? (running ? "AUTO" : "OFF");
+  const remainingSec = status?.run_remaining_sec ?? 0;
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       <div
@@ -74,11 +87,23 @@ export default function DashboardMainGrid({
           value={isError ? "ERROR" : running ? "ON" : "OFF"}
           Icon={Activity}
           color={isError ? "red" : running ? "green" : "cyan"}
-          sub={`Mode: ${mode}`}
+          sub={`Policy: ${mode} · Run: ${runMode}`}
         />
       </div>
 
-      <div className="card p-4 sm:p-5 card-glow-cyan md:col-span-2 lg:col-span-1">
+      <div className="card p-4 sm:p-5 card-glow-cyan md:col-span-2 lg:col-span-1 space-y-4">
+        <RunControls
+          runMode={runMode}
+          remainingSec={remainingSec}
+          controlMode={mode}
+          isError={isError}
+          isAdmin={isAdmin}
+          lastFaultCode={status?.last_fault_code}
+          onStartManual={onStartManualRun}
+          onStartTimed={onStartTimedRun}
+          onStop={onStopRun}
+        />
+        <div className="border-t border-surface-3 pt-4">
         <ModeControls
           currentMode={mode}
           isError={isError}
@@ -89,6 +114,7 @@ export default function DashboardMainGrid({
           onSetMode={onSetMode}
           onAcknowledge={onAcknowledge}
         />
+        </div>
       </div>
     </div>
   );

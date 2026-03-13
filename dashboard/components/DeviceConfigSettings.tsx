@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, X } from "lucide-react";
+import { Settings, X, RotateCw } from "lucide-react";
 import { useDeviceConfig } from "@/lib/useDeviceConfig";
 import InfoTooltip from "./InfoTooltip";
 import type { DeviceConfig } from "@/lib/types";
@@ -15,9 +15,11 @@ interface DeviceConfigSettingsProps {
   isAdmin?: boolean;
   actorUid?: string | null;
   actorEmail?: string | null;
+  esp32Online?: boolean;
+  onRequestReboot?: () => Promise<void>;
 }
 
-export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUid = null, actorEmail = null }: DeviceConfigSettingsProps) {
+export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUid = null, actorEmail = null, esp32Online = false, onRequestReboot }: DeviceConfigSettingsProps) {
   const { config, loading, saveConfig, seedDefaultsIfEmpty } = useDeviceConfig();
   const [form, setForm] = useState<DeviceConfig>({ ...DEFAULT_DEVICE_CONFIG });
   const [saving, setSaving] = useState(false);
@@ -25,6 +27,7 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [rebootBusy, setRebootBusy] = useState(false);
 
   const sectionTitleClass =
     "text-sm font-display font-semibold text-text-primary";
@@ -368,6 +371,35 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
             </>
           )}
           <p className="text-[10px] font-mono text-text-muted">Settings sync to your controller when it&apos;s online. When offline, it uses the last saved values—no restart needed.</p>
+
+          {/* System: Restart controller (admin only, when ESP32 online) */}
+          {isAdmin && onRequestReboot && (
+            <div className="mt-4 pt-4 border-t border-surface-3">
+              <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">System</p>
+              <button
+                type="button"
+                onClick={async () => {
+                  setRebootBusy(true);
+                  try {
+                    await onRequestReboot();
+                    toast({ kind: "success", title: "Restart sent", detail: "The controller will reboot and reappear online in a few seconds." });
+                  } catch {
+                    toast({ kind: "error", title: "Restart failed" });
+                  } finally {
+                    setRebootBusy(false);
+                  }
+                }}
+                disabled={!esp32Online || rebootBusy}
+                className="w-full px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm hover:bg-surface-3 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <RotateCw size={14} className={rebootBusy ? "animate-spin" : ""} />
+                {rebootBusy ? "Sending…" : "Restart controller"}
+              </button>
+              {!esp32Online && (
+                <p className="text-[10px] font-mono text-text-muted mt-1">Controller must be online to restart.</p>
+              )}
+            </div>
+          )}
           </div>
 
           {saveError && (

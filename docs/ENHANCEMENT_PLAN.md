@@ -410,3 +410,117 @@ Add NVS keys for new config fields so they persist across reboot when offline.
 ---
 
 *Plan version 5. Phase 6 added — March 2026.*
+
+---
+
+## Phase 7 — Smart Manual & Timed Runs
+
+**Goal:** Add a safer, smarter way to run the pump manually or for a fixed time **even when the current sensor is unavailable or unreliable**, while keeping all existing flow‑sensor and level protections.
+
+This phase is now implemented in this repo as an **additive** extension (existing deployments remain compatible because the new Firebase keys are optional and safe to ignore).
+
+### 7.1 High‑Level Behavior
+
+- **Manual “run until I stop”** from the dashboard:
+  - Operator explicitly starts the pump (similar to FORCE_ON today) but with a clear **MANUAL** label and explanation.
+  - ESP32 keeps all protections active: flow dry‑run, overflow, sensor failure, sleep/emergency logic.
+  - Operator stops the run from the dashboard, or the firmware stops it automatically on safety fault.
+- **Timed run**:
+  - Operator chooses a duration (e.g. 5/10/15/30/60 min).
+  - ESP32 starts the pump and **auto‑stops** after the duration expires, or earlier on safety fault.
+- **Compatibility with AUTO:**
+  - AUTO mode (start/stop by tank% thresholds) continues to behave exactly as today.
+  - Manual/timed runs are **short‑lived overrides** that return to AUTO afterward.
+- **Current sensor optional**:
+  - Design does not depend on current sensing; if/when a current sensor is re‑enabled, additional fault codes can be added without changing the high‑level contract.
+
+### 7.2 Firmware State Model (Additive)
+
+Existing `control.mode` values remain unchanged:
+
+| Field | Current values | Meaning |
+|-------|----------------|---------|
+| `/pump_system/control/mode` | `"AUTO" \| "FORCE_ON" \| "FORCE_OFF"` | Automation, manual override on, manual override off |
+
+Phase 7 **adds** a separate notion of **run mode** inside the firmware, without overwriting `mode`:
+
+- Internal enum (conceptual):
+  - `RUN_OFF`
+  - `RUN_AUTO` (current AUTO behavior)
+  - `RUN_MANUAL_UNTIL_STOP`
+  - `RUN_TIMED`
+- New runtime fields:
+  - `pumpRunMode` (enum above)
+  - `runStartMillis` (unsigned long)
+  - `runRequestedDurationMs` (unsigned long, 0 for manual‑until‑stop)
+
+Within the existing non‑blocking loop:
+
+- On each sensor tick:
+  - Read level, flow, and run all existing safety checks (`checkSafetyCutoff()`).
+  - Execute pump logic:
+    - `RUN_AUTO`: same as today (start at `pump_start_level`, stop at `pump_stop_level`, respect sleep/emergency).
+    - `RUN_MANUAL_UNTIL_STOP`: pump ON, but **never** bypass safety; any safety fault stops the pump and returns to `RUN_OFF`.
+    - `RUN_TIMED`: pump ON; when `millis() - runStartMillis >= runRequestedDurationMs`, stop pump and return to `RUN_AUTO` (or `RUN_OFF` if previously not in AUTO), unless a safety fault already stopped it earlier.
+- Any safety fault (dry‑run, overflow, sensor failure, future current faults) forces:
+  - Pump OFF
+  - `pumpRunMode = RUN_OFF`
+  - Error flags pushed to Firebase as today.
+
+Sleep/idle logic (Phase 3) remains unchanged; runs that start during sleep either:
+
+- Use **emergency override** rules (low level), or
+- Are considered **operator‑forced** (manual/timed) and still respect dry‑run and flow safety.
+
+### 7.3 Firebase Schema Extensions (Planned)
+
+To avoid breaking existing dashboards and firmware, Phase 7 uses **additive** fields in both `status` and `control`. These are safe to ignore for older code:
+
+| Path | Field | Type | Notes |
+|------|-------|------|-------|
+| `/pump_system/status` | `run_mode` | `"AUTO" \| "MANUAL" \| "TIMED" \| "OFF"` | Human‑readable mirror of internal `pumpRunMode` for the dashboard. |
+| `/pump_system/status` | `run_remaining_sec` | number | Seconds until auto‑stop when in timed run; `0` otherwise. |
+| `/pump_system/status` | `last_fault_code` | string | Optional stable code such as `"DRY_RUN"`, `"OVERFLOW"`, `"SENSOR"`, `"CURRENT"`. |
+| `/pump_system/status` | `last_fault_message` | string | Human‑readable description (for dashboard banner). |
+| `/pump_system/control` | `manual_start` | boolean | When toggled `true`, requests a **manual‑until‑stop** run; firmware clears it after processing. |
+| `/pump_system/control` | `timed_start_sec` | number | Duration in seconds for timed run. Non‑zero value triggers a timed run; firmware copies & clears it atomically. |
+| `/pump_system/control` | `manual_stop` | boolean | Immediate stop request; firmware turns pump off and clears flags. |
+
+Notes:
+
+- Existing fields (`mode`, `clear_error`, `reboot_request_id`) keep their semantics and remain the primary way to request AUTO/FORCE_ON/FORCE_OFF and clear errors.
+- For backwards compatibility, an initial implementation can treat:
+  - `manual_start` as equivalent to setting `mode = "FORCE_ON"` plus a tracked run mode.
+  - `manual_stop` as equivalent to `mode = "FORCE_OFF"` or returning to `"AUTO"`, depending on previous state.
+
+### 7.4 Dashboard UX (Organized Controls)
+
+Dashboard changes are kept small and aligned with the existing `ModeControls` and Device Config patterns:
+
+- **New control group:** “Run pump” with two primary actions:
+  - **Quick start (Manual)** — sends `manual_start = true`. Label explains: “Runs now, stops when you press Stop or when safety triggers.”
+  - **Timed run…** — opens a small dialog to pick a duration (e.g. 5/10/15/30/60 minutes), then writes `timed_start_sec`. Text explains that the ESP32 will **auto‑stop** at the end and still has full protections.
+- **Stop button:** Visible whenever `run_mode` is `"MANUAL"` or `"TIMED"`:
+  - Sends `manual_stop = true`.
+  - Disabled while a stop request is already in flight (use `usePendingControl` style feedback).
+- **Status display:**
+  - Show `Run mode: AUTO / Manual / Timed / Off`.
+  - If timed: show a countdown “Auto‑stop in mm:ss” derived from `run_remaining_sec`.
+- **Config & safety:**
+  - No new config fields are required to use manual/timed runs.
+  - Existing **max runtime**, sleep, and dry‑run thresholds still apply and are documented as the safety envelope for both manual and timed runs.
+
+### 7.5 Safety & Compatibility Notes
+
+- Manual/timed runs **never bypass**:
+  - Dry‑run shutdown (flow threshold + timeout).
+  - Overflow cutoff (`max_pump_runtime_min`).
+  - Sensor failure handling (sensor error ⇒ safe OFF).
+  - Emergency low‑level overrides and sleep rules from Phase 3.
+- The design is safe to roll out in small steps:
+  1. Implement internal `pumpRunMode` and timed/remaining logic purely in firmware, without new Firebase fields (for bench testing).
+  2. Add `run_mode` and `run_remaining_sec` to status (dashboard can start reading them).
+  3. Add control fields and wire a simple dashboard “Timed run” button.
+- Current sensor can later set additional fault codes without changing this contract, keeping the system compatible across hardware revisions.
+
+This phase gives you a clear, documented path to safer manual and timed control, even with the current‑sensor hardware still in flux, while staying consistent with the existing v2.4.0 architecture and plans.
