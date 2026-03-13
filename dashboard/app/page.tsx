@@ -38,6 +38,10 @@ export default function DashboardPage() {
     error,
     setMode,
     acknowledgeError,
+    requestReboot,
+    startManualRun,
+    startTimedRun,
+    stopRun,
   } = usePumpData();
 
   const { config } = useDeviceConfig();
@@ -112,6 +116,14 @@ export default function DashboardPage() {
           userEmail={authUser?.email ?? ""}
           running={running}
           isError={isError}
+          isAdmin={isAdmin}
+          esp32Online={esp32Online}
+          onRequestReboot={() => {
+            toast({ kind: "info", title: "Restarting controller…" });
+            requestReboot().catch(() => {
+              toast({ kind: "error", title: "Restart failed" });
+            });
+          }}
           onOpenDeviceConfig={() => setShowDeviceConfig(true)}
           onOpenNotifications={() => setShowNotifications(true)}
           onSignOut={() => signOut().then(() => router.replace("/login"))}
@@ -136,6 +148,7 @@ export default function DashboardPage() {
               running={running}
               isError={isError}
               mode={mode}
+              status={snapshot?.status ?? null}
               config={config}
               isAdmin={isAdmin}
               pendingMode={pendingMode}
@@ -155,6 +168,19 @@ export default function DashboardPage() {
                 toast({ kind: "info", title: "Sending acknowledge…" });
                 acknowledgeError();
                 window.setTimeout(() => setPendingAck(false), 6000);
+              }}
+              onStartManualRun={() => {
+                toast({ kind: "info", title: "Starting manual run…" });
+                startManualRun();
+              }}
+              onStartTimedRun={(durationSec) => {
+                const min = Math.round(durationSec / 60);
+                toast({ kind: "info", title: `Starting timed run (${min} min)…` });
+                startTimedRun(durationSec);
+              }}
+              onStopRun={() => {
+                toast({ kind: "info", title: "Stopping pump…" });
+                stopRun();
               }}
             />
 
@@ -181,6 +207,8 @@ export default function DashboardPage() {
           actorUid={authUser?.uid ?? null}
           actorEmail={authUser?.email ?? null}
           onClose={() => setShowDeviceConfig(false)}
+          esp32Online={esp32Online}
+          onRequestReboot={requestReboot}
         />
       )}
       <InstallPrompt />

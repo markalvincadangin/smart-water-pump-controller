@@ -29,7 +29,11 @@ The dashboard reads/writes the same paths as the ESP32 firmware:
   status/                    ← ESP32 writes every 3s
     water_level_percent, is_running, flow_rate_lpm, is_error,
     is_sensor_error, is_overflow_error, is_sleeping,
-    wifi_rssi, last_boot_reason, uptime_minutes
+    wifi_rssi, last_boot_reason, uptime_minutes,
+    ultrasonic_cycles_ok, ultrasonic_cycles_timeout, ultrasonic_last_good_cm,
+    flow_discard_max_sane, flow_stuck_high_events,
+    free_heap_bytes, min_free_heap_bytes, max_alloc_heap_bytes, min_free_heap_observed_bytes,
+    firebase_consecutive_failures, firebase_last_error
 
   control/                   ← Dashboard writes, ESP32 reads every 3s
     mode: "AUTO"             ← "AUTO" | "FORCE_ON" | "FORCE_OFF"
@@ -175,7 +179,8 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 |------------------------|-------------------------------------------------------------------|
 | Live tank level        | Animated tank graphic; StatCard shows configurable start/stop %   |
 | Flow rate              | YF-G1 sensor data; low-flow warning uses configurable threshold   |
-| Mode control           | AUTO / FORCE ON / FORCE OFF with instant Firebase push            |
+| Mode control           | AUTO / FORCE ON / FORCE OFF with instant Firebase push           |
+| Smart runs             | Manual and timed runs that auto-stop on duration or safety fault, aligned with firmware Phase 7 |
 | Dry-run acknowledge    | Red alert banner with ACK; message shows configured timeout (s)   |
 | Device config (gear)   | Tank calibration, pump thresholds, safety, sleep schedule, advanced — with **tooltips** (hover/tap for help) |
 | Notifications (bell)   | Email + **push** (phone/browser); dry-run, low level, pump started, overflow alerts — with **tooltips** |

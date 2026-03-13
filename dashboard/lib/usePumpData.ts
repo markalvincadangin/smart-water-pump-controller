@@ -161,6 +161,92 @@ export function usePumpData() {
     }
   }, [authUser?.email, authUser?.uid]);
 
+  const requestReboot = useCallback(async () => {
+    try {
+      const id = Math.max(1, Math.floor(Date.now() / 1000));
+      await set(ref(db, `${CONTROL_PATH}/reboot_request_id`), id);
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.request_reboot",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+          meta: { reboot_request_id: id },
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] requestReboot failed:", err);
+    }
+  }, [authUser?.email, authUser?.uid]);
+
+  // ── Phase 7: Smart manual/timed run writers ───────────────────────────────
+
+  const startManualRun = useCallback(async () => {
+    try {
+      // If the policy mode is FORCE_OFF, switch to AUTO first, otherwise the firmware will stop runs immediately.
+      if (controlRef.current?.mode === "FORCE_OFF") {
+        await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
+      }
+      // One-shot: toggle true then reset to false so firmware edge-detects reliably.
+      await set(ref(db, `${CONTROL_PATH}/manual_start`), true);
+      window.setTimeout(() => {
+        void set(ref(db, `${CONTROL_PATH}/manual_start`), false);
+      }, 15000); // keep high longer so ESP32 can see it even with weak WiFi
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.run_manual_start",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] startManualRun failed:", err);
+    }
+  }, [authUser?.email, authUser?.uid]);
+
+  const startTimedRun = useCallback(async (durationSec: number) => {
+    try {
+      const safeSec = Math.max(1, Math.floor(durationSec));
+      // If the policy mode is FORCE_OFF, switch to AUTO first, otherwise the firmware will stop runs immediately.
+      if (controlRef.current?.mode === "FORCE_OFF") {
+        await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
+      }
+      // One-shot: write duration then reset to 0 so firmware can detect future runs.
+      await set(ref(db, `${CONTROL_PATH}/timed_start_sec`), safeSec);
+      window.setTimeout(() => {
+        void set(ref(db, `${CONTROL_PATH}/timed_start_sec`), 0);
+      }, 15000); // keep non-zero longer so ESP32 can see it even with weak WiFi
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.run_timed_start",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+          meta: { durationSec: safeSec },
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] startTimedRun failed:", err);
+    }
+  }, [authUser?.email, authUser?.uid]);
+
+  const stopRun = useCallback(async () => {
+    try {
+      // One-shot: toggle true then reset to false so repeated stop works.
+      await set(ref(db, `${CONTROL_PATH}/manual_stop`), true);
+      window.setTimeout(() => {
+        void set(ref(db, `${CONTROL_PATH}/manual_stop`), false);
+        }, 5000); // keep high a bit longer to survive timeouts
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.run_stop",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] stopRun failed:", err);
+    }
+  }, [authUser?.email, authUser?.uid]);
+
   return {
     snapshot,
     history,
@@ -171,5 +257,9 @@ export function usePumpData() {
     error,
     setMode,
     acknowledgeError,
+    requestReboot,
+    startManualRun,
+    startTimedRun,
+    stopRun,
   };
 }

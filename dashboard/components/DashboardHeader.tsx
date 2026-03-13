@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Bell, Settings } from "lucide-react";
+import { Bell, Settings, RotateCw } from "lucide-react";
 
 const TANK_LABEL =
   process.env.NEXT_PUBLIC_TANK_LABEL ?? "Deep Well Pump · 660L Tank";
@@ -10,8 +10,11 @@ interface DashboardHeaderProps {
   userEmail: string;
   running: boolean;
   isError: boolean;
+  isAdmin: boolean;
+  esp32Online: boolean;
   onOpenDeviceConfig: () => void;
   onOpenNotifications: () => void;
+  onRequestReboot: () => void;
   onSignOut: () => void;
 }
 
@@ -19,8 +22,11 @@ export default function DashboardHeader({
   userEmail,
   running,
   isError,
+  isAdmin,
+  esp32Online,
   onOpenDeviceConfig,
   onOpenNotifications,
+  onRequestReboot,
   onSignOut,
 }: DashboardHeaderProps) {
   return (
@@ -42,6 +48,18 @@ export default function DashboardHeader({
             <span className="text-xs font-mono text-text-muted hidden md:block truncate max-w-[140px]">
               {userEmail}
             </span>
+            {isAdmin && (
+              <button
+                onClick={onRequestReboot}
+                title={esp32Online ? "Restart controller" : "Controller must be online to restart"}
+                disabled={!esp32Online}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-lg border border-surface-3 text-text-secondary
+                         hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
+                         focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1 disabled:opacity-50"
+              >
+                <RotateCw size={18} />
+              </button>
+            )}
             <button
               onClick={onOpenDeviceConfig}
               title="Device settings"

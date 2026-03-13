@@ -7,6 +7,10 @@ import { getDashboardDeviceId } from "@/lib/deviceId";
 export type AuditAction =
   | "control.set_mode"
   | "control.ack_error"
+  | "control.request_reboot"
+  | "control.run_manual_start"
+  | "control.run_timed_start"
+  | "control.run_stop"
   | "config.device.save"
   | "config.notifications.save";
 

@@ -231,9 +231,14 @@ The Smart Water Pump dashboard is well-structured with a consistent dark theme, 
 ### 4.2 Controls & Advanced Features
 
 - **Basic vs advanced settings**: In DeviceConfigSettings and NotificationSettings, add a **“Basic / Advanced” toggle**. Basic shows the most important fields (start/stop levels, low-water alerts). Advanced reveals calibration, sleep schedule, idle intervals, sensor thresholds, etc.
-- **Safer FORCE_ON**:
-  - Add an optional **“Run for…” timeout** (e.g. 10 / 20 / 30 minutes) when FORCE_ON is selected, with automatic return to AUTO afterwards.
-  - When an error is active, show a **confirmation dialog** before allowing FORCE_ON: clearly state the risk of running the pump against errors.
+- **Safer manual & timed runs (aligned with Phase 7 firmware plan)**:
+  - Introduce a dedicated **“Run pump”** control group, separate from the `AUTO / FORCE_ON / FORCE_OFF` mode selector.
+  - Provide two primary actions:
+    - **Quick start (Manual)** — sends a `manual_start` control flag; the firmware treats this as “run until I press Stop”, with all safety checks still active.
+    - **Timed run…** — opens a small dialog to pick a duration (e.g. 5 / 10 / 15 / 30 / 60 minutes), then writes a `timed_start_sec` value. The ESP32 auto-stops at the end or earlier on safety fault.
+  - Show a **Stop** button whenever `run_mode` is `"MANUAL"` or `"TIMED"`, wired to a `manual_stop` control flag.
+  - Display `run_mode` and `run_remaining_sec` from status next to the controls (e.g. “Run mode: Timed · Auto-stop in 09:32”).
+  - When an error is active, show a short explanation and (for admins) an extra confirmation step before allowing a new manual/timed run.
 - **Mode explanations**: Under ModeControls (or via InfoTooltip), show short, plain-English explanations for AUTO, FORCE_ON and FORCE_OFF, optimized for non-technical users.
 - **Troubleshooting helpers**: For error banners and dry-run lockouts, add a small **“Troubleshoot”** link that opens a short checklist (check power, valve, sensor wiring) and links to deeper docs where relevant.
 

@@ -66,6 +66,26 @@
 
 ---
 
+## Remote Tank Sensor Node (RS-485)
+
+| # | Component | Model / Spec | Qty | Role |
+|---|-----------|-------------|-----|------|
+| 28 | NodeMCU v3 Development Board | ESP8266 (ESP-12E) NodeMCU v3, 3.3V logic, Wi-Fi | 1 | Tank-side microcontroller that reads JSN-SR04T and sends level over RS-485 |
+| 29 | RS-485 Transceiver Module (Main Box) | 3.3V-compatible, e.g. MAX3485 or equivalent | 1 | Converts ESP32 UART (main enclosure) to RS-485 A/B for the 30–40m CAT6 run |
+| 30 | RS-485 Transceiver Module (Tank Box) | 3.3V-compatible, same family as above | 1 | Converts NodeMCU UART (tank) to RS-485 A/B |
+| 31 | Tank-Side IP65 Enclosure | ~15×15×10 cm ABS, 1× PG gland for CAT6 | 1 | Weatherproof housing for NodeMCU, JSN-SR04T PCB, RS-485 module near the tank |
+| 32 | Inline Fuse / Polyfuse | 500 mA @ 5V DC | 1 | Protects 5V branch feeding CAT6 to tank node |
+| 33 | Electrolytic Capacitor | 100–470 µF, ≥10V | 1 | Bulk decoupling for 5V rail inside tank box (handles cable voltage drop / transients) |
+| 34 | Ceramic Capacitors | 100 nF | 2 | Local decoupling near NodeMCU and RS-485 module |
+| 35 | Resistors — JSN ECHO divider | 10 kΩ and 20 kΩ, 1/4W | 2 each | On-board voltage divider to convert JSN ECHO 5V → ~3.3V for NodeMCU GPIO |
+| 36 | Small terminal block strip | 4–8 way, screw or push-in | 1 | Terminates CAT6 pairs inside tank box (5V, GND, RS-485 A/B) |
+
+> **Remote node power note:** The existing 5V adapter in the main enclosure now also feeds the tank node
+> over CAT6. Two CAT6 pairs are paralleled for +5V and two for GND to reduce voltage drop; see
+> `hardware/wiring_notes.md` for the exact pinout.
+
+---
+
 ## Consumables / Misc
 
 | # | Item | Notes |
@@ -83,11 +103,11 @@
 | Category | Items |
 |----------|-------|
 | High-voltage electrical | 5 |
-| Low-voltage / logic | 5 |
+| Low-voltage / logic | 9 |
 | Sensors | 2 |
-| Enclosure & cabling | 10 |
+| Enclosure & cabling | 11 |
 | Consumables | 5 |
-| **Total line items** | **27** |
+| **Total line items** | **31** |
 
 ---
 

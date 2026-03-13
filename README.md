@@ -59,10 +59,20 @@ smart-water-pump-controller/
 │   └── Diagram.drawio
 │
 ├── firmware/
-│   ├── smart_pump_controller/
-│   │   └── smart_pump_controller.ino  ← Flash this to the ESP32
-│   ├── libraries.txt                  ← Required Arduino libraries
-│   └── README.md                      ← Full flash & calibration guide
+│   ├── arduino_smart_water_pump_controller/
+│   │   ├── arduino_smart_water_pump_controller.ino  ← Open this in Arduino IDE and flash to ESP32
+│   │   ├── 01_config.ino
+│   │   ├── 02_sensors.ino
+│   │   ├── 03_safety_pump.ino
+│   │   ├── 04_persistence.ino
+│   │   ├── 05_connectivity_cloud.ino
+│   │   └── smart_water_pump_controller_shared.h
+│   ├── platformio_smart_water_pump_controller/      ← PlatformIO project (VS Code)
+│   │   ├── platformio.ini
+│   │   ├── src/
+│   │   └── include/
+│   ├── libraries.txt                                ← Required Arduino libraries
+│   └── README.md                                    ← Full flash & calibration guide
 │
 ├── dashboard/
 │   ├── app/                           ← Next.js App Router pages
@@ -245,6 +255,17 @@ See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for the
     wifi_rssi:           -65       int    dBm, signal strength
     last_boot_reason:    "Power-on" string e.g. Power-on, Task watchdog
     uptime_minutes:      125       int    minutes since boot
+    ultrasonic_cycles_ok:      120  int    cycles with ≥1 valid ultrasonic sample
+    ultrasonic_cycles_timeout: 0    int    cycles with 0 valid ultrasonic samples
+    ultrasonic_last_good_cm:   35.2 float  last good median distance (cm)
+    flow_discard_max_sane:     0    int    discarded flow readings due to max-sane guard
+    flow_stuck_high_events:    0    int    stuck-high detections
+    free_heap_bytes:           182000 int
+    min_free_heap_bytes:       175000 int    (ESP32)
+    max_alloc_heap_bytes:      82000  int    (ESP32)
+    min_free_heap_observed_bytes: 175000 int
+    firebase_consecutive_failures: 0  int
+    firebase_last_error:       ""     string
 
   control/                         ← Dashboard writes, ESP32 reads every 3 seconds
     mode:        "AUTO"            string  AUTO | FORCE_ON | FORCE_OFF

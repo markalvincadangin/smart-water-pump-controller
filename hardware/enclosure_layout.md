@@ -76,7 +76,8 @@ Mount a 4-position DIN screw terminal strip immediately to the left of the MCB o
 |-----------|----------|----------|-------|
 | ESP32 DevKit V1 (38-pin) | Bottom-left | M3 nylon standoffs, 5mm height | USB port faces left wall for potential laptop access |
 | 5V Relay Module | Bottom-center | M3 nylon standoffs | IN pin faces toward ESP32; NO/COM/NC terminals face right toward HV zone edge |
-| Voltage divider resistors | On small perfboard or terminal strip, mounted adjacent to ESP32 | Solder or terminal-mount | Label: "G34-Flow" and "G18-Echo" |
+| Voltage divider resistors | On small perfboard or terminal strip, mounted adjacent to ESP32 | Solder or terminal-mount | Label: "G34-Flow" (flow sensor signal divider) |
+| RS-485 Module (Tank Link) | Bottom-right, near CAT6 entry | M3 standoffs or adhesive | DI/RO/DE/RE wired to ESP32 UART & GPIO; A/B wired to CAT6 Green pair |
 
 ---
 
@@ -100,6 +101,35 @@ Left edge ──────────────── Right edge
 > These are **two separate runs** — both originate from the DIN rail grounding lug.
 
 ---
+
+## Tank-Side Mini Enclosure — Remote Ultrasonic Node
+
+A small IP65 box is mounted near the tank to host the remote ultrasonic node.
+
+### Layout
+
+```text
+┌──────────────────────────────┐
+│  JSN-SR04T probe cable  ─────┼──→ Down into tank
+│                              │
+│  [ Terminal Block ]          │  ← CAT6 5V/GND/A/B
+│                              │
+│  [ RS-485 Module ]           │
+│                              │
+│  [ NodeMCU v3 (ESP8266) ]    │
+│                              │
+│  [ 5V / GND bus + caps ]     │
+└──────────────────────────────┘
+```
+
+- CAT6 enters through a small gland at the bottom.
+- The terminal block breaks out:
+  - Paralleled +5V (Orange/Orange-White)
+  - Paralleled GND (Blue/Blue-White)
+  - RS-485 A/B (Green/Green-White)
+- The NodeMCU, JSN module PCB, and RS-485 module are mounted on standoffs or a small perfboard.
+- A 100–470 µF electrolytic capacitor and 100 nF ceramic capacitor are placed close to the NodeMCU
+  between 5V and GND.
 
 ## Internal Wire Routing Guidelines
 
