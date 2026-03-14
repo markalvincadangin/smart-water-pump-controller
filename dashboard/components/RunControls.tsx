@@ -2,20 +2,25 @@
 
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Timer, Play, Square } from "lucide-react";
+import { Timer, Play, Square, Plus } from "lucide-react";
 
-type RunMode = "OFF" | "AUTO" | "MANUAL" | "TIMED";
-type ControlMode = "AUTO" | "FORCE_ON" | "FORCE_OFF";
+type RunMode = "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "COUNTDOWN";
+type ControlMode = "AUTO" | "FORCE_ON" | "FORCE_OFF" | "COUNTDOWN";
 
 interface RunControlsProps {
   runMode: RunMode;
   remainingSec: number;
   controlMode: ControlMode;
   isError: boolean;
+  isOverflowError?: boolean;
   isAdmin: boolean;
-  lastFaultCode?: string;
+  esp32Online?: boolean;
+  pendingAck?: boolean;
+  onAcknowledge?: () => void;
+  isAddingCountdownTime?: boolean;
   onStartManual: () => void;
-  onStartTimed: (durationSec: number) => void;
+  onStartCountdown: (durationMin: number) => void;
+  onAddCountdownTime: () => void;
   onStop: () => void;
 }
 
@@ -33,196 +38,227 @@ export default function RunControls({
   remainingSec,
   controlMode,
   isError,
+  isOverflowError = false,
   isAdmin,
-  lastFaultCode,
+  esp32Online = true,
+  pendingAck = false,
+  onAcknowledge,
+  isAddingCountdownTime = false,
   onStartManual,
-  onStartTimed,
+  onStartCountdown,
+  onAddCountdownTime,
   onStop,
 }: RunControlsProps) {
-  const [busy, setBusy] = useState<"manual" | "timed" | "stop" | null>(null);
-  const [timedMin, setTimedMin] = useState<number>(10);
+  const [busy, setBusy] = useState<"manual" | "countdown" | "add" | "stop" | null>(null);
+  const [countdownMin, setCountdownMin] = useState<number>(10);
 
-  // Local countdown so UI stays smooth even if status updates are delayed.
   const [localRemainingSec, setLocalRemainingSec] = useState<number | null>(null);
 
-  // Snap local countdown to controller value whenever a fresh update arrives
   useEffect(() => {
-    if (runMode === "TIMED") {
+    if (runMode === "COUNTDOWN") {
       setLocalRemainingSec(remainingSec);
     } else {
       setLocalRemainingSec(null);
     }
   }, [runMode, remainingSec]);
 
-  // Tick local countdown every second between updates
   useEffect(() => {
-    if (runMode !== "TIMED" || localRemainingSec == null || localRemainingSec <= 0) return;
+    if (runMode !== "COUNTDOWN" || localRemainingSec == null || localRemainingSec <= 0) return;
     const id = window.setInterval(() => {
       setLocalRemainingSec((prev) => (prev != null && prev > 0 ? prev - 1 : prev));
     }, 1000);
     return () => window.clearInterval(id);
   }, [runMode, localRemainingSec]);
 
-  const showStop = runMode === "MANUAL" || runMode === "TIMED";
+  const showStop = runMode === "MANUAL" || runMode === "COUNTDOWN";
   const effectiveRemaining = localRemainingSec ?? remainingSec;
   const countdown = useMemo(
-    () => (runMode === "TIMED" ? formatMmSs(effectiveRemaining) : null),
+    () => (runMode === "COUNTDOWN" ? formatMmSs(effectiveRemaining) : null),
     [effectiveRemaining, runMode]
   );
   const blockedByForceOff = controlMode === "FORCE_OFF" && !showStop;
-  const isDryRunLockout = lastFaultCode === "DRY_RUN";
+  const isLockedOut = isError || isOverflowError;
+  const controllerOffline = !esp32Online;
+  const canAct = isAdmin && !isLockedOut && !blockedByForceOff && !controllerOffline;
 
   return (
     <div className="space-y-3">
+      {/* Header with run mode badge */}
       <div className="flex items-center justify-between">
         <h3 className="font-display font-semibold text-text-primary text-sm uppercase tracking-widest">
           Run Pump
         </h3>
         <span
           className={clsx(
-            "badge border font-mono",
-            runMode === "TIMED" ? "bg-accent-amber/10 text-accent-amber border-accent-amber/20"
+            "badge border font-mono text-[10px]",
+            runMode === "COUNTDOWN" ? "bg-accent-amber/10 text-accent-amber border-accent-amber/20"
               : runMode === "MANUAL" ? "bg-accent-green/10 text-accent-green border-accent-green/20"
-                : runMode === "AUTO" ? "bg-accent-cyan/10 text-accent-cyan border-accent-cyan/20"
+                : runMode === "AUTO" || runMode === "AUTO_STANDBY" ? "bg-accent-cyan/10 text-accent-cyan border-accent-cyan/20"
                   : "bg-surface-3 text-text-secondary border-surface-4"
           )}
           title="Run mode reported by the controller"
         >
-          {runMode === "OFF" ? "OFF" : runMode}
-          {countdown ? ` · ${countdown}` : ""}
+          {runMode === "OFF" ? "OFF" : runMode === "AUTO_STANDBY" ? "Standby" : runMode}
+          {countdown ? ` ${countdown}` : ""}
         </span>
       </div>
 
+      {/* FORCE_ON notice */}
       {controlMode === "FORCE_ON" && (
-        <div className="p-3 rounded-xl bg-accent-amber/10 border border-accent-amber/25">
-          <p className="text-xs font-mono text-accent-amber font-semibold uppercase tracking-wide">
-            ⚠ Emergency override active (FORCE ON)
+        <div className="p-2.5 rounded-xl bg-accent-amber/10 border border-accent-amber/25">
+          <p className="text-[10px] sm:text-xs font-mono text-accent-amber font-semibold uppercase tracking-wide">
+            Emergency override active
           </p>
-          <p className="text-[11px] font-mono text-text-secondary mt-1">
-            Pump is running continuously. Prefer stopping this and using <span className="text-text-primary">Manual</span> or <span className="text-text-primary">Timed</span> runs for normal operation.
+          <p className="text-[10px] font-mono text-text-secondary mt-0.5">
+            Pump runs until you change mode. Use Quick Start or Countdown for normal runs with Stop.
           </p>
         </div>
       )}
 
+      {/* FORCE_OFF notice */}
       {blockedByForceOff && (
-        <div className="p-3 rounded-xl bg-accent-red/10 border border-accent-red/25">
-          <p className="text-xs font-mono text-accent-red font-semibold uppercase tracking-wide">
-            FORCE OFF is active
+        <div className="p-2.5 rounded-xl bg-accent-red/10 border border-accent-red/25">
+          <p className="text-[10px] sm:text-xs font-mono text-accent-red font-semibold uppercase tracking-wide">
+            Force Off active
           </p>
-          <p className="text-[11px] font-mono text-text-secondary mt-1">
-            Switch Mode to <span className="text-text-primary">AUTO</span> (or Emergency ON) to start a run.
-          </p>
-        </div>
-      )}
-
-      {isDryRunLockout && (
-        <div className="p-3 rounded-xl bg-accent-red/10 border border-accent-red/25">
-          <p className="text-xs font-mono text-accent-red font-semibold uppercase tracking-wide">
-            Dry-run lockout active
-          </p>
-          <p className="text-[11px] font-mono text-text-secondary mt-1">
-            Pump was stopped due to low flow protection. Acknowledge the error in the Errors &amp; Alerts panel before starting a new run.
+          <p className="text-[10px] font-mono text-text-secondary mt-0.5">
+            Switch to AUTO to enable pump controls.
           </p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <button
-          type="button"
-          disabled={busy !== null || isError || !isAdmin || blockedByForceOff || isDryRunLockout}
-          onClick={async () => {
-            setBusy("manual");
-            try { onStartManual(); } finally { window.setTimeout(() => setBusy(null), 1200); }
-          }}
-          className={clsx(
-            "px-4 py-3 rounded-xl border font-mono text-sm min-h-[44px] flex items-center justify-center gap-2 transition-colors",
-            "border-surface-4 text-text-secondary hover:bg-surface-3",
-            (!isAdmin || isError || blockedByForceOff) && "opacity-50 cursor-not-allowed"
+      {/* Error lockout */}
+      {isLockedOut && (
+        <div className="p-2.5 rounded-xl bg-accent-red/10 border border-accent-red/25 space-y-2">
+          <p className="text-[10px] sm:text-xs font-mono text-accent-red font-semibold uppercase tracking-wide">
+            {isError ? "Dry-run lockout" : "Overflow lockout"}
+          </p>
+          <p className="text-[10px] font-mono text-text-secondary">
+            Clear the error to start a new run.
+          </p>
+          {onAcknowledge && (
+            <button
+              type="button"
+              onClick={onAcknowledge}
+              disabled={pendingAck || !esp32Online}
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-accent-red/20 border border-accent-red/50
+                         text-accent-red text-xs font-mono font-semibold
+                         hover:bg-accent-red/30 transition-colors touch-manipulation
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {pendingAck ? "Sending…" : "Clear Error"}
+            </button>
           )}
-          title={
-            !isAdmin ? "Admin only"
-              : blockedByForceOff ? "FORCE OFF is active"
-                : isDryRunLockout ? "Dry-run lockout: acknowledge in Errors & Alerts before starting"
-                  : isError ? "Clear error before starting"
-                  : "Start a manual run (stop anytime)"
-          }
-        >
-          <Play size={14} />
-          Quick start (Manual)
-        </button>
+        </div>
+      )}
 
-        <button
-          type="button"
-          disabled={busy !== null || isError || !isAdmin || blockedByForceOff || isDryRunLockout}
-          onClick={async () => {
-            setBusy("timed");
-            try { onStartTimed(timedMin * 60); } finally { window.setTimeout(() => setBusy(null), 1200); }
-          }}
-          className={clsx(
-            "px-4 py-3 rounded-xl border font-mono text-sm min-h-[44px] flex items-center justify-center gap-2 transition-colors",
-            "border-surface-4 text-text-secondary hover:bg-surface-3",
-            (!isAdmin || isError || blockedByForceOff) && "opacity-50 cursor-not-allowed"
+      {/* Main controls — hidden when locked out or FORCE_ON */}
+      {!isLockedOut && controlMode !== "FORCE_ON" && (
+        <>
+          {/* Start buttons */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={busy !== null || !canAct}
+              onClick={() => {
+                setBusy("manual");
+                try { onStartManual(); } finally { window.setTimeout(() => setBusy(null), 8000); }
+              }}
+              className={clsx(
+                "px-3 py-2.5 rounded-xl border font-mono text-xs sm:text-sm min-h-[48px] flex items-center justify-center gap-1.5 sm:gap-2 transition-colors touch-manipulation",
+                canAct
+                  ? "border-accent-green/30 text-accent-green hover:bg-accent-green/10 active:scale-[0.98]"
+                  : "border-surface-4 text-text-muted opacity-50 cursor-not-allowed"
+              )}
+              title={!isAdmin ? "Admin only" : blockedByForceOff ? "FORCE OFF active" : "Start a manual run (stop anytime)"}
+            >
+              <Play size={14} />
+              <span className="sm:hidden">Manual</span>
+              <span className="hidden sm:inline">Quick Start</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={busy !== null || !canAct}
+              onClick={() => {
+                setBusy("countdown");
+                try { onStartCountdown(countdownMin); } finally { window.setTimeout(() => setBusy(null), 8000); }
+              }}
+              className={clsx(
+                "px-3 py-2.5 rounded-xl border font-mono text-xs sm:text-sm min-h-[48px] flex items-center justify-center gap-1.5 sm:gap-2 transition-colors touch-manipulation",
+                canAct
+                  ? "border-accent-amber/30 text-accent-amber hover:bg-accent-amber/10 active:scale-[0.98]"
+                  : "border-surface-4 text-text-muted opacity-50 cursor-not-allowed"
+              )}
+              title={!isAdmin ? "Admin only" : "Run for set time then auto-stop"}
+            >
+              <Timer size={14} />
+              Countdown
+            </button>
+          </div>
+
+          {/* Countdown duration — inline with label */}
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-mono text-text-muted shrink-0">Duration</label>
+            <div className="flex gap-1 flex-1 min-w-0">
+              {PRESETS_MIN.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setCountdownMin(m)}
+                  disabled={busy !== null || showStop}
+                  className={clsx(
+                    "flex-1 px-1.5 py-1.5 rounded-lg font-mono text-[10px] sm:text-xs transition-colors min-w-0",
+                    m === countdownMin
+                      ? "bg-accent-amber/15 text-accent-amber border border-accent-amber/30"
+                      : "bg-surface-2 text-text-muted border border-surface-4 hover:text-text-secondary"
+                  )}
+                >
+                  {m}m
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Add time (during countdown) */}
+          {runMode === "COUNTDOWN" && (
+            <button
+              type="button"
+              disabled={busy !== null || isAddingCountdownTime || controllerOffline}
+              onClick={() => {
+                setBusy("add");
+                try { onAddCountdownTime(); } finally { window.setTimeout(() => setBusy(null), 8000); }
+              }}
+              className="w-full px-3 py-2 rounded-xl border border-accent-amber/30 text-accent-amber font-mono text-xs sm:text-sm hover:bg-accent-amber/10 min-h-[44px] flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation"
+              title={isAddingCountdownTime ? "Waiting for controller…" : "Add 5 minutes to the countdown"}
+            >
+              <Plus size={12} />
+              Add 5 min
+            </button>
           )}
-          title={
-            !isAdmin ? "Admin only"
-              : blockedByForceOff ? "FORCE OFF is active"
-                : isDryRunLockout ? "Dry-run lockout: acknowledge in Errors & Alerts before starting"
-                  : isError ? "Clear error before starting"
-                  : "Run for a fixed time then auto-stop"
-          }
-        >
-          <Timer size={14} />
-          Timed run
-        </button>
-      </div>
 
-      <div className="flex items-center justify-between gap-2">
-        <label className="text-[11px] font-mono text-text-muted">
-          Duration
-        </label>
-        <select
-          value={timedMin}
-          onChange={(e) => setTimedMin(parseInt(e.target.value, 10))}
-          className="px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm"
-          disabled={busy !== null || showStop}
-          title={showStop ? "Stop the current run to change duration" : "Pick a timed run duration"}
-        >
-          {PRESETS_MIN.map((m) => (
-            <option key={m} value={m}>{m} min</option>
-          ))}
-        </select>
-      </div>
+          {/* Stop */}
+          {showStop && (
+            <button
+              type="button"
+              disabled={busy !== null || controllerOffline}
+              onClick={() => {
+                setBusy("stop");
+                try { onStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
+              }}
+              className="w-full px-4 py-3 rounded-xl bg-accent-red/20 border border-accent-red/40 text-accent-red font-mono text-sm font-semibold hover:bg-accent-red/30 min-h-[56px] sm:min-h-[64px] flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation active:scale-[0.98]"
+              title="Stop the pump now"
+            >
+              <Square size={16} />
+              Stop
+            </button>
+          )}
 
-      {showStop && (
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={async () => {
-            setBusy("stop");
-            try { onStop(); } finally { window.setTimeout(() => setBusy(null), 1200); }
-          }}
-          className="w-full px-4 py-3 rounded-xl bg-accent-red/20 border border-accent-red/40 text-accent-red font-mono text-sm font-semibold hover:bg-accent-red/30 min-h-[44px] flex items-center justify-center gap-2 disabled:opacity-50"
-          title="Stop the pump now"
-        >
-          <Square size={14} />
-          Stop
-        </button>
+          {!isAdmin && (
+            <p className="text-[9px] font-mono text-text-muted">Admin access required for pump controls.</p>
+          )}
+        </>
       )}
-
-      {!isAdmin && (
-        <p className="text-[10px] font-mono text-text-muted">
-          Run controls are admin-only.
-        </p>
-      )}
-      {isError && (
-        <p className="text-[10px] font-mono text-text-muted">
-          Clear the error (Acknowledge) before starting a run.
-        </p>
-      )}
-      <p className="text-[10px] font-mono text-text-muted">
-        Safety protections stay active (dry-run, overflow, sensor fail-safe). Use Emergency override only for troubleshooting.
-      </p>
     </div>
   );
 }
-

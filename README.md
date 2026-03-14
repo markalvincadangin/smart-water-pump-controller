@@ -51,12 +51,21 @@ smart-water-pump-controller/
 ├── database.rules.json                 ← RTDB security rules
 │
 ├── docs/
-│   ├── Master_Manual.pdf
-│   ├── Hardware_Documentation.pdf
-│   ├── Software_Firmware_Documentation.pdf
-│   ├── Diagram.pdf
-│   ├── Diagram.png
-│   └── Diagram.drawio
+│   ├── README.md                       ← Docs index
+│   ├── releases/
+│   │   ├── v2.0/
+│   │   │   ├── firmware-rtdb-spec.md   ← Firmware & RTDB contract (v2.0)
+│   │   │   ├── dashboard-ux-spec.md    ← Dashboard UI/UX spec (v2.0)
+│   │   │   ├── deploy.md               ← Deploy guide for v2.0
+│   │   │   └── changelog.md            ← Summary of v2 changes
+│   │   └── v3.0/
+│   │       ├── firmware-spec.md        ← Firmware behavior (v3.0)
+│   │       └── migration-from-v2.md    ← Notes for upgrading from v2 → v3
+│   ├── operations/                     ← Troubleshooting, safety (future)
+│   ├── assets/
+│   │   ├── diagrams/                   ← System diagrams
+│   │   └── manuals/                    ← PDFs and manuals
+│   └── archive/                        ← Historical plans and notes
 │
 ├── firmware/
 │   ├── arduino_smart_water_pump_controller/
@@ -91,6 +100,11 @@ smart-water-pump-controller/
     ├── enclosure_layout.md            ← Component placement & zone map
     └── wiring_notes.md                ← Complete wiring reference & checklist
 ```
+
+**Firmware & dashboard design:** The authoritative specifications live under `docs/releases/` — start with:
+
+- [docs/releases/v2.0/firmware-rtdb-spec.md](docs/releases/v2.0/firmware-rtdb-spec.md)
+- [docs/releases/v2.0/dashboard-ux-spec.md](docs/releases/v2.0/dashboard-ux-spec.md)
 
 ---
 
@@ -152,7 +166,7 @@ Phase 4 is fully checked off.
 | Firebase ESP Client | Mobizt | ≥ 4.4.14 |
 | ArduinoJson | Benoit Blanchon | ≥ 6.21.5 **(v6.x only — not v7)** |
 
-1. Open `firmware/smart_pump_controller/smart_pump_controller.ino` in Arduino IDE
+1. Open `firmware/arduino_smart_water_pump_controller/arduino_smart_water_pump_controller.ino` in Arduino IDE (or use PlatformIO: `firmware/platformio_smart_water_pump_controller/`)
 2. Copy `secrets.h.example` to `secrets.h` and fill in WiFi, Firebase, and Email/Password credentials (see `firmware/README.md`)
 3. Set board: **Tools → Board → ESP32 Dev Module**
 4. Set board: **ESP32 Dev Module**; upload speed **115200**; Partition Scheme **Huge APP (3MB No OTA/1MB SPIFFS)**; Flash Mode **QIO**; PSRAM **Disabled**
@@ -223,11 +237,11 @@ Complete every item before switching the MCB on for the first time.
 
 ## Full deployment
 
-For a single, end-to-end deployment guide (Firebase, Functions, Dashboard, ESP32, and smoke tests), use **`docs/DEPLOY_GUIDE.md`**.
+For a single, end-to-end deployment guide (Firebase, Functions, Dashboard, ESP32, and smoke tests), use **`docs/releases/v2.0/deploy.md`**.
 
 ## Notifications (Optional)
 
-Email and **push notifications** (to phone/browser, like YouTube or Facebook) for dry-run lockout, low tank level, pump started, and overflow protection. See `docs/NOTIFICATIONS_SETUP.md`.
+Email and **push notifications** (to phone/browser, like YouTube or Facebook) for dry-run lockout, low tank level, pump started, and overflow protection. See `docs/operations/NOTIFICATIONS_SETUP.md`.
 
 ## Implemented Enhancements
 
@@ -320,7 +334,7 @@ See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for the
 ## Repository Conventions
 
 - `docs/` — read-only reference. Never edit PDFs; update the source `.drawio` and re-export.
-- `firmware/` — the `.ino` file must stay inside a folder of the same name. Use `secrets.h.example` → `secrets.h` for credentials (never commit `secrets.h`).
+- `firmware/` — use either Arduino IDE with `arduino_smart_water_pump_controller/` or PlatformIO with `platformio_smart_water_pump_controller/`. Use `secrets.h.example` → `secrets.h` for credentials (never commit `secrets.h`).
 - `dashboard/` — never commit `.env.local`. It is gitignored. Use `.env.local.example` as the template.
 - `hardware/` — plain markdown. Update these files when physical changes are made to the build.
 

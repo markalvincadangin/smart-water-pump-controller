@@ -1,7 +1,7 @@
 // components/DeviceConfigSettings.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Settings, X, RotateCw } from "lucide-react";
 import { useDeviceConfig } from "@/lib/useDeviceConfig";
 import InfoTooltip from "./InfoTooltip";
@@ -17,9 +17,13 @@ interface DeviceConfigSettingsProps {
   actorEmail?: string | null;
   esp32Online?: boolean;
   onRequestReboot?: () => Promise<void>;
+  /** Current bypass state from controller status (maintenance mode). */
+  bypassLevelSensor?: boolean;
+  /** Set level sensor bypass via Firebase control (admin only). */
+  onSetBypassLevelSensor?: (value: boolean) => Promise<void>;
 }
 
-export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUid = null, actorEmail = null, esp32Online = false, onRequestReboot }: DeviceConfigSettingsProps) {
+export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUid = null, actorEmail = null, esp32Online = false, onRequestReboot, bypassLevelSensor = false, onSetBypassLevelSensor }: DeviceConfigSettingsProps) {
   const { config, loading, saveConfig, seedDefaultsIfEmpty } = useDeviceConfig();
   const [form, setForm] = useState<DeviceConfig>({ ...DEFAULT_DEVICE_CONFIG });
   const [saving, setSaving] = useState(false);
@@ -28,6 +32,7 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [rebootBusy, setRebootBusy] = useState(false);
+  const [bypassBusy, setBypassBusy] = useState(false);
 
   const sectionTitleClass =
     "text-sm font-display font-semibold text-text-primary";
@@ -41,6 +46,48 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
   useEffect(() => {
     if (config) setForm(config);
   }, [config]);
+
+  // B8: Dirty when form differs from saved config (deep compare)
+  const isDirty = useMemo(() => {
+    if (!config) return false;
+    const a = form;
+    const b = config;
+    const levelThreshA = a.level_sensor_failure_threshold ?? a.sensor_failure_threshold;
+    const levelThreshB = b.level_sensor_failure_threshold ?? b.sensor_failure_threshold;
+    return (
+      a.tank_empty_cm !== b.tank_empty_cm ||
+      a.tank_full_cm !== b.tank_full_cm ||
+      a.pump_start_level !== b.pump_start_level ||
+      a.pump_stop_level !== b.pump_stop_level ||
+      a.dry_run_threshold_lpm !== b.dry_run_threshold_lpm ||
+      a.dry_run_timeout_sec !== b.dry_run_timeout_sec ||
+      a.flow_calibration_factor !== b.flow_calibration_factor ||
+      a.max_pump_runtime_min !== b.max_pump_runtime_min ||
+      a.sleep_enabled !== b.sleep_enabled ||
+      a.sleep_start_hour !== b.sleep_start_hour ||
+      a.sleep_end_hour !== b.sleep_end_hour ||
+      a.sleep_emergency_level !== b.sleep_emergency_level ||
+      levelThreshA !== levelThreshB ||
+      a.idle_sensor_interval_ms !== b.idle_sensor_interval_ms ||
+      a.idle_firebase_interval_ms !== b.idle_firebase_interval_ms ||
+      (a.auto_bypass_on_sensor_fail ?? false) !== (b.auto_bypass_on_sensor_fail ?? false) ||
+      (a.auto_bypass_delay_sec ?? 60) !== (b.auto_bypass_delay_sec ?? 60)
+    );
+  }, [form, config]);
+
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  function handleCloseAttempt() {
+    if (isDirty) setShowDiscardConfirm(true);
+    else onClose();
+  }
+
+  function handleDiscard() {
+    if (config) setForm(config);
+    setShowDiscardConfirm(false);
+    setSaveError(null);
+    onClose();
+  }
 
   function validate(): string | null {
     if (form.tank_full_cm >= form.tank_empty_cm) return "Full (cm) must be less than Empty (cm).";
@@ -56,9 +103,11 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
     if (form.sleep_start_hour < 0 || form.sleep_start_hour > 23) return "Sleep start: 0–23.";
     if (form.sleep_end_hour < 0 || form.sleep_end_hour > 23) return "Sleep end: 0–23.";
     if (form.sleep_emergency_level < 0 || form.sleep_emergency_level > 100) return "Emergency level: 0–100%.";
-    if (form.sensor_failure_threshold < 3 || form.sensor_failure_threshold > 20) return "Sensor error threshold: 3–20.";
+    const levelThreshold = form.level_sensor_failure_threshold ?? form.sensor_failure_threshold;
+    if (levelThreshold < 3 || levelThreshold > 20) return "Level sensor error threshold: 3–20.";
     if (form.idle_sensor_interval_ms < 5000 || form.idle_sensor_interval_ms > 60000) return "Level check: 5000–60000 ms.";
     if (form.idle_firebase_interval_ms < 10000 || form.idle_firebase_interval_ms > 120000) return "Sync interval: 10000–120000 ms.";
+    if (form.auto_bypass_on_sensor_fail && (form.auto_bypass_delay_sec == null || form.auto_bypass_delay_sec < 10 || form.auto_bypass_delay_sec > 300)) return "Auto bypass delay: 10–300 sec when enabled.";
     return null;
   }
 
@@ -79,6 +128,7 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
           action: "config.device.save",
           uid: actorUid,
           email: actorEmail,
+          detail: "Device config updated",
         });
       }
       setTimeout(() => onClose(), 800);
@@ -120,8 +170,8 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 overscroll-contain pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
-      <div className="card card-glow-cyan max-w-md w-full max-h-[95dvh] sm:max-h-[90vh] min-w-0 rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 overscroll-contain pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]" onClick={(e) => e.target === e.currentTarget && handleCloseAttempt()}>
+      <div className="card card-glow-cyan max-w-md w-full max-h-[95dvh] sm:max-h-[90vh] min-w-0 rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden relative">
         {/* Header - fixed */}
         <div className="flex items-center justify-between p-4 sm:p-6 pb-0 shrink-0">
           <div className="flex items-center gap-3">
@@ -133,10 +183,27 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
               <p className="text-xs font-mono text-text-muted">Tank size, pump levels, and safety</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors" aria-label="Close">
+          <button onClick={handleCloseAttempt} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors" aria-label="Close">
             <X size={20} />
           </button>
         </div>
+
+        {/* B8: Unsaved-changes confirm dialog */}
+        {showDiscardConfirm && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 rounded-t-2xl sm:rounded-2xl p-4">
+            <div className="card p-4 sm:p-5 max-w-sm w-full space-y-3">
+              <p className="text-sm font-mono text-text-primary">You have unsaved changes. Discard and close?</p>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setShowDiscardConfirm(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm hover:bg-surface-3">
+                  Keep editing
+                </button>
+                <button type="button" onClick={handleDiscard} className="flex-1 px-4 py-2.5 rounded-xl bg-accent-amber/20 border border-accent-amber/40 text-accent-amber font-mono text-sm font-semibold hover:bg-accent-amber/30">
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-6 py-4">
@@ -281,13 +348,29 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
                   </div>
                   <div>
                     <label className={fieldLabelClass}>
-                      Sensor error threshold
-                      <InfoTooltip content="After this many failed readings in a row, we show a sensor error. Default is 5." side="right" />
+                      Level sensor error threshold
+                      <InfoTooltip content="After this many failed ultrasonic readings in a row, we show a level sensor error. Default is 5." side="right" />
                     </label>
-                    <input type="number" min={3} max={20} value={form.sensor_failure_threshold} onChange={(e) => setForm((f) => ({ ...f, sensor_failure_threshold: parseInt(e.target.value, 10) || 5 }))}
+                    <input type="number" min={3} max={20} value={form.level_sensor_failure_threshold ?? form.sensor_failure_threshold} onChange={(e) => setForm((f) => ({ ...f, level_sensor_failure_threshold: parseInt(e.target.value, 10) || 5 }))}
                       className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
                     <p className={helperTextClass}>Consecutive failed readings before error.</p>
                   </div>
+                </div>
+                <div className="mt-4 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={form.auto_bypass_on_sensor_fail ?? false} onChange={(e) => setForm((f) => ({ ...f, auto_bypass_on_sensor_fail: e.target.checked }))}
+                      className="w-4 h-4 rounded border-surface-4 text-accent-amber focus:ring-accent-amber/50" />
+                    <span className="text-sm font-mono text-text-primary">Auto bypass on level sensor fail</span>
+                  </label>
+                  <p className={helperTextClass}>When on: after level sensor fails for the delay below, controller enables bypass automatically (flow-only mode).</p>
+                  {form.auto_bypass_on_sensor_fail && (
+                    <div>
+                      <label className={fieldLabelClass}>Delay (sec)</label>
+                      <input type="number" min={10} max={300} value={form.auto_bypass_delay_sec ?? 60} onChange={(e) => setForm((f) => ({ ...f, auto_bypass_delay_sec: parseInt(e.target.value, 10) || 60 }))}
+                        className="w-full max-w-[120px] px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
+                      <p className={helperTextClass}>10–300. Time of continuous failure before auto-bypass engages.</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -372,6 +455,37 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
           )}
           <p className="text-[10px] font-mono text-text-muted">Settings sync to your controller when it&apos;s online. When offline, it uses the last saved values—no restart needed.</p>
 
+          {/* Maintenance: Level sensor bypass (admin only) */}
+          {isAdmin && onSetBypassLevelSensor != null && (
+            <div className="mt-4 pt-4 border-t border-surface-3">
+              <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">Maintenance</p>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!bypassLevelSensor}
+                  disabled={bypassBusy}
+                  onChange={async (e) => {
+                    const v = e.target.checked;
+                    setBypassBusy(true);
+                    try {
+                      await onSetBypassLevelSensor(v);
+                      toast({ kind: "success", title: v ? "Level bypass on" : "Level bypass off", detail: "Controller will apply when online." });
+                    } catch {
+                      toast({ kind: "error", title: "Failed to set bypass" });
+                    } finally {
+                      setBypassBusy(false);
+                    }
+                  }}
+                  className="rounded border-surface-4"
+                />
+                <span className="text-sm font-mono text-text-primary">Bypass level sensor</span>
+              </label>
+              <p className="text-[10px] font-mono text-text-muted mt-1">
+                When on: pump start/stop ignores tank level (flow guard and dry-run protection still active). Use for maintenance or when the sensor is faulty. Supervise the pump.
+              </p>
+            </div>
+          )}
+
           {/* System: Restart controller (admin only, when ESP32 online) */}
           {isAdmin && onRequestReboot && (
             <div className="mt-4 pt-4 border-t border-surface-3">
@@ -407,14 +521,21 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
           )}
         </div>
 
-        {/* Footer - fixed, no overlap */}
+        {/* B8: Sticky footer — when dirty, highlight Save/Discard */}
         <div className="shrink-0 flex flex-col gap-2 p-4 sm:p-6 pt-4 border-t border-surface-3 bg-surface-1">
+          {isDirty && (
+            <p className="text-xs font-mono text-accent-amber">You have unsaved changes.</p>
+          )}
           <button onClick={handleSeedDefaults} disabled={seeding} className="w-full px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm hover:bg-surface-3 disabled:opacity-50">
             {seeding ? "Setting up…" : "Reset to defaults (if empty)"}
           </button>
           <div className="flex gap-3">
-            <button onClick={onClose} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm hover:bg-surface-3 disabled:opacity-50">
-              Cancel
+            <button
+              onClick={isDirty ? () => { if (config) setForm(config); setSaveError(null); } : handleCloseAttempt}
+              disabled={saving}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm hover:bg-surface-3 disabled:opacity-50"
+            >
+              {isDirty ? "Discard" : "Cancel"}
             </button>
             <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl bg-accent-cyan/20 border border-accent-cyan/40 text-accent-cyan font-mono text-sm font-semibold hover:bg-accent-cyan/30 disabled:opacity-50">
               {saving ? "Saving…" : saveSuccess ? "Saved" : "Save"}

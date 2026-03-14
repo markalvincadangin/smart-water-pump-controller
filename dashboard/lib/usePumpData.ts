@@ -17,7 +17,8 @@ const DEFAULT_STATUS: PumpStatus = {
   is_running: false,
   flow_rate_lpm: 0,
   is_error: false,
-  is_sensor_error: false,
+  is_level_sensor_error: false,
+  is_flow_sensor_error: false,
   is_overflow_error: false,
   wifi_rssi: 0,
   last_boot_reason: "",
@@ -36,6 +37,7 @@ export function usePumpData() {
   const [authChecked, setAuthChecked] = useState(false);
   const [authUser, setAuthUser] = useState<{ uid: string; email: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isAddingCountdownTime, setIsAddingCountdownTime] = useState(false);
 
   // Keep refs so callbacks don't close over stale state
   const statusRef = useRef<PumpStatus>(DEFAULT_STATUS);
@@ -132,6 +134,7 @@ export function usePumpData() {
 
   const setMode = useCallback(async (mode: PumpControl["mode"]) => {
     try {
+      const prevMode = controlRef.current?.mode ?? "?";
       await set(ref(db, `${CONTROL_PATH}/mode`), mode);
       if (authUser?.uid) {
         await writeAuditEvent({
@@ -139,6 +142,7 @@ export function usePumpData() {
           uid: authUser.uid,
           email: authUser.email ?? null,
           meta: { mode },
+          detail: `Mode changed from ${prevMode} to ${mode}`,
         });
       }
     } catch (err) {
@@ -154,6 +158,7 @@ export function usePumpData() {
           action: "control.ack_error",
           uid: authUser.uid,
           email: authUser.email ?? null,
+          detail: "Error acknowledged and cleared",
         });
       }
     } catch (err) {
@@ -171,6 +176,7 @@ export function usePumpData() {
           uid: authUser.uid,
           email: authUser.email ?? null,
           meta: { reboot_request_id: id },
+          detail: "Controller reboot requested",
         });
       }
     } catch (err) {
@@ -190,12 +196,13 @@ export function usePumpData() {
       await set(ref(db, `${CONTROL_PATH}/manual_start`), true);
       window.setTimeout(() => {
         void set(ref(db, `${CONTROL_PATH}/manual_start`), false);
-      }, 15000); // keep high longer so ESP32 can see it even with weak WiFi
+      }, 5000); // 5s so firmware has two poll cycles to see it [FIX B2]
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.run_manual_start",
           uid: authUser.uid,
           email: authUser.email ?? null,
+          detail: "Manual run started",
         });
       }
     } catch (err) {
@@ -203,30 +210,52 @@ export function usePumpData() {
     }
   }, [authUser?.email, authUser?.uid]);
 
-  const startTimedRun = useCallback(async (durationSec: number) => {
+  const startCountdown = useCallback(async (durationMin: number) => {
     try {
-      const safeSec = Math.max(1, Math.floor(durationSec));
-      // If the policy mode is FORCE_OFF, switch to AUTO first, otherwise the firmware will stop runs immediately.
+      const safeMin = Math.max(1, Math.min(120, Math.floor(durationMin)));
       if (controlRef.current?.mode === "FORCE_OFF") {
         await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
       }
-      // One-shot: write duration then reset to 0 so firmware can detect future runs.
-      await set(ref(db, `${CONTROL_PATH}/timed_start_sec`), safeSec);
-      window.setTimeout(() => {
-        void set(ref(db, `${CONTROL_PATH}/timed_start_sec`), 0);
-      }, 15000); // keep non-zero longer so ESP32 can see it even with weak WiFi
+      await set(ref(db, `${CONTROL_PATH}/countdown_duration_min`), safeMin);
+      await set(ref(db, `${CONTROL_PATH}/mode`), "COUNTDOWN");
       if (authUser?.uid) {
         await writeAuditEvent({
-          action: "control.run_timed_start",
+          action: "control.run_countdown_start",
           uid: authUser.uid,
           email: authUser.email ?? null,
-          meta: { durationSec: safeSec },
+          meta: { durationMin: safeMin },
+          detail: `Countdown started: ${safeMin} min`,
         });
       }
     } catch (err) {
-      console.error("[RTDB] startTimedRun failed:", err);
+      console.error("[RTDB] startCountdown failed:", err);
     }
   }, [authUser?.email, authUser?.uid]);
+
+  const addCountdownTime = useCallback(async () => {
+    try {
+      setIsAddingCountdownTime(true);
+      await set(ref(db, `${CONTROL_PATH}/countdown_add_time`), true);
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.run_countdown_add_time",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+          detail: "5 min added to countdown",
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] addCountdownTime failed:", err);
+      setIsAddingCountdownTime(false);
+    }
+  }, [authUser?.email, authUser?.uid]);
+
+  // Clear isAddingCountdownTime when firmware resets countdown_add_time to false (Firebase roundtrip)
+  useEffect(() => {
+    if (snapshot?.control?.countdown_add_time === false && isAddingCountdownTime) {
+      setIsAddingCountdownTime(false);
+    }
+  }, [snapshot?.control?.countdown_add_time, isAddingCountdownTime]);
 
   const stopRun = useCallback(async () => {
     try {
@@ -240,6 +269,7 @@ export function usePumpData() {
           action: "control.run_stop",
           uid: authUser.uid,
           email: authUser.email ?? null,
+          detail: "Manual run stopped",
         });
       }
     } catch (err) {
@@ -247,19 +277,48 @@ export function usePumpData() {
     }
   }, [authUser?.email, authUser?.uid]);
 
+  const setBypassLevelSensor = useCallback(async (value: boolean) => {
+    try {
+      await set(ref(db, `${CONTROL_PATH}/bypass_level_sensor`), value);
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.bypass_level_sensor",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+          meta: { bypass_level_sensor: value },
+          detail: value ? "Level sensor bypass enabled (maintenance mode)" : "Level sensor bypass disabled",
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] setBypassLevelSensor failed:", err);
+      throw err;
+    }
+  }, [authUser?.email, authUser?.uid]);
+
+  const status: PumpStatus | null = snapshot?.status ?? null;
+  const control: PumpControl | null = snapshot?.control ?? null;
+
   return {
-    snapshot,
+    // Preferred public fields
+    status,
+    control,
     history,
     connected,
     authReady,
     authChecked,
     authUser,
     error,
+    // Back-compat combined snapshot (used by some call sites)
+    snapshot,
+    // Writers and helpers
     setMode,
     acknowledgeError,
     requestReboot,
     startManualRun,
-    startTimedRun,
+    startCountdown,
+    addCountdownTime,
+    isAddingCountdownTime,
     stopRun,
+    setBypassLevelSensor,
   };
 }

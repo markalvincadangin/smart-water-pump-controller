@@ -18,7 +18,7 @@ Each update is a single ASCII line:
 
 ```text
 LVL:<percent>;ERR:<flag>\r\n
-``>
+```
 
 - `<percent>`: integer 0–100, water level percentage.
 - `<flag>`: `0` (OK) or `1` (ultrasonic sensor error).

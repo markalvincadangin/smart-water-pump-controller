@@ -67,7 +67,7 @@ Ensure `database.rules.json` includes:
 - `pump_system/config/notification_last_sent` — no client read/write (Functions only)
 - `pump_system/audit/events` and `pump_system/presence` — optional but recommended for multi-user activity/presence indicators (dashboard writes best-effort)
 
-See `docs/DEPLOY_CHECKLIST.md` and `docs/DEPLOY_GUIDE.md` for full rules and UID setup.
+See `docs/releases/v2.0/deploy.md` for full rules and UID setup.
 
 ---
 
@@ -116,7 +116,7 @@ Push notifications are sent directly to your phone or browser. **Requirements:**
 2. Bell icon → **Enable push on this device** → allow notifications when prompted
 3. Click **Save**
 
-Push works best when the dashboard is **installed as an app** (Add to Home Screen). See `docs/DEPLOY_GUIDE.md` Phase 5 step 7 for PWA install.
+Push works best when the dashboard is **installed as an app** (Add to Home Screen). See `docs/releases/v2.0/deploy.md` Phase 5 step 7 for PWA install.
 
 ---
 
@@ -167,4 +167,4 @@ To avoid spam, each alert type is limited to **once per 15 minutes** per user. F
 
 ---
 
-*See `docs/DEPLOY_GUIDE.md` for full deployment order including Functions and dashboard. See `docs/FIREBASE_OPTIMIZATION.md` for RTDB usage assessment.*
+*See `docs/releases/v2.0/deploy.md` for full deployment order including Functions and dashboard.*

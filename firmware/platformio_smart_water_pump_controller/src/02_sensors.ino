@@ -82,34 +82,56 @@ int readUltrasonicSensor() {
 
   ultrasonicLastGoodCmX10 = (uint32_t)(medianDist * 10.0f + 0.5f);
 
-  // Clamp to calibrated range
-  medianDist = constrain(medianDist, (float)cfgTankFullCm, (float)cfgTankEmptyCm);
+  return updateLevelFromReading(medianDist);
+}
 
-  // Convert to percent full (float, then rounded)
+/**
+ * @brief v3.0 LoRa-ready: applies processing pipeline to a raw distance (cm).
+ *        Used by readUltrasonicSensor(); future LoRa path will call this with packet data.
+ * @return int Water level 0-100, or prevWaterLevelPct on rate-of-change reject.
+ */
+int updateLevelFromReading(float distanceCm) {
+  distanceCm = constrain(distanceCm, (float)cfgTankFullCm, (float)cfgTankEmptyCm);
   float range = (float)(cfgTankEmptyCm - cfgTankFullCm);
-  float levelFloat = 100.0f * ((float)cfgTankEmptyCm - medianDist) / range;
+  float levelFloat = 100.0f * ((float)cfgTankEmptyCm - distanceCm) / range;
   levelFloat = constrain(levelFloat, 0.0f, 100.0f);
 
-  // EMA smoothing
   if (waterLevelEma < 0.1f && waterLevelPct == 0) {
-    // First reading after boot — initialize EMA directly
     waterLevelEma = levelFloat;
   } else {
     waterLevelEma = ULTRASONIC_EMA_ALPHA * levelFloat + (1.0f - ULTRASONIC_EMA_ALPHA) * waterLevelEma;
   }
 
-  int newLevel = (int)(waterLevelEma + 0.5f); // Round to nearest int
+  int newLevel = (int)(waterLevelEma + 0.5f);
   newLevel = constrain(newLevel, 0, 100);
 
-  // Rate-of-change guard: reject implausible jumps (noise spikes on long UTP)
   int delta = abs(newLevel - prevWaterLevelPct);
   if (prevWaterLevelPct > 0 && delta > LEVEL_RATE_OF_CHANGE_MAX) {
-    Serial.printf("[SENSOR][WARN] Level jumped %d%% in 1s (prev=%d%%, new=%d%%). Holding previous.\n",
+    Serial.printf("[SENSOR][WARN] Level jumped %d%% (prev=%d%%, new=%d%%). Holding previous.\n",
                   delta, prevWaterLevelPct, newLevel);
-    return prevWaterLevelPct;  // Return last known good value
+    return prevWaterLevelPct;
   }
-
   return newLevel;
+}
+
+/**
+ * @brief v3.0: Flow-based level estimate while pump runs. Resets on sensor recovery (see checkLevelSensorFailure).
+ */
+void updateFlowBasedEstimate() {
+  if (!isRunning || flowRateLpm < cfgDryRunThresholdLpm) {
+    lastFlowEstimateMs = millis();
+    return;
+  }
+  unsigned long now = millis();
+  float dtSec = (now - lastFlowEstimateMs) / 1000.0f;
+  lastFlowEstimateMs = now;
+  if (dtSec > 5.0f) return;
+
+  flowVolumeAddedL += flowRateLpm * (dtSec / 60.0f);
+  if (levelAnchorPct >= 0) {
+    float added = (flowVolumeAddedL / (float)TANK_CAPACITY_L) * 100.0f;
+    estimatedLevelPct = constrain((float)levelAnchorPct + added, 0.0f, 100.0f);
+  }
 }
 
 // ---- Flow rate ----

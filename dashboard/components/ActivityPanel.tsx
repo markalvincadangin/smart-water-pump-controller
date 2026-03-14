@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import { Clock, Settings, Bell, Zap, ShieldCheck, Timer, Square, RotateCw, Activity } from "lucide-react";
 import { useAuditEvents } from "@/lib/useAuditEvents";
 import type { AuditAction } from "@/lib/audit";
+import CollapsibleSection from "@/components/CollapsibleSection";
 
 type AuditMeta = {
   mode?: string;
@@ -16,8 +17,10 @@ function formatAction(action: AuditAction) {
     case "control.ack_error": return "Acknowledged error";
     case "control.request_reboot": return "Requested reboot";
     case "control.run_manual_start": return "Started manual run";
-    case "control.run_timed_start": return "Started timed run";
+    case "control.run_countdown_start": return "Started countdown";
+    case "control.run_countdown_add_time": return "Added 5 min to countdown";
     case "control.run_stop": return "Stopped run";
+    case "control.bypass_level_sensor": return "Level sensor bypass";
     case "config.device.save": return "Saved device settings";
     case "config.notifications.save": return "Saved alert settings";
     default: return "Activity";
@@ -30,8 +33,10 @@ function iconFor(action: AuditAction): LucideIcon {
     case "control.ack_error": return ShieldCheck;
     case "control.request_reboot": return RotateCw;
     case "control.run_manual_start": return Activity;
-    case "control.run_timed_start": return Timer;
+    case "control.run_countdown_start": return Timer;
+    case "control.run_countdown_add_time": return Timer;
     case "control.run_stop": return Square;
+    case "control.bypass_level_sensor": return Settings;
     case "config.device.save": return Settings;
     case "config.notifications.save": return Bell;
     default: return Activity;
@@ -55,21 +60,16 @@ export default function ActivityPanel() {
 
   return (
     <div className="card p-4 sm:p-5 border-surface-3 min-w-0">
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div>
-          <h3 className="font-display font-semibold text-sm uppercase tracking-widest text-text-primary">
-            Activity
-          </h3>
-          <p className="text-[10px] sm:text-xs font-mono text-text-muted mt-0.5">
-            Recent changes from all users
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-text-muted">
-          <Clock size={12} />
-          <span className="text-xs font-mono">Live</span>
-        </div>
-      </div>
-
+      <CollapsibleSection
+        title="Activity"
+        subtitle="Showing last 10 actions · Recent changes from all users"
+        headerExtra={
+          <div className="flex items-center gap-2 text-text-muted">
+            <Clock size={12} />
+            <span className="text-xs font-mono">Live</span>
+          </div>
+        }
+      >
       {events.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
           <p className="text-xs font-mono text-text-muted">
@@ -97,8 +97,7 @@ export default function ActivityPanel() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-mono text-text-primary break-words">
-                    {formatAction(e.action)}
-                    {mode ? <span className="text-text-muted"> · {mode}</span> : null}
+                    {e.detail ?? `${formatAction(e.action)}${mode ? ` · ${mode}` : ""}`}
                   </p>
                   <p className="text-[10px] font-mono text-text-muted mt-0.5 break-words">
                     {who}
@@ -112,6 +111,7 @@ export default function ActivityPanel() {
           })}
         </div>
       )}
+      </CollapsibleSection>
     </div>
   );
 }

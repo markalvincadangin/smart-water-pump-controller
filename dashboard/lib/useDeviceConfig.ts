@@ -34,8 +34,11 @@ export function useDeviceConfig() {
             sleep_end_hour: val.sleep_end_hour ?? DEFAULT_DEVICE_CONFIG.sleep_end_hour,
             sleep_emergency_level: val.sleep_emergency_level ?? DEFAULT_DEVICE_CONFIG.sleep_emergency_level,
             sensor_failure_threshold: val.sensor_failure_threshold ?? DEFAULT_DEVICE_CONFIG.sensor_failure_threshold,
+            level_sensor_failure_threshold: val.level_sensor_failure_threshold ?? val.sensor_failure_threshold ?? DEFAULT_DEVICE_CONFIG.sensor_failure_threshold,
             idle_sensor_interval_ms: val.idle_sensor_interval_ms ?? DEFAULT_DEVICE_CONFIG.idle_sensor_interval_ms,
             idle_firebase_interval_ms: val.idle_firebase_interval_ms ?? DEFAULT_DEVICE_CONFIG.idle_firebase_interval_ms,
+            auto_bypass_on_sensor_fail: val.auto_bypass_on_sensor_fail ?? DEFAULT_DEVICE_CONFIG.auto_bypass_on_sensor_fail,
+            auto_bypass_delay_sec: val.auto_bypass_delay_sec ?? DEFAULT_DEVICE_CONFIG.auto_bypass_delay_sec,
           });
         } else {
           setConfig({ ...DEFAULT_DEVICE_CONFIG });
@@ -62,6 +65,8 @@ export function useDeviceConfig() {
       ...config,
       ...next,
     };
+    // Prefer level_sensor_failure_threshold for firmware; ensure it's written
+    if (merged.level_sensor_failure_threshold == null) merged.level_sensor_failure_threshold = merged.sensor_failure_threshold;
     await set(configRef, merged);
     // Optimistic update so StatCard labels and other UI reflect changes immediately
     setConfig(merged);

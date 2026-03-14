@@ -108,6 +108,11 @@
 #define IDLE_SENSOR_INTERVAL_MS_DEF   10000
 #define IDLE_FIREBASE_INTERVAL_MS_DEF 30000
 
+#define COUNTDOWN_ADD_TIME_MIN       5
+#define COUNTDOWN_MAX_DURATION_MIN   120
+#define TANK_CAPACITY_L              660
+#define AUTO_BYPASS_FAILURE_SEC_DEF  60
+
 // ---- Firebase objects ----
 extern FirebaseData   fbdo;
 extern FirebaseAuth   auth;
@@ -129,9 +134,10 @@ extern int  cfgSleepStartHour;
 extern int  cfgSleepEndHour;
 extern int  cfgSleepEmergencyLevel;
 
-extern int cfgSensorFailureThreshold;
-extern int cfgIdleSensorIntervalMs;
-extern int cfgIdleFirebaseIntervalMs;
+extern int  cfgLevelSensorFailureThreshold;
+extern int  cfgIdleSensorIntervalMs;
+extern int  cfgIdleFirebaseIntervalMs;
+extern bool cfgBypassLevelSensor;
 
 extern volatile uint32_t pulseCount;
 extern volatile uint64_t lastPulseUs;
@@ -143,11 +149,26 @@ extern int   prevWaterLevelPct;
 
 extern String pumpMode;
 extern bool   isDryRunError;
-extern bool   isSensorError;
+extern bool   isLevelSensorError;
 extern bool   isFlowSensorError;
 extern bool   isOverflowError;
 
-extern int           sensorFailCount;
+extern int           levelSensorFailCount;
+extern unsigned long levelLastValidMs;
+extern float         estimatedLevelPct;
+extern float         flowVolumeAddedL;
+extern unsigned long lastFlowEstimateMs;
+extern int           levelAnchorPct;
+extern unsigned long totalPumpRunSec;
+extern uint32_t      totalPumpCycles;
+extern uint32_t      lastPersistedPumpCycles;
+extern unsigned long lastPersistedPumpRunSec;
+extern unsigned long pumpOnSinceMs;
+extern bool          cfgAutoBypassOnSensorFail;
+extern int           cfgAutoBypassDelaySec;
+extern bool          autoBypassWasEngaged;
+extern bool          autoBypassActive;
+extern unsigned long levelSensorFailStartMs;
 extern unsigned long flowStuckStartMs;
 extern bool          flowStuckTimerActive;
 extern unsigned long pumpOffStartMs;
@@ -176,6 +197,7 @@ extern String        bootReasonStr;
 
 extern unsigned long wifiBackoffMs;
 extern bool          wifiWasConnected;
+extern bool          firebaseInitialized;
 
 extern int           wifiRssi;
 extern unsigned long lastSuccessfulFirebaseMs;
@@ -187,6 +209,7 @@ extern unsigned long firebaseLastErrorLogMs;
 
 extern String        lastPersistedMode;
 extern bool          lastPersistedDryRun;
+extern bool          lastPersistedBypass;
 extern int           lastPersistedLevel;
 extern unsigned long lastLevelWriteMs;
 extern unsigned long lastUptimeWriteMs;
@@ -207,15 +230,16 @@ extern unsigned long lastHeapDiagMs;
 extern uint32_t      minFreeHeapObserved;
 
 // -----------------------------------------------------------------------------
-// Phase 7 (planned → implemented): Smart manual & timed runs (additive)
+// Phase 7 manual run + v3.0 COUNTDOWN
 // -----------------------------------------------------------------------------
-// These fields are additive to the existing `pumpMode` contract. The dashboard can
-// optionally write to new control keys; older dashboards/firmware safely ignore them.
-extern String        runMode;               // "OFF" | "AUTO" | "MANUAL" | "TIMED"
-extern String        runPrevPumpMode;        // stores prior pumpMode when run started
-extern unsigned long runStartMs;            // millis() when run began
-extern unsigned long runDurationMs;         // 0 for manual-until-stop
-extern uint32_t      runRemainingSec;       // countdown for dashboard (0 when not timed)
-extern String        lastFaultCode;         // e.g. "DRY_RUN", "OVERFLOW", "SENSOR"
-extern String        lastFaultMessage;      // human-readable detail
+extern String        runMode;               // "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "COUNTDOWN"
+extern String        runPrevPumpMode;
+extern unsigned long runStartMs;
+extern bool          isManualRun;
+extern String        lastFaultCode;
+extern String        lastFaultMessage;
+extern bool          isCountdownActive;
+extern unsigned long countdownEndMs;
+void checkCountdownExpiry();
+void updateFlowBasedEstimate();
 

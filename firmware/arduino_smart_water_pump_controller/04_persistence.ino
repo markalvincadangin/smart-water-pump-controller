@@ -60,7 +60,7 @@ void loadDeviceConfigFromNVS() {
   cfgSleepEnabled = slpEn;
 
   // Phase 4: Apply advanced config (validate ranges)
-  if (sensThresh >= 3 && sensThresh <= 20) cfgSensorFailureThreshold = sensThresh;
+  if (sensThresh >= 3 && sensThresh <= 20) cfgLevelSensorFailureThreshold = sensThresh;
   if (idleSens >= 5000 && idleSens <= 60000) cfgIdleSensorIntervalMs = idleSens;
   if (idleFb >= 10000 && idleFb <= 120000) cfgIdleFirebaseIntervalMs = idleFb;
 
@@ -86,7 +86,7 @@ void saveDeviceConfigToNVS() {
   prefs.putInt("slp_end", cfgSleepEndHour);
   prefs.putInt("slp_emerg", cfgSleepEmergencyLevel);
   // Phase 4: Advanced config
-  prefs.putInt("sens_thresh", cfgSensorFailureThreshold);
+  prefs.putInt("sens_thresh", cfgLevelSensorFailureThreshold);
   prefs.putInt("idle_sens_ms", cfgIdleSensorIntervalMs);
   prefs.putInt("idle_fb_ms", cfgIdleFirebaseIntervalMs);
   prefs.end();
@@ -154,6 +154,8 @@ void checkCrashLoop() {
   if (bootCount >= CRASH_LOOP_THRESHOLD) {
     inSafeMode = true;
     safeModeEnteredMs = millis();
+    lastFaultCode = "SAFE_MODE";
+    lastFaultMessage = "Crash loop detected. Controller in safe mode. Power cycle to recover.";
     prefs.putULong("safe_mode_ms", safeModeEnteredMs);
     Serial.printf("[ERROR] CRASH LOOP DETECTED: %d reboots. Entering SAFE MODE.\n", bootCount);
     Serial.println("[SAFE MODE] Pump OFF. Firebase disabled. Serial only.");
@@ -175,7 +177,13 @@ void loadStateFromNVS() {
 
   String savedMode = prefs.getString("mode", "AUTO");
   bool savedDryRun = prefs.getBool("dry_run_err", false);
+  bool savedBypass = prefs.getBool("bypass_lvl", false);
   int savedLevel = prefs.getInt("level_pct", -1);
+  totalPumpCycles = prefs.getUInt("pump_cycles", 0);
+  totalPumpRunSec = prefs.getULong("pump_run_sec", 0);
+  lastPersistedPumpCycles = totalPumpCycles;
+  lastPersistedPumpRunSec = totalPumpRunSec;
+  lastRebootRequestId = prefs.getInt("last_reboot_id", 0);
   prefs.end();
 
   // Validate mode
@@ -185,14 +193,19 @@ void loadStateFromNVS() {
   }
   isDryRunError = savedDryRun;
   lastPersistedDryRun = savedDryRun;
+  cfgBypassLevelSensor = savedBypass;
+  lastPersistedBypass = savedBypass;
 
-  Serial.printf("[BOOT] Last state: Level=%d%%, Mode=%s, DryRun=%s\n",
-                savedLevel, pumpMode.c_str(), isDryRunError ? "YES" : "NO");
+  Serial.printf("[BOOT] Last state: Level=%d%%, Mode=%s, DryRun=%s, Bypass=%s, Cycles=%lu, RunSec=%lu\n",
+                savedLevel, pumpMode.c_str(), isDryRunError ? "YES" : "NO", savedBypass ? "YES" : "NO",
+                (unsigned long)totalPumpCycles, (unsigned long)totalPumpRunSec);
 }
 
 void persistStateToNVS() {
   bool modeChanged = (pumpMode != lastPersistedMode);
   bool dryRunChanged = (isDryRunError != lastPersistedDryRun);
+  bool bypassChanged = (cfgBypassLevelSensor != lastPersistedBypass);
+  bool telemetryChanged = (totalPumpCycles != lastPersistedPumpCycles) || (totalPumpRunSec != lastPersistedPumpRunSec);
   int levelDelta = abs(waterLevelPct - lastPersistedLevel);
   unsigned long now = millis();
   bool levelNeedsWrite = (lastPersistedLevel == -1)  // Never written
@@ -200,7 +213,7 @@ void persistStateToNVS() {
     || (now - lastLevelWriteMs >= NVS_LEVEL_INTERVAL_MS);
   bool uptimeNeedsWrite = (now - lastUptimeWriteMs >= NVS_UPTIME_INTERVAL_MS);
 
-  if (!modeChanged && !dryRunChanged && !levelNeedsWrite && !uptimeNeedsWrite) return;
+  if (!modeChanged && !dryRunChanged && !bypassChanged && !telemetryChanged && !levelNeedsWrite && !uptimeNeedsWrite) return;
 
   if (!prefs.begin(NVS_STATE_NAMESPACE, false)) return;
 
@@ -212,6 +225,17 @@ void persistStateToNVS() {
   if (dryRunChanged) {
     prefs.putBool("dry_run_err", isDryRunError);
     lastPersistedDryRun = isDryRunError;
+  }
+  if (bypassChanged) {
+    prefs.putBool("bypass_lvl", cfgBypassLevelSensor);
+    lastPersistedBypass = cfgBypassLevelSensor;
+    Serial.printf("[NVS] Bypass level sensor persisted: %s\n", cfgBypassLevelSensor ? "ON" : "OFF");
+  }
+  if (telemetryChanged) {
+    prefs.putUInt("pump_cycles", totalPumpCycles);
+    prefs.putULong("pump_run_sec", totalPumpRunSec);
+    lastPersistedPumpCycles = totalPumpCycles;
+    lastPersistedPumpRunSec = totalPumpRunSec;
   }
   if (levelNeedsWrite) {
     prefs.putInt("level_pct", waterLevelPct);

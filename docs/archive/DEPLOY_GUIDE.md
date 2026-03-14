@@ -1,3 +1,7 @@
+> **Superseded by:** [../releases/v2.0/deploy.md](../releases/v2.0/deploy.md) — use that for deployment steps.
+
+---
+
 # Complete Deployment Guide — Smart Water Pump Controller
 
 **Use this document when you have the go signal to deploy the full system.**  
@@ -113,7 +117,7 @@ Before starting, confirm:
    firebase functions:secrets:set RESEND_API_KEY
    ```
 
-3. **Optional:** Custom “From” email  
+3. **Optional:** Custom "From" email  
    Create `functions/.env` (do not commit) with:
    ```env
    RESEND_FROM_EMAIL=Smart Water Pump <alerts@yourdomain.com>
@@ -179,7 +183,7 @@ Before starting, confirm:
    Firebase Console → **Authentication → Settings → Authorized domains** → **Add domain** → add `your-app.vercel.app` (and custom domain if used).
 
 6. **Sign-in test**  
-   Open the dashboard URL → sign in with Google. If `NEXT_PUBLIC_AUTHORIZED_UIDS` is set, the signed-in user’s UID must be in that list or sign-in may be rejected.
+   Open the dashboard URL → sign in with Google. If `NEXT_PUBLIC_AUTHORIZED_UIDS` is set, the signed-in user's UID must be in that list or sign-in may be rejected.
 
 7. **Install as app (PWA)**
    On mobile, users can add the dashboard to the home screen for an app-like experience. Chrome and Safari show an "Install" or "Add to Home Screen" option. The dashboard is a Progressive Web App (PWA).
@@ -251,7 +255,7 @@ Before starting, confirm:
    - Connect ESP32 via USB.
    - **Tools → Port** → select the correct COM port.
    - Click **Upload** (→).
-   - If you see “Failed to connect”: hold the **BOOT** button on the ESP32, click Upload again, release BOOT when “Connecting…” appears.
+   - If you see "Failed to connect": hold the **BOOT** button on the ESP32, click Upload again, release BOOT when "Connecting…" appears.
 
 4. **Serial Monitor**
    - **Tools → Serial Monitor** → 115200 baud.
@@ -306,7 +310,7 @@ Use this checklist after everything is deployed.
 ### Dashboard
 
 - [ ] Open dashboard URL → sign in with Google.
-- [ ] Page loads; you see status (or “ESP32 offline” if the device is not pushing yet).
+- [ ] Page loads; you see status (or "ESP32 offline" if the device is not pushing yet).
 
 ### Device config
 
@@ -318,7 +322,7 @@ Use this checklist after everything is deployed.
 ### Notifications
 
 - [ ] Click **bell icon** → enable notifications, set your email, choose alert types (dry-run, low level, pump started, **overflow**) → **Save**.
-- [ ] Trigger a test (see `docs/NOTIFICATIONS_SETUP.md`): e.g. in Firebase Console set `pump_system/status/is_running` to `true` (after setting to `false` first) for “Pump started” email.
+- [ ] Trigger a test (see `docs/operations/NOTIFICATIONS_SETUP.md`): e.g. in Firebase Console set `pump_system/status/is_running` to `true` (after setting to `false` first) for "Pump started" email.
 - [ ] Confirm email received and Resend dashboard shows delivery.
 
 ### Control and ESP32
@@ -367,10 +371,9 @@ cd dashboard && npm run build
 | Hardware wiring | `hardware/wiring_notes.md`, `hardware/enclosure_layout.md` |
 | Firmware calibration, Serial, troubleshooting | `firmware/README.md` |
 | Dashboard setup, env vars | `dashboard/README.md` |
-| Notifications (email, push, testing alerts) | `docs/NOTIFICATIONS_SETUP.md` |
-| Device config from DB | `docs/FIRMWARE_CONFIG_FROM_DATABASE.md` |
-| Firebase RTDB optimization & long-term assessment | `docs/FIREBASE_OPTIMIZATION.md` |
-| Enhancement plan & implementation status | `docs/ENHANCEMENT_PLAN.md`, `docs/IMPLEMENTATION_VERIFICATION.md` (project history + phase tracking) |
+| Notifications (email, push, testing alerts) | `docs/operations/NOTIFICATIONS_SETUP.md` |
+| Device config from DB | `docs/operations/FIRMWARE_CONFIG_FROM_DATABASE.md` |
+| Deploy (canonical) | `docs/releases/v2.0/deploy.md` |
 
 ---
 

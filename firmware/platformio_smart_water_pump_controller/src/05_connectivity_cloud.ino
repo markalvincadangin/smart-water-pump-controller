@@ -93,16 +93,26 @@ void readDeviceConfigFromFirebase() {
   json.get(jsonData, "sleep_emergency_level");
   if (jsonData.success) { int v = jsonData.intValue; if (v >= 0 && v <= 100) slpEmerg = v; }
 
-  // Advanced tuning (optional keys)
-  int sensThresh = cfgSensorFailureThreshold;
+  // Advanced tuning (optional keys) — prefer level_sensor_failure_threshold [FIX B6]
+  int sensThresh = cfgLevelSensorFailureThreshold;
   int idleSens = cfgIdleSensorIntervalMs;
   int idleFb = cfgIdleFirebaseIntervalMs;
-  json.get(jsonData, "sensor_failure_threshold");
+  json.get(jsonData, "level_sensor_failure_threshold");
   if (jsonData.success) { int v = jsonData.intValue; if (v >= 3 && v <= 20) sensThresh = v; }
+  if (sensThresh == cfgLevelSensorFailureThreshold) {
+    json.get(jsonData, "sensor_failure_threshold");
+    if (jsonData.success) { int v = jsonData.intValue; if (v >= 3 && v <= 20) sensThresh = v; }
+  }
   json.get(jsonData, "idle_sensor_interval_ms");
   if (jsonData.success) { int v = jsonData.intValue; if (v >= 5000 && v <= 60000) idleSens = v; }
   json.get(jsonData, "idle_firebase_interval_ms");
   if (jsonData.success) { int v = jsonData.intValue; if (v >= 10000 && v <= 120000) idleFb = v; }
+  bool autoBypassEn = cfgAutoBypassOnSensorFail;
+  int autoBypassSec = cfgAutoBypassDelaySec;
+  json.get(jsonData, "auto_bypass_on_sensor_fail");
+  if (jsonData.success) autoBypassEn = jsonData.boolValue;
+  json.get(jsonData, "auto_bypass_delay_sec");
+  if (jsonData.success) { int v = jsonData.intValue; if (v >= 10 && v <= 300) autoBypassSec = v; }
 
   if (!allOk) return;  // Missing/invalid keys → keep current config
 
@@ -113,8 +123,9 @@ void readDeviceConfigFromFirebase() {
 
   bool sleepChanged = (slpEn != cfgSleepEnabled || slpStart != cfgSleepStartHour ||
                        slpEnd != cfgSleepEndHour || slpEmerg != cfgSleepEmergencyLevel);
-  bool advancedChanged = (sensThresh != cfgSensorFailureThreshold ||
-                          idleSens != cfgIdleSensorIntervalMs || idleFb != cfgIdleFirebaseIntervalMs);
+  bool advancedChanged = (sensThresh != cfgLevelSensorFailureThreshold ||
+                          idleSens != cfgIdleSensorIntervalMs || idleFb != cfgIdleFirebaseIntervalMs ||
+                          autoBypassEn != cfgAutoBypassOnSensorFail || autoBypassSec != cfgAutoBypassDelaySec);
 
   bool changed = (te != cfgTankEmptyCm || tf != cfgTankFullCm || ps != cfgPumpStartLevel || po != cfgPumpStopLevel
                   || drSec != cfgDryRunTimeoutSec || maxRun != cfgMaxPumpRuntimeMin || floatsChanged || sleepChanged || advancedChanged);
@@ -132,11 +143,27 @@ void readDeviceConfigFromFirebase() {
   cfgSleepStartHour      = slpStart;
   cfgSleepEndHour        = slpEnd;
   cfgSleepEmergencyLevel = slpEmerg;
-  cfgSensorFailureThreshold = sensThresh;
+  cfgLevelSensorFailureThreshold = sensThresh;
   cfgIdleSensorIntervalMs   = idleSens;
   cfgIdleFirebaseIntervalMs = idleFb;
+  cfgAutoBypassOnSensorFail = autoBypassEn;
+  cfgAutoBypassDelaySec     = (autoBypassSec >= 10 && autoBypassSec <= 300) ? autoBypassSec : cfgAutoBypassDelaySec;
   saveDeviceConfigToNVS();
   Serial.println("[FIREBASE] Device config updated.");
+}
+
+// v3.0: Called from loop() before executePumpLogic(). Reverts to AUTO when countdown expires.
+void checkCountdownExpiry() {
+  if (!isCountdownActive || pumpMode != "COUNTDOWN") return;
+  if (millis() >= countdownEndMs) {
+    Serial.println("[COUNTDOWN] Timer expired. Reverting to AUTO mode.");
+    isCountdownActive = false;
+    countdownEndMs = 0;
+    setPump(false);
+    pumpMode = "AUTO";
+    runMode = "AUTO";
+    Firebase.RTDB.setString(&fbdo, "/pump_system/control/mode", "AUTO");
+  }
 }
 
 // Read `/pump_system/control/*` (mode + clear_error + reboot request).
@@ -146,34 +173,33 @@ void readFirebaseControl() {
   // does not need to write back to /control (writes are admin-restricted).
   static bool lastManualStart = false;
   static bool lastManualStop  = false;
-  static int  lastTimedStartSec = 0;
 
-  // Read pump mode
+  // Read pump mode (v3.0: include COUNTDOWN)
   if (Firebase.RTDB.getString(&fbdo, "/pump_system/control/mode")) {
     firebaseConsecutiveFailCount = 0;
     String newMode = fbdo.stringData();
     newMode.trim();
     newMode.toUpperCase();
-    if (newMode == "AUTO" || newMode == "FORCE_ON" || newMode == "FORCE_OFF") {
-      // If a run is active, don't let /control/mode fight the run.
-      // However, treat FORCE_OFF as a hard stop request.
-      if (runMode == "MANUAL" || runMode == "TIMED") {
-        if (newMode == "FORCE_OFF") {
-          Serial.println("[FIREBASE] FORCE_OFF received during run — stopping.");
-          setPump(false);
-          runMode = "OFF";
-          runDurationMs = 0;
-          runStartMs = 0;
-          runRemainingSec = 0;
-          pumpMode = "FORCE_OFF";
-        } else {
-          // Remember desired mode to restore after timed run completes
-          runPrevPumpMode = newMode;
+    if (newMode == "AUTO" || newMode == "FORCE_ON" || newMode == "FORCE_OFF" || newMode == "COUNTDOWN") {
+      bool runActive = (runMode == "MANUAL" || (pumpMode == "COUNTDOWN" && isCountdownActive));
+      if (runActive && newMode == "FORCE_OFF") {
+        Serial.println("[FIREBASE] FORCE_OFF received during run — stopping.");
+        setPump(false);
+        runMode = "OFF";
+        runStartMs = 0;
+        isManualRun = false;
+        pumpMode = "FORCE_OFF";
+        if (isCountdownActive) {
+          isCountdownActive = false;
+          countdownEndMs = 0;
         }
+      } else if (runActive && newMode != "FORCE_OFF") {
+        runPrevPumpMode = newMode;
       } else {
         if (pumpMode != newMode) {
           Serial.printf("[FIREBASE] Mode changed: %s -> %s\n",
                         pumpMode.c_str(), newMode.c_str());
+          if (newMode != "FORCE_ON") isManualRun = false;
         }
         pumpMode = newMode;
       }
@@ -198,67 +224,82 @@ void readFirebaseControl() {
     }
   }
 
-  // Phase 7: Smart manual/timed run controls (additive; safe to ignore for older dashboards)
-  // manual_stop: immediate stop request (one-shot edge)
+  // Phase 7: manual_stop (one-shot edge) — revert to AUTO so tank can auto-fill again [FIX A4]
   if (Firebase.RTDB.getBool(&fbdo, "/pump_system/control/manual_stop")) {
     bool v = fbdo.boolData();
     if (v && !lastManualStop) {
-      Serial.println("[FIREBASE] Manual stop requested.");
-      // Stop pump immediately; clear run state
+      Serial.println("[FIREBASE] Manual stop requested. Reverting to AUTO.");
       setPump(false);
       runMode = "OFF";
-      runDurationMs = 0;
       runStartMs = 0;
-      runRemainingSec = 0;
-      // Keep pump OFF after a manual stop (prevents immediate AUTO restart at low level)
-      pumpMode = "FORCE_OFF";
+      isManualRun = false;
+      pumpMode = "AUTO";
+      Firebase.RTDB.setString(&fbdo, "/pump_system/control/mode", "AUTO");
+      if (isCountdownActive) {
+        isCountdownActive = false;
+        countdownEndMs = 0;
+      }
     }
     lastManualStop = v;
   }
 
-  // timed_start_sec: start a timed run when the value changes to a non-zero number
-  if (Firebase.RTDB.getInt(&fbdo, "/pump_system/control/timed_start_sec")) {
-    int sec = fbdo.intData();
-    if (sec > 0 && sec != lastTimedStartSec) {
-      // Guardrails: minimum 30s; maximum limited by cfgMaxPumpRuntimeMin (overflow safety envelope)
-      int minSec = 30;
-      int maxSec = max(60, cfgMaxPumpRuntimeMin * 60);
-      int durSec = constrain(sec, minSec, maxSec);
-
-      // Do not start if hard lockouts are active
-      if (isDryRunError || isOverflowError) {
-        Serial.println("[FIREBASE] Timed run rejected: error lockout active.");
-      } else {
-        runPrevPumpMode = pumpMode;  // remember current policy
-        pumpMode = "FORCE_ON";
-        runMode = "TIMED";
-        runStartMs = millis();
-        runDurationMs = (unsigned long)durSec * 1000UL;
-        runRemainingSec = (uint32_t)durSec;
-        Serial.printf("[FIREBASE] Timed run started: %ds (requested %ds).\n", durSec, sec);
-      }
+  // v3.0 COUNTDOWN: start when mode is COUNTDOWN and duration is set
+  if (pumpMode == "COUNTDOWN" && !isCountdownActive) {
+    int durationMin = 0;
+    if (Firebase.RTDB.getInt(&fbdo, "/pump_system/control/countdown_duration_min")) {
+      durationMin = fbdo.intData();
     }
-    lastTimedStartSec = sec;
+    durationMin = constrain(durationMin, 1, COUNTDOWN_MAX_DURATION_MIN);
+    countdownEndMs = millis() + (unsigned long)durationMin * 60000UL;
+    isCountdownActive = true;
+    Serial.printf("[COUNTDOWN] Started: %d min.\n", durationMin);
   }
 
-  // manual_start: start manual-until-stop run (one-shot edge)
+  // v3.0 COUNTDOWN: add time (one-shot from dashboard)
+  if (pumpMode == "COUNTDOWN" && isCountdownActive) {
+    if (Firebase.RTDB.getBool(&fbdo, "/pump_system/control/countdown_add_time")) {
+      if (fbdo.boolData()) {
+        unsigned long maxEnd = millis() + (unsigned long)COUNTDOWN_MAX_DURATION_MIN * 60000UL;
+        countdownEndMs = min(countdownEndMs + (unsigned long)COUNTDOWN_ADD_TIME_MIN * 60000UL, maxEnd);
+        Serial.printf("[COUNTDOWN] +%d min added.\n", COUNTDOWN_ADD_TIME_MIN);
+        Firebase.RTDB.setBool(&fbdo, "/pump_system/control/countdown_add_time", false);
+      }
+    }
+  }
+
+  // v3.0 COUNTDOWN: cleanup when mode exits COUNTDOWN
+  if (pumpMode != "COUNTDOWN" && isCountdownActive) {
+    isCountdownActive = false;
+    countdownEndMs = 0;
+    Serial.println("[COUNTDOWN] Mode exited. Countdown cleared.");
+  }
+
+  // manual_start: start manual-until-stop run (one-shot edge); run_mode is firmware-owned, set via isManualRun
   if (Firebase.RTDB.getBool(&fbdo, "/pump_system/control/manual_start")) {
     bool v = fbdo.boolData();
     if (v && !lastManualStart) {
-      // Do not start if hard lockouts are active
       if (isDryRunError || isOverflowError) {
         Serial.println("[FIREBASE] Manual run rejected: error lockout active.");
       } else {
         runPrevPumpMode = pumpMode;
         pumpMode = "FORCE_ON";
-        runMode = "MANUAL";
+        isManualRun = true;
         runStartMs = millis();
-        runDurationMs = 0;
-        runRemainingSec = 0;
         Serial.println("[FIREBASE] Manual run started.");
       }
     }
     lastManualStart = v;
+  }
+
+  // v3.0 P2: Read bypass_level_sensor (maintenance mode — ignore level for start/stop)
+  if (Firebase.RTDB.getBool(&fbdo, "/pump_system/control/bypass_level_sensor")) {
+    bool v = fbdo.boolData();
+    if (v != cfgBypassLevelSensor) {
+      cfgBypassLevelSensor = v;
+      autoBypassActive = false;
+      autoBypassWasEngaged = false;
+      Serial.printf("[FIREBASE] Bypass level sensor: %s\n", v ? "ON" : "OFF");
+    }
   }
 
   // Read clear_error flag — clears ALL error types
@@ -286,6 +327,11 @@ void readFirebaseControl() {
     if (requestedId > 0 && requestedId != lastRebootRequestId) {
       Serial.printf("[FIREBASE] Reboot requested (id=%d).\n", requestedId);
       lastRebootRequestId = requestedId;
+      // Persist so after reboot we don't treat the same id as new (avoids crash loop)
+      if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
+        prefs.putInt("last_reboot_id", lastRebootRequestId);
+        prefs.end();
+      }
       // Acknowledge before restarting so dashboard sees progress
       Firebase.RTDB.setInt(&fbdo, "/pump_system/status/last_reboot_request_id", lastRebootRequestId);
       Firebase.RTDB.setInt(&fbdo, "/pump_system/status/last_reboot_at", (int)(esp_timer_get_time() / 1000000ULL)); // seconds since boot
@@ -306,8 +352,11 @@ void pushFirebaseStatus() {
   statusJson.set("is_running",          isRunning);
   statusJson.set("flow_rate_lpm",       flowRateLpm);
   statusJson.set("is_error",            isDryRunError);
-  statusJson.set("is_sensor_error",     isSensorError || isFlowSensorError);
+  statusJson.set("is_level_sensor_error", isLevelSensorError);
+  statusJson.set("is_flow_sensor_error",  isFlowSensorError);
   statusJson.set("is_overflow_error",   isOverflowError);
+  statusJson.set("bypass_level_sensor", cfgBypassLevelSensor);
+  statusJson.set("auto_bypass_active",  autoBypassActive);
   statusJson.set("is_sleeping",         isSleeping);
   statusJson.set("wifi_rssi",           wifiRssi);
   statusJson.set("last_boot_reason",    bootReasonStr);
@@ -328,11 +377,32 @@ void pushFirebaseStatus() {
   statusJson.set("flow_discard_max_sane",        (int)flowDiscardMaxSaneCount);
   statusJson.set("flow_stuck_high_events",       (int)flowStuckHighEventCount);
 
-  // Phase 7: smart run status (additive)
+  // Phase 7 run_mode + v3.0 countdown (replaces run_remaining_sec)
   statusJson.set("run_mode", runMode);
-  statusJson.set("run_remaining_sec", (int)runRemainingSec);
+  int32_t countdownRemainSec = 0;
+  if (isCountdownActive && pumpMode == "COUNTDOWN") {
+    unsigned long nowMs = millis();
+    countdownRemainSec = (countdownEndMs > nowMs)
+      ? (int32_t)((countdownEndMs - nowMs) / 1000UL)
+      : 0;
+  }
+  statusJson.set("countdown_remaining_sec", countdownRemainSec);
   if (lastFaultCode.length() > 0) statusJson.set("last_fault_code", lastFaultCode);
   if (lastFaultMessage.length() > 0) statusJson.set("last_fault_message", lastFaultMessage);
+
+  // v3.0 sensor resilience
+  statusJson.set("estimated_level_pct", (int)estimatedLevelPct);
+  statusJson.set("level_estimate_active", (estimatedLevelPct >= 0.0f && cfgBypassLevelSensor));
+  statusJson.set("flow_volume_added_l", flowVolumeAddedL);
+  uint32_t levelAgeS = (levelLastValidMs > 0) ? (uint32_t)((millis() - levelLastValidMs) / 1000UL) : 0;
+  statusJson.set("level_last_valid_age_sec", (int)levelAgeS);
+  int levelSensorHealthPct = 100;
+  levelSensorHealthPct -= min(levelSensorFailCount * 20, 80);
+  if (levelLastValidMs > 0 && (millis() - levelLastValidMs) > 30000UL) levelSensorHealthPct -= 20;
+  levelSensorHealthPct = constrain(levelSensorHealthPct, 0, 100);
+  statusJson.set("level_sensor_health_pct", levelSensorHealthPct);
+  statusJson.set("total_pump_cycles", (int)totalPumpCycles);
+  statusJson.set("total_pump_run_min", (int)(totalPumpRunSec / 60));
 
   if (Firebase.RTDB.setJSON(&fbdo, "/pump_system/status", &statusJson)) {
     lastSuccessfulFirebaseMs = millis();
@@ -365,10 +435,12 @@ void pushFirebaseStatus() {
 
 void connectWiFi() {
   Serial.printf("\n[WIFI] Connecting to: %s", WIFI_SSID);
+  WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+  while (WiFi.status() != WL_CONNECTED && attempts < 40) {
     delay(500);
     Serial.print(".");
     attempts++;
@@ -379,7 +451,7 @@ void connectWiFi() {
     Serial.printf("\n[WIFI] Connected! IP: %s | RSSI: %d dBm\n",
                   WiFi.localIP().toString().c_str(), wifiRssi);
   } else {
-    Serial.println("\n[WIFI] Connection failed. Operating in offline mode.");
+    Serial.println("\n[WIFI] Connection failed after 20s. Will retry in main loop.");
   }
 }
 
@@ -400,14 +472,15 @@ void initFirebase() {
   fbdo.setBSSLBufferSize(4096, 1024);
 
   Firebase.begin(&config, &auth);
-  Firebase.reconnectWiFi(true);  // Auto-reconnect if router reboots
+  Firebase.reconnectWiFi(true);
 
-  // Prevent long blocking reads from starving the loop watchdog.
-  // With weak WiFi (e.g. RSSI -85 to -95 dBm), RTDB reads can otherwise hang long enough
-  // to trigger Task WDT and crash-loop into safe mode.
-  Firebase.RTDB.setReadTimeout(&fbdo, 10000);     // 10s max per GET
-  Firebase.RTDB.setwriteSizeLimit(&fbdo, "medium"); // keep default-ish write budget
-  fbdo.setResponseSize(1024);                    // tolerate larger responses without retries
+  Firebase.RTDB.setReadTimeout(&fbdo, 10000);
+  Firebase.RTDB.setwriteSizeLimit(&fbdo, "medium");
+  fbdo.setResponseSize(1024);
+
+  firebaseInitialized = true;
+  firebaseConsecutiveFailCount = 0;
+  firebaseCooldownUntilMs = 0;
 
   Serial.println("[FIREBASE] Initialized. Waiting for token...");
 }

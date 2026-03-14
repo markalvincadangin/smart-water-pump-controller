@@ -1,7 +1,9 @@
 # Firmware — Smart Water Pump Controller
 **Platform:** ESP32 DevKit V1 (38-pin)
 **Framework:** Arduino (via Arduino IDE or VS Code + Arduino extension)
-**Version:** 2.4.0
+**Version:** 3.0.0 (Hierarchical Priority Model, COUNTDOWN, bypass, telemetry)
+
+**Detailed system documentation:** For architecture, hardware interface, safety logic, and integration details, see [docs/releases/v2.0/firmware-documentation.md](../docs/releases/v2.0/firmware-documentation.md). For the RTDB contract (status/control/config schemas), see [docs/releases/v2.0/firmware-rtdb-spec.md](../docs/releases/v2.0/firmware-rtdb-spec.md).
 
 ---
 
@@ -225,25 +227,32 @@ The firmware reads `/pump_system/control/mode` from Firebase every 3 seconds.
 
 | Mode | Behaviour | Set By |
 |------|-----------|--------|
-| `AUTO` | Pump starts at ≤30%, stops at ≥100% | Dashboard / default |
+| `AUTO` | Pump starts at ≤ start level, stops at ≥ stop level (hysteresis) | Dashboard / default |
 | `FORCE_ON` | Pump runs continuously regardless of level | Dashboard override |
-| `FORCE_OFF` | Pump stays off regardless of level | Dashboard override |
+| `FORCE_OFF` | Pump stays off regardless of level | Dashboard emergency stop |
+| `COUNTDOWN` | Pump runs for N minutes (1–120), then reverts to AUTO | Dashboard timed run |
 
-> **Safety override:** If `isDryRunError` is active, the pump will not run in
+> **Safety override:** If `isDryRunError` or `isOverflowError` is active, the pump will not run in
 > any mode until the error is acknowledged via the dashboard (`clear_error = true`).
 
-### Smart manual & timed runs (Phase 7)
+### Run modes (v3.0)
 
-Phase 7 in `docs/ENHANCEMENT_PLAN.md` adds an extension where the ESP32 tracks a run mode (`AUTO`, `MANUAL`, `TIMED`, `OFF`) alongside the existing `mode` field:
+The firmware tracks a `run_mode` alongside `mode` to give the dashboard fine-grained status:
 
-- Dashboard can request:
-  - A **manual run** (“run now until I press Stop”) via a `manual_start` control flag.
-  - A **timed run** (“run for N minutes, then stop”) via a `timed_start_sec` control value.
-- Firmware:
-  - Starts/stops the pump according to the requested run, but **never bypasses** the existing protections (dry-run, overflow, sensor failure, sleep/emergency rules).
-  - Reports `run_mode` and `run_remaining_sec` in status so the dashboard can show clear, organized controls and countdowns.
+| `run_mode` | Meaning |
+|------------|--------|
+| `AUTO` | AUTO mode, pump running |
+| `AUTO_STANDBY` | AUTO mode, pump idle (tank above start level) |
+| `MANUAL` | FORCE_ON active |
+| `COUNTDOWN` | Timed run in progress |
+| `OFF` | FORCE_OFF or error lockout |
 
-This keeps the current `AUTO` / `FORCE_ON` / `FORCE_OFF` contract intact while allowing smarter, safer manual operation.
+Dashboard can request:
+- **Manual run** ("run now until I press Stop") via `manual_start` control flag.
+- **Countdown run** ("run for N minutes, then stop") via COUNTDOWN mode + `countdown_duration_min`.
+- **Add time** (+5 min to a running countdown) via `countdown_add_time`.
+
+All runs are subject to P1 safety (dry-run, overflow) — manual operation never bypasses safety interlocks.
 
 ---
 
@@ -284,43 +293,61 @@ This keeps the current `AUTO` / `FORCE_ON` / `FORCE_OFF` contract intact while a
 
 ```
 /pump_system/
-  status/                        ← ESP32 writes every 3s
-    water_level_percent: 85      (int,   0–100)
-    is_running:          true    (bool)
-    flow_rate_lpm:       12.4    (float, L/min)
-    is_error:            false   (bool,  dry-run lockout)
-    is_sensor_error:     false   (bool,  ultrasonic/flow sensor failure)
-    is_overflow_error:   false   (bool,  max runtime exceeded)
-    is_sleeping:         false   (bool,  scheduled sleep active)
-    last_reboot_request_id: 0    (int,   last processed reboot request)
-    last_reboot_at:      0       (int,   seconds since boot when last reboot acknowledged)
-    wifi_rssi:           -65     (int,   dBm)
-    last_boot_reason:    "Power-on" (string)
-    uptime_minutes:      125     (int)
-    ultrasonic_cycles_ok:      120  (int,   cycles with >=1 valid ultrasonic sample)
-    ultrasonic_cycles_timeout: 0    (int,   cycles with 0 valid ultrasonic samples)
-    ultrasonic_last_good_cm:   35.2 (float, last good median distance)
-    flow_discard_max_sane:     0    (int,   discarded flow readings due to max-sane guard)
-    flow_stuck_high_events:    0    (int,   stuck-high detections)
+  status/                            ← ESP32 writes every 3s
+    water_level_percent: 85          (int,   0–100)
+    is_running:          true        (bool)
+    flow_rate_lpm:       12.4        (float, L/min)
+    is_error:            false       (bool,  dry-run lockout)
+    is_level_sensor_error: false     (bool,  ultrasonic sensor failure)
+    is_flow_sensor_error:  false     (bool,  flow sensor stuck-high)
+    is_overflow_error:   false       (bool,  max runtime exceeded)
+    is_sleeping:         false       (bool,  scheduled sleep active)
+    bypass_level_sensor: false       (bool,  manual/auto bypass active)
+    auto_bypass_active:  false       (bool,  true when firmware auto-engaged bypass)
+    wifi_rssi:           -65         (int,   dBm)
+    last_boot_reason:    "Power-on"  (string)
+    uptime_minutes:      125         (int)
+    run_mode:            "AUTO"      (string: OFF|AUTO|AUTO_STANDBY|MANUAL|COUNTDOWN)
+    countdown_remaining_sec: 0       (int,   seconds left in COUNTDOWN; 0 when inactive)
+    last_fault_code:     ""          (string: DRY_RUN|OVERFLOW|LEVEL_SENSOR|FLOW_SENSOR|SAFE_MODE)
+    last_fault_message:  ""          (string, human-readable detail)
+    estimated_level_pct: -1          (int,   flow-based estimate; -1 = inactive)
+    level_estimate_active: false     (bool,  true when using flow estimate)
+    flow_volume_added_l: 0.0         (float, litres added since last good reading)
+    level_last_valid_age_sec: 0      (int,   seconds since last valid ultrasonic)
+    level_sensor_health_pct: 100     (int,   0–100 health score)
+    total_pump_cycles:   42          (int,   lifetime pump start count)
+    total_pump_run_min:  1280        (int,   lifetime runtime in minutes)
+    ultrasonic_cycles_ok:      120   (int,   cycles with >=1 valid sample)
+    ultrasonic_cycles_timeout: 0     (int,   cycles with 0 valid samples)
+    ultrasonic_last_good_cm:   35.2  (float, last good median distance)
+    flow_discard_max_sane:     0     (int,   discarded readings > max sane)
+    flow_stuck_high_events:    0     (int,   stuck-high detections)
     free_heap_bytes:           182000 (int)
-    min_free_heap_bytes:       175000 (int, ESP32)
-    max_alloc_heap_bytes:      82000  (int, ESP32)
-    min_free_heap_observed_bytes: 175000 (int)
+    min_free_heap_bytes:       175000 (int,  ESP32 SDK low-water mark)
+    max_alloc_heap_bytes:      82000  (int,  largest allocatable block)
+    min_free_heap_observed_bytes: 175000 (int, firmware-tracked minimum)
     firebase_consecutive_failures: 0  (int)
-    firebase_last_error:       ""   (string)
+    firebase_last_error:       ""    (string)
 
-  control/                       ← Dashboard writes, ESP32 reads every 3s
-    mode:        "AUTO"          (string: "AUTO" | "FORCE_ON" | "FORCE_OFF")
-    clear_error: false           (bool:  set true to acknowledge errors)
-    reboot_request_id: 0         (int:   bump to request a soft reboot)
+  control/                           ← Dashboard writes, ESP32 reads every 3s
+    mode:        "AUTO"              (string: AUTO|FORCE_ON|FORCE_OFF|COUNTDOWN)
+    clear_error: false               (bool:  set true to acknowledge errors)
+    reboot_request_id: 0             (int:   bump to request soft reboot)
+    manual_start: false              (bool:  one-shot edge to start manual run)
+    manual_stop:  false              (bool:  one-shot edge to stop run → AUTO)
+    countdown_duration_min: 10       (int:   1–120, set before COUNTDOWN mode)
+    countdown_add_time: false        (bool:  one-shot to add 5 min)
+    bypass_level_sensor: false       (bool:  toggle level sensor bypass)
 
   config/
-    device/                      ← Dashboard writes, ESP32 reads every 30s
+    device/                          ← Dashboard writes, ESP32 reads every 30s
       tank_empty_cm, tank_full_cm, pump_start_level, pump_stop_level,
       dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor,
       max_pump_runtime_min, sleep_enabled, sleep_start_hour, sleep_end_hour,
-      sleep_emergency_level, sensor_failure_threshold, idle_sensor_interval_ms,
-      idle_firebase_interval_ms
+      sleep_emergency_level, level_sensor_failure_threshold,
+      idle_sensor_interval_ms, idle_firebase_interval_ms,
+      auto_bypass_on_sensor_fail, auto_bypass_delay_sec
 ```
 
 ---
@@ -331,7 +358,7 @@ Connect at **115200 baud** to see live debug output:
 
 ```
 ====================================
- Smart Water Pump Controller v1.0
+ Smart Water Pump Controller v3.0.0
 ====================================
 [INIT] GPIO configured. Pump OFF.
 [INIT] Flow sensor interrupt attached on GPIO 34.
@@ -358,6 +385,8 @@ Connect at **115200 baud** to see live debug output:
 | Upload fails — "Failed to connect" | ESP32 not in download mode | Hold BOOT button while clicking Upload |
 | Compiles but WiFi never connects | Wrong SSID/password | Double-check credentials; ensure 2.4GHz network (ESP32 does not support 5GHz) |
 | Firebase stays "Not ready" | Invalid API_KEY, DATABASE_URL, or credentials | Verify values in Firebase Console; ensure Email/Password user exists |
+| ESP32 doesn't reconnect after power outage | Router boots slower than ESP32 | Normal — firmware retries WiFi with backoff (5–60s) and auto-inits Firebase on first connect |
+| Dashboard restart fails to reconnect | WiFi briefly unavailable during restart | Firmware uses late-init path; check Serial Monitor for `[FIREBASE] Late init` message |
 | Level always reads 0% or 100% | Calibration mismatch | Open Serial Monitor, note actual distance readings, update `TANK_EMPTY_CM`/`TANK_FULL_CM` |
 | Flow reads 0 while pump is running | Wiring issue on GPIO 34 or YF-G1 | Check voltage divider (should read ~3.3V on GPIO 34 when signal is high); confirm YF-G1 VCC is 5V |
 | Dry-run lockout triggers immediately | Flow calibration too high or sensor unpowered | Verify 5V on YF-G1 VCC pin; check CAT6 Orange pair connection |
@@ -366,16 +395,22 @@ Connect at **115200 baud** to see live debug output:
 
 ---
 
-## Offline Behaviour
+## Offline Behaviour & WiFi Recovery
 
-If WiFi is unavailable at boot, the ESP32 continues to:
-- Load device config from **NVS** (last values saved when online), or use compiled defaults if NVS is empty
-- Read sensors every 1 second
-- Execute pump logic based on last known mode (defaults to `AUTO`) and last-known calibration/thresholds
-- Attempt to push/pull Firebase (will log "Not ready. Skipping sync.")
+If WiFi is unavailable at boot (common during power outages where the router takes
+longer to start than the ESP32), the firmware:
+- Loads device config from **NVS** (last values saved when online), or uses compiled defaults if NVS is empty
+- Reads sensors every 1 second and executes pump logic based on last known mode
+- Retries WiFi with exponential backoff (5s / 10s / 20s / 40s / 60s cap, with jitter)
 
-When WiFi recovers, `Firebase.reconnectWiFi(true)` automatically re-establishes
-the connection; on the next sync cycle the ESP32 reads `/pump_system/config/device` again and updates NVS if the database has config.
+When WiFi connects (first time or after a drop):
+1. **Firebase late-init**: If `initFirebase()` was skipped at boot (no WiFi), it runs now.
+2. **Token refresh**: If Firebase was already initialized, `Firebase.refreshToken()` renews the auth token.
+3. **NTP re-sync**: Time is re-synced so scheduled sleep windows and countdown timers stay accurate.
+4. Normal Firebase sync resumes on the next 3-second cycle.
+
+For dashboard-initiated restarts (`ESP.restart()`), the same recovery path applies:
+the ESP32 re-enters `setup()`, connects to WiFi, and initializes Firebase.
 
 ---
 
@@ -395,4 +430,4 @@ the connection; on the next sync cycle the ESP32 reads `/pump_system/config/devi
 
 ---
 
-*Firmware version 2.4.0 — for end-to-end rollout (Firebase + Functions + Dashboard + ESP32), use `docs/DEPLOY_GUIDE.md`.*
+*Firmware version 3.0.0 — for v3.0 firmware specification, see `docs/releases/v3.0/firmware-spec.md`. For end-to-end deployment, use `docs/releases/v2.0/deploy.md`.*
