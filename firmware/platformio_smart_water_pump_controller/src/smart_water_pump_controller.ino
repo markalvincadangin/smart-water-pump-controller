@@ -12,7 +12,7 @@
 void setup() {
   Serial.begin(115200);
   Serial.println("\n====================================");
-  Serial.println(" Smart Water Pump Controller v2.4.0");
+  Serial.println(" Smart Water Pump Controller v3.0.0");
   Serial.println("====================================");
 
   // --- Boot reason logging (Phase 2) ---
@@ -77,6 +77,8 @@ void setup() {
   // --- Firebase ---
   if (WiFi.status() == WL_CONNECTED) {
     initFirebase();
+  } else {
+    Serial.println("[FIREBASE] Skipped — no WiFi. Will init when WiFi connects.");
   }
 
   // --- Hardware Watchdog (Phase 2) ---
@@ -151,7 +153,6 @@ void loop() {
   // --- WIFI RECOVERY (Phase 2: exponential backoff with jitter) ---
   if (WiFi.status() != WL_CONNECTED) {
     if (wifiWasConnected) {
-      // Just lost connection
       wifiWasConnected = false;
       wifiBackoffMs = WIFI_BACKOFF_INITIAL_MS;
       Serial.println("[WIFI] Connection lost.");
@@ -159,24 +160,46 @@ void loop() {
     if (now - lastWifiRetryMs >= wifiBackoffMs) {
       lastWifiRetryMs = now;
       Serial.printf("[WIFI] Reconnecting (backoff: %lums)...\n", wifiBackoffMs);
-      WiFi.disconnect(false);  // Session disconnect only — keeps credentials and radio
+      WiFi.disconnect(true);
+      delay(100);
+      WiFi.mode(WIFI_STA);
       WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-      // Increase backoff: 5s → 10s → 20s → 40s → 60s (cap)
       wifiBackoffMs = min(wifiBackoffMs * 2, (unsigned long)WIFI_BACKOFF_MAX_MS);
-      // Add jitter: ±2s
       long jitter = (long)random(-WIFI_JITTER_MS, WIFI_JITTER_MS);
       wifiBackoffMs = max((unsigned long)WIFI_BACKOFF_INITIAL_MS,
                           (unsigned long)((long)wifiBackoffMs + jitter));
     }
   } else {
     if (!wifiWasConnected) {
-      // Just reconnected
       wifiWasConnected = true;
       wifiBackoffMs = WIFI_BACKOFF_INITIAL_MS;
       wifiRssi = WiFi.RSSI();
       Serial.printf("[WIFI] Reconnected! IP: %s | RSSI: %d dBm\n",
                     WiFi.localIP().toString().c_str(), wifiRssi);
+
+      // Firebase was never initialized (WiFi was down during boot) — init now
+      if (!firebaseInitialized) {
+        Serial.println("[FIREBASE] Late init — WiFi was unavailable at boot.");
+        initFirebase();
+      } else {
+        // WiFi recovered after a drop — force token refresh so Firebase doesn't
+        // stay in a stale-token loop printing "Not ready" forever.
+        Serial.println("[FIREBASE] Refreshing auth token after WiFi recovery.");
+        Firebase.refreshToken(&config);
+        firebaseCooldownUntilMs = 0;
+      }
+
+      // Re-sync NTP (may have drifted or never synced if WiFi was down at boot)
+      configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+      struct tm timeinfo;
+      if (getLocalTime(&timeinfo, 5000)) {
+        ntpSynced = true;
+        Serial.printf("[NTP] Re-synced: %02d:%02d (PHT)\n",
+                      timeinfo.tm_hour, timeinfo.tm_min);
+      } else {
+        Serial.println("[NTP] Re-sync failed. Will retry on next reconnect.");
+      }
     }
     lastWifiRetryMs = 0;
   }
@@ -257,7 +280,7 @@ void loop() {
     int reading = readUltrasonicSensor();
 
     // 2. Check for sensor failure (consecutive timeouts)
-    checkSensorFailure(reading);
+    checkLevelSensorFailure(reading);
 
     if (reading >= 0) {
       prevWaterLevelPct = waterLevelPct;
@@ -266,15 +289,19 @@ void loop() {
 
     // 3. Calculate flow rate from last 1-second pulse window
     flowRateLpm = calculateFlowRate();
+    updateFlowBasedEstimate();
 
     Serial.printf("[SENSOR] Level:%d%% | Flow:%.2f LPM | SensorErr:%s | OverflowErr:%s | Sleep:%s\n",
                   waterLevelPct, flowRateLpm,
-                  isSensorError ? "Y" : "N",
+                  isLevelSensorError ? "Y" : "N",
                   isOverflowError ? "Y" : "N",
                   isSleeping ? "Y" : "N");
 
     // 4. Run all safety checks (dry-run, flow stuck, overflow)
     checkSafetyCutoff();
+
+    // 4b. v3.0: Check countdown expiry (revert to AUTO when timer ends)
+    checkCountdownExpiry();
 
     // 5. Execute pump state machine
     executePumpLogic();

@@ -29,9 +29,10 @@ int  cfgSleepStartHour       = SLEEP_DEFAULT_START_HOUR;
 int  cfgSleepEndHour         = SLEEP_DEFAULT_END_HOUR;
 int  cfgSleepEmergencyLevel  = SLEEP_DEFAULT_EMERGENCY_LVL;
 
-int cfgSensorFailureThreshold = SENSOR_FAILURE_THRESHOLD;
-int cfgIdleSensorIntervalMs   = IDLE_SENSOR_INTERVAL_MS_DEF;
-int cfgIdleFirebaseIntervalMs = IDLE_FIREBASE_INTERVAL_MS_DEF;
+int  cfgLevelSensorFailureThreshold = SENSOR_FAILURE_THRESHOLD;
+int  cfgIdleSensorIntervalMs   = IDLE_SENSOR_INTERVAL_MS_DEF;
+int  cfgIdleFirebaseIntervalMs = IDLE_FIREBASE_INTERVAL_MS_DEF;
+bool cfgBypassLevelSensor      = false;
 
 volatile uint32_t pulseCount  = 0;
 volatile uint64_t lastPulseUs = 0;
@@ -43,12 +44,27 @@ int   prevWaterLevelPct       = 0;
 
 String pumpMode          = "AUTO";
 bool   isDryRunError     = false;
-bool   isSensorError     = false;
+bool   isLevelSensorError = false;
 bool   isFlowSensorError = false;
 bool   isOverflowError   = false;
 
-int           sensorFailCount       = 0;
-unsigned long flowStuckStartMs      = 0;
+int           levelSensorFailCount     = 0;
+unsigned long levelLastValidMs         = 0;
+float         estimatedLevelPct        = -1.0f;
+float         flowVolumeAddedL         = 0.0f;
+unsigned long lastFlowEstimateMs       = 0;
+int           levelAnchorPct           = -1;
+unsigned long totalPumpRunSec          = 0;
+uint32_t      totalPumpCycles          = 0;
+uint32_t      lastPersistedPumpCycles  = 0;
+unsigned long lastPersistedPumpRunSec  = 0;
+unsigned long pumpOnSinceMs            = 0;
+bool          cfgAutoBypassOnSensorFail = false;
+int           cfgAutoBypassDelaySec    = AUTO_BYPASS_FAILURE_SEC_DEF;
+bool          autoBypassWasEngaged     = false;
+bool          autoBypassActive        = false;
+unsigned long levelSensorFailStartMs   = 0;
+unsigned long flowStuckStartMs         = 0;
 bool          flowStuckTimerActive  = false;
 unsigned long pumpOffStartMs        = 0;
 
@@ -76,6 +92,7 @@ String        bootReasonStr     = "";
 
 unsigned long wifiBackoffMs    = WIFI_BACKOFF_INITIAL_MS;
 bool          wifiWasConnected = false;
+bool          firebaseInitialized = false;
 
 int           wifiRssi                 = 0;
 unsigned long lastSuccessfulFirebaseMs = 0;
@@ -87,6 +104,7 @@ unsigned long firebaseLastErrorLogMs   = 0;
 
 String        lastPersistedMode   = "AUTO";
 bool          lastPersistedDryRun = false;
+bool          lastPersistedBypass = false;
 int           lastPersistedLevel  = -1;
 unsigned long lastLevelWriteMs    = 0;
 unsigned long lastUptimeWriteMs   = 0;
@@ -106,11 +124,12 @@ unsigned long lastWifiRetryMs    = 0;
 unsigned long lastHeapDiagMs      = 0;
 uint32_t      minFreeHeapObserved = 0;
 
-// Phase 7: Smart manual/timed run state (additive to existing pumpMode)
-String        runMode         = "AUTO";
-String        runPrevPumpMode = "AUTO";
-unsigned long runStartMs      = 0;
-unsigned long runDurationMs   = 0;
-uint32_t      runRemainingSec = 0;
-String        lastFaultCode   = "";
+// Phase 7 manual run + v3.0 COUNTDOWN
+String        runMode          = "AUTO";
+String        runPrevPumpMode  = "AUTO";
+unsigned long runStartMs       = 0;
+bool          isManualRun      = false;
+String        lastFaultCode    = "";
 String        lastFaultMessage = "";
+bool          isCountdownActive = false;
+unsigned long countdownEndMs   = 0;

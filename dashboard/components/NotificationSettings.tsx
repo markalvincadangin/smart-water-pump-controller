@@ -99,6 +99,7 @@ export default function NotificationSettings({ userUid, userEmail, isAdmin = fal
           action: "config.notifications.save",
           uid: userUid,
           email: userEmail,
+          detail: "Alert settings updated",
         });
       }
       setTimeout(() => onClose(), 800);

@@ -1,51 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { onValue, onDisconnect, ref, remove, serverTimestamp, set } from "firebase/database";
-import { db } from "@/lib/firebase";
-import { getDashboardDeviceId } from "@/lib/deviceId";
-
+/**
+ * Presence was removed per FIRMWARE_DASHBOARD_DESIGN_v2 §2:
+ * /pump_system/presence is no longer used. This hook is a no-op and returns
+ * onlineCount 0 so existing UI that passes it to StatusBar simply shows no "X users" badge.
+ */
 export interface PresenceInfo {
   onlineCount: number;
 }
 
-const PRESENCE_ROOT = "/pump_system/presence";
-
-export function usePresence(uid: string | null, email: string | null) {
-  const [onlineCount, setOnlineCount] = useState(0);
-  const deviceId = useMemo(() => getDashboardDeviceId(), []);
-
-  useEffect(() => {
-    if (!uid) return;
-
-    const myRef = ref(db, `${PRESENCE_ROOT}/${uid}_${deviceId}`);
-    const allRef = ref(db, PRESENCE_ROOT);
-
-    const unsub = onValue(
-      allRef,
-      (snap) => {
-        const val = snap.val() as Record<string, unknown> | null;
-        setOnlineCount(val ? Object.keys(val).length : 0);
-      },
-      () => {
-        // ignore
-      }
-    );
-
-    // Best-effort presence. If rules deny it, it should fail silently.
-    Promise.resolve()
-      .then(async () => {
-        await set(myRef, { uid, email: email ?? null, at: serverTimestamp() });
-        await onDisconnect(myRef).remove();
-      })
-      .catch(() => {});
-
-    return () => {
-      unsub();
-      remove(myRef).catch(() => {});
-    };
-  }, [deviceId, email, uid]);
-
-  return { onlineCount } satisfies PresenceInfo;
+export function usePresence(
+  _uid?: string | null,
+  _email?: string | null
+): PresenceInfo {
+  void _uid;
+  void _email;
+  return { onlineCount: 0 };
 }
 

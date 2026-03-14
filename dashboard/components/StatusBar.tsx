@@ -2,62 +2,76 @@
 "use client";
 
 import clsx from "clsx";
-import { Wifi, WifiOff, Clock, AlertTriangle } from "lucide-react";
+import { Wifi, WifiOff, Clock, AlertTriangle, Signal } from "lucide-react";
 
 interface StatusBarProps {
   connected: boolean;
   esp32Online: boolean;
   updatedAt: number | null;
   mode: string;
-  isSensorError?: boolean;
+  isLevelSensorError?: boolean;
+  isFlowSensorError?: boolean;
   isOverflowError?: boolean;
-  isSleeping?: boolean;  // Phase 3: scheduled sleep active
+  isSleeping?: boolean;
   wifiRssi?: number;
   bootReason?: string;
-  uptimeMinutes?: number; // Phase 5: Uptime
-  onlineUsers?: number;
+  uptimeMinutes?: number;
+  levelLastValidAgeSec?: number;
+  levelSensorHealthPct?: number;
 }
 
-export default function StatusBar({ connected, esp32Online, updatedAt, mode, isSensorError, isOverflowError, isSleeping, wifiRssi, bootReason, uptimeMinutes, onlineUsers }: StatusBarProps) {
-  const timeAgo = updatedAt
-    ? Math.round((Date.now() - updatedAt) / 1000)
-    : null;
+function formatUptime(min: number): string {
+  if (min >= 1440) return `${Math.floor(min / 1440)}d ${Math.floor((min % 1440) / 60)}h`;
+  if (min >= 60) return `${Math.floor(min / 60)}h ${min % 60}m`;
+  return `${min}m`;
+}
+
+function wifiStrengthLabel(rssi: number): { label: string; color: string; bars: number } {
+  if (rssi >= -50) return { label: "Excellent", color: "text-accent-green", bars: 4 };
+  if (rssi >= -60) return { label: "Good", color: "text-accent-green", bars: 3 };
+  if (rssi >= -70) return { label: "Fair", color: "text-accent-amber", bars: 2 };
+  return { label: "Weak", color: "text-accent-red", bars: 1 };
+}
+
+export default function StatusBar({ connected, esp32Online, updatedAt, mode, isLevelSensorError, isFlowSensorError, isOverflowError, isSleeping, wifiRssi, bootReason, uptimeMinutes, levelLastValidAgeSec, levelSensorHealthPct }: StatusBarProps) {
+  const timeAgo = updatedAt ? Math.round((Date.now() - updatedAt) / 1000) : null;
+  const wifi = wifiRssi != null && wifiRssi !== 0 ? wifiStrengthLabel(wifiRssi) : null;
+  const hasAnyWarning = isLevelSensorError || isFlowSensorError || isOverflowError;
 
   return (
-    <div className="flex items-center justify-between gap-1 sm:gap-2 px-3 sm:px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] bg-surface-1 border-b border-surface-3 min-w-0 overflow-hidden">
-      {/* Left: ESP32 online/offline (stale = no update in 15s) */}
-      <div className="flex items-center gap-1 sm:gap-2 shrink-0 min-w-0">
+    <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-1.5 sm:py-2 pt-[max(0.375rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] bg-surface-1 border-b border-surface-3 min-w-0 overflow-hidden">
+      {/* Left: connectivity status */}
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 min-w-0">
         {!connected ? (
           <>
             <div className="dot-error" />
-            <WifiOff size={12} className="sm:w-[13px] sm:h-[13px] text-accent-red" />
-            <span className="text-[10px] sm:text-xs font-mono text-accent-red hidden sm:inline">DISCONNECTED</span>
-            <span className="text-[10px] font-mono text-accent-red sm:hidden">OFF</span>
+            <WifiOff size={12} className="text-accent-red" />
+            <span className="text-[10px] sm:text-xs font-mono text-accent-red">Offline</span>
           </>
         ) : esp32Online ? (
           <>
             <div className="dot-live" />
-            <Wifi size={12} className="sm:w-[13px] sm:h-[13px] text-accent-green" />
+            {wifi ? (
+              <Signal size={12} className={wifi.color} />
+            ) : (
+              <Wifi size={12} className="text-accent-green" />
+            )}
             <span className="text-[10px] sm:text-xs font-mono text-accent-green"
-              title={bootReason ? `Boot: ${bootReason}` : undefined}>
-              ESP32 online
+              title={[
+                bootReason ? `Boot: ${bootReason}` : null,
+                wifi ? `WiFi: ${wifiRssi}dBm (${wifi.label})` : null,
+                uptimeMinutes != null ? `Uptime: ${formatUptime(uptimeMinutes)}` : null,
+              ].filter(Boolean).join(" · ")}>
+              Online
             </span>
-            {uptimeMinutes !== undefined && (
-              <span className="text-[9px] font-mono text-text-muted ml-0.5 sm:ml-1 hidden sm:inline"
-                title="Uptime">
-                up {uptimeMinutes >= 1440
-                  ? `${Math.floor(uptimeMinutes / 1440)}d ${Math.floor((uptimeMinutes % 1440) / 60)}h`
-                  : uptimeMinutes >= 60
-                    ? `${Math.floor(uptimeMinutes / 60)}h ${uptimeMinutes % 60}m`
-                    : `${uptimeMinutes}m`}
+            {uptimeMinutes != null && (
+              <span className="text-[9px] font-mono text-text-muted hidden sm:inline" title="Uptime">
+                {formatUptime(uptimeMinutes)}
               </span>
             )}
-            {wifiRssi !== undefined && wifiRssi !== 0 && (
-              <span className={clsx(
-                "text-[9px] font-mono ml-1 hidden sm:inline",
-                wifiRssi >= -60 ? "text-accent-green" :
-                  wifiRssi >= -75 ? "text-accent-amber" : "text-accent-red"
-              )}>
+            {wifi && (
+              <span className={clsx("text-[9px] font-mono hidden sm:inline", wifi.color)}
+                title={`WiFi ${wifiRssi}dBm`}>
                 {wifiRssi}dBm
               </span>
             )}
@@ -65,67 +79,90 @@ export default function StatusBar({ connected, esp32Online, updatedAt, mode, isS
         ) : (
           <>
             <div className="dot-error" />
-            <WifiOff size={12} className="sm:w-[13px] sm:h-[13px] text-accent-amber" />
-            <span className="text-[10px] sm:text-xs font-mono text-accent-amber hidden sm:inline">
-              ESP32 offline
-              {timeAgo !== null ? ` (${timeAgo}s)` : ""}
-            </span>
-            <span className="text-[10px] font-mono text-accent-amber sm:hidden">
-              Offline{timeAgo !== null ? ` ${timeAgo}s` : ""}
+            <WifiOff size={12} className="text-accent-amber" />
+            <span className="text-[10px] sm:text-xs font-mono text-accent-amber">
+              Controller off{timeAgo != null ? ` ${timeAgo}s` : ""}
             </span>
           </>
         )}
       </div>
 
-      {/* Center: title — full name on sm+, abbreviation on mobile */}
-      <span className="text-[10px] sm:text-xs font-mono text-text-secondary tracking-widest uppercase truncate hidden sm:block text-center min-w-0 mx-1 flex-1">
-        Smart Water Pump System
-      </span>
-      <span className="text-[10px] font-mono text-text-secondary tracking-widest uppercase sm:hidden shrink-0 truncate max-w-[80px]">
-        Pump
-      </span>
-
-      {/* Right: last update */}
-      <div className="flex items-center gap-1 sm:gap-2 text-text-muted shrink-0 flex-wrap justify-end">
-        <Clock size={11} className="sm:w-3 sm:h-3" />
-        <span className="text-[10px] sm:text-xs font-mono tabular-nums">
-          {timeAgo !== null
-            ? timeAgo < 5
-              ? "Just now"
-              : `${timeAgo}s`
-            : "—"}
-        </span>
-        <span className={clsx(
-          "badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0",
-          mode === "AUTO" && "bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20",
-          mode === "FORCE_ON" && "bg-accent-green/10 text-accent-green border border-accent-green/20",
-          mode === "FORCE_OFF" && "bg-accent-red/10 text-accent-red border border-accent-red/20"
-        )}>
-          {mode}
-        </span>
-        {typeof onlineUsers === "number" && onlineUsers > 0 && (
-          <span className="badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0 bg-surface-3 text-text-muted border border-surface-4">
-            {onlineUsers} user{onlineUsers === 1 ? "" : "s"}
+      {/* Right: mode + warnings + freshness */}
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        {/* Stale level warning */}
+        {typeof levelLastValidAgeSec === "number" && levelLastValidAgeSec > 20 && (
+          <span className="badge text-[9px] sm:text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20"
+            title={`Level reading is ${levelLastValidAgeSec}s old`}>
+            Level {levelLastValidAgeSec}s
           </span>
         )}
-        {isSensorError && (
-          <span className="badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0 bg-accent-amber/10 text-accent-amber border border-accent-amber/20 flex items-center gap-0.5">
+
+        {/* Sensor health (compact) */}
+        {typeof levelSensorHealthPct === "number" && levelSensorHealthPct < 100 && (
+          <span
+            className={clsx("inline-flex items-center gap-0.5 shrink-0",
+              levelSensorHealthPct >= 80 ? "text-accent-green" : levelSensorHealthPct >= 50 ? "text-accent-amber" : "text-accent-red"
+            )}
+            title={`Level sensor health ${levelSensorHealthPct}%`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-current" aria-hidden />
+            <span className="text-[9px] font-mono hidden sm:inline">{levelSensorHealthPct}%</span>
+          </span>
+        )}
+
+        {/* Warning badges — collapsed on mobile into single icon */}
+        {hasAnyWarning && (
+          <span className="sm:hidden badge text-[9px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20"
+            title={[
+              isLevelSensorError && "Level sensor error",
+              isFlowSensorError && "Flow sensor error",
+              isOverflowError && "Overflow error",
+            ].filter(Boolean).join(", ")}>
             <AlertTriangle size={9} />
-            <span className="hidden sm:inline">SENSOR</span>
+          </span>
+        )}
+        {isLevelSensorError && (
+          <span className="hidden sm:inline-flex badge text-[9px] sm:text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20 items-center gap-0.5">
+            <AlertTriangle size={9} /> LEVEL
+          </span>
+        )}
+        {isFlowSensorError && (
+          <span className="hidden sm:inline-flex badge text-[9px] sm:text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20 items-center gap-0.5">
+            <AlertTriangle size={9} /> FLOW
           </span>
         )}
         {isOverflowError && (
-          <span className="badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0 bg-accent-red/10 text-accent-red border border-accent-red/20 flex items-center gap-0.5">
-            <AlertTriangle size={9} />
-            <span className="hidden sm:inline">OVERFLOW</span>
+          <span className="hidden sm:inline-flex badge text-[9px] sm:text-[10px] bg-accent-red/10 text-accent-red border border-accent-red/20 items-center gap-0.5">
+            <AlertTriangle size={9} /> OVERFLOW
           </span>
         )}
+
         {isSleeping && (
-          <span className="badge text-[9px] sm:text-[10px] ml-0.5 sm:ml-1 shrink-0 bg-surface-3 text-text-muted border border-surface-4 flex items-center gap-0.5">
-            <span aria-hidden>😴</span>
+          <span className="badge text-[9px] sm:text-[10px] bg-surface-3 text-text-muted border border-surface-4">
+            <span aria-hidden className="text-[8px]">💤</span>
             <span className="hidden sm:inline">Sleep</span>
           </span>
         )}
+
+        {/* Mode badge */}
+        <span className={clsx(
+          "badge text-[9px] sm:text-[10px] font-semibold",
+          mode === "AUTO" && "bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20",
+          mode === "FORCE_ON" && "bg-accent-green/10 text-accent-green border border-accent-green/20",
+          mode === "FORCE_OFF" && "bg-accent-red/10 text-accent-red border border-accent-red/20",
+          mode === "COUNTDOWN" && "bg-accent-amber/10 text-accent-amber border border-accent-amber/20"
+        )}>
+          {mode === "FORCE_ON" ? "F.ON" : mode === "FORCE_OFF" ? "F.OFF" : mode}
+        </span>
+
+        {/* Freshness */}
+        <div className="flex items-center gap-0.5 text-text-muted" title="Last update">
+          <Clock size={10} className="sm:hidden" />
+          <Clock size={11} className="hidden sm:block" />
+          <span className="text-[9px] sm:text-[10px] font-mono tabular-nums">
+            {timeAgo != null ? (timeAgo < 5 ? "now" : `${timeAgo}s`) : "—"}
+          </span>
+        </div>
       </div>
     </div>
   );

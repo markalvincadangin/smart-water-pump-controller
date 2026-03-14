@@ -9,8 +9,10 @@ export type AuditAction =
   | "control.ack_error"
   | "control.request_reboot"
   | "control.run_manual_start"
-  | "control.run_timed_start"
+  | "control.run_countdown_start"
+  | "control.run_countdown_add_time"
   | "control.run_stop"
+  | "control.bypass_level_sensor"
   | "config.device.save"
   | "config.notifications.save";
 
@@ -22,6 +24,8 @@ export interface AuditEvent {
   at: unknown; // serverTimestamp()
   at_ms?: number; // client timestamp for reliable UI sorting/relative time
   meta?: Record<string, unknown>;
+  /** Optional human-readable description (v2 §10); prefer when present in ActivityPanel. */
+  detail?: string;
 }
 
 const AUDIT_PATH = "/pump_system/audit/events";
@@ -31,12 +35,14 @@ export async function writeAuditEvent(input: Omit<AuditEvent, "deviceId" | "at">
     const deviceId = getDashboardDeviceId();
     const eventsRef = ref(db, AUDIT_PATH);
     const evtRef = push(eventsRef);
-    await set(evtRef, {
+    const payload: AuditEvent = {
       ...input,
       deviceId,
       at: serverTimestamp(),
       at_ms: Date.now(),
-    } satisfies AuditEvent);
+    };
+    if (input.detail != null) payload.detail = input.detail;
+    await set(evtRef, payload);
   } catch {
     // Best-effort; ignore audit failures so UI controls still work.
   }

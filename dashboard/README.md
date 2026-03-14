@@ -3,6 +3,8 @@
 Next.js 14 + Firebase RTDB real-time dashboard for the ESP32 pump controller.  
 Access is protected by **Google sign-in**; only authorized users can view and control the pump.
 
+**Detailed system documentation:** For architecture, data flow, and feature overview, see [docs/releases/v2.0/dashboard-documentation.md](../docs/releases/v2.0/dashboard-documentation.md). For the exact UI structure and behavior, see [docs/releases/v2.0/dashboard-ux-spec.md](../docs/releases/v2.0/dashboard-ux-spec.md).
+
 ---
 
 ## Tech Stack
@@ -17,37 +19,6 @@ Access is protected by **Google sign-in**; only authorized users can view and co
 | Database   | Firebase Realtime Database              |
 | Auth       | Firebase Google Authentication          |
 | Fonts      | Syne · DM Sans · JetBrains Mono (Google)|
-
----
-
-## Firebase Data Structure
-
-The dashboard reads/writes the same paths as the ESP32 firmware:
-
-```
-/pump_system/
-  status/                    ← ESP32 writes every 3s
-    water_level_percent, is_running, flow_rate_lpm, is_error,
-    is_sensor_error, is_overflow_error, is_sleeping,
-    wifi_rssi, last_boot_reason, uptime_minutes,
-    ultrasonic_cycles_ok, ultrasonic_cycles_timeout, ultrasonic_last_good_cm,
-    flow_discard_max_sane, flow_stuck_high_events,
-    free_heap_bytes, min_free_heap_bytes, max_alloc_heap_bytes, min_free_heap_observed_bytes,
-    firebase_consecutive_failures, firebase_last_error
-
-  control/                   ← Dashboard writes, ESP32 reads every 3s
-    mode: "AUTO"             ← "AUTO" | "FORCE_ON" | "FORCE_OFF"
-    clear_error: false       ← Set to true to acknowledge errors
-
-  config/
-    device/                  ← Dashboard writes, ESP32 reads every 30s
-      tank_empty_cm, tank_full_cm, pump_start_level, pump_stop_level,
-      dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor,
-      max_pump_runtime_min, sleep_*, sensor_failure_threshold, idle_*_ms
-    notifications_by_user/   ← Per-user notification settings (bell icon)
-      $uid/  enabled, email, fcmTokens, dryRunAlert, lowLevelAlert, lowLevelThreshold,
-             pumpStartedAlert, overflowAlert
-```
 
 ---
 
@@ -80,7 +51,12 @@ Edit `.env.local` and fill in your Firebase credentials. Optionally:
 **Where to find Firebase values:**  
 Firebase Console → Project Settings → General → Your apps → Web → SDK setup and configuration
 
-**Push notifications (optional):** Add `NEXT_PUBLIC_FIREBASE_VAPID_KEY` from Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair. See `docs/NOTIFICATIONS_SETUP.md` section 4b.
+**Push notifications (optional):** Add `NEXT_PUBLIC_FIREBASE_VAPID_KEY` from Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair. See `docs/operations/NOTIFICATIONS_SETUP.md` section 4b.
+
+For the full RTDB contract and dashboard behavior reference, see:
+
+- `docs/releases/v2.0/firmware-rtdb-spec.md`
+- `docs/releases/v2.0/dashboard-ux-spec.md`
 
 ### 5. Enable Firebase services
 In the Firebase Console:
@@ -132,21 +108,34 @@ dashboard/
 │   ├── page.tsx            # Main dashboard page
 │   └── globals.css         # Global styles + Tailwind
 ├── components/
-│   ├── TankVisual.tsx      # Animated tank level graphic
-│   ├── ModeControls.tsx    # AUTO / FORCE_ON / FORCE_OFF buttons
-│   ├── HistoryChart.tsx    # Recharts area chart (level + flow)
+│   ├── TankVisual.tsx      # Animated tank level + start/stop reference lines
+│   ├── ModeControls.tsx    # AUTO / FORCE_ON / FORCE_OFF mode selector
+│   ├── RunControls.tsx     # Manual start, countdown (pill buttons), stop
+│   ├── HistoryChart.tsx    # Dual Y-axis area chart (level + flow)
 │   ├── StatCard.tsx        # Metric display card
-│   ├── StatusBar.tsx       # Top connection status bar (uptime, WiFi, badges)
-│   ├── DeviceConfigSettings.tsx  # Gear icon — calibration & thresholds (with tooltips)
-│   ├── NotificationSettings.tsx # Bell icon — email + push alert preferences (with tooltips)
+│   ├── StatusBar.tsx       # Top bar: connectivity, mode, warning badges
+│   ├── DashboardHeader.tsx # Title, pump status badge, overflow menu
+│   ├── DashboardMainGrid.tsx   # Main layout: tank + stats + controls
+│   ├── DashboardHistorySection.tsx # History chart wrapper
+│   ├── DashboardSystemInfo.tsx     # System info panel (heap, sensors, connectivity)
+│   ├── DashboardSkeleton.tsx       # Loading skeleton for main grid
+│   ├── ActivityPanel.tsx   # Audit log / activity feed
+│   ├── CollapsibleSection.tsx      # Expandable section wrapper
+│   ├── OverflowMenu.tsx    # Three-dot menu for secondary actions
+│   ├── DeviceConfigSettings.tsx    # Gear icon — calibration & thresholds
+│   ├── NotificationSettings.tsx    # Bell icon — email + push alert preferences
 │   ├── InfoTooltip.tsx     # Reusable help tooltip (hover/tap)
 │   └── InstallPrompt.tsx   # PWA install banner
 ├── lib/
 │   ├── firebase.ts         # Firebase init + Google Auth
 │   ├── fcm.ts              # FCM push token helpers
-│   ├── types.ts            # TypeScript interfaces
-│   ├── usePumpData.ts      # Real-time data hook
+│   ├── types.ts            # TypeScript interfaces (PumpStatus, PumpControl, DeviceConfig)
+│   ├── usePumpData.ts      # Real-time RTDB data hook
 │   ├── useDeviceConfig.ts  # Device config read/write
+│   ├── usePresence.ts      # Online/offline presence tracking
+│   ├── audit.ts            # Audit log helpers
+│   ├── alertRanking.ts     # Alert priority ranking
+│   ├── faultCodes.ts       # Fault code descriptions
 │   └── useNotificationConfig.ts
 ├── public/icons/           # PWA icons (72, 192, 512px)
 ├── .env.local.example      # Environment variable template
@@ -179,12 +168,13 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 |------------------------|-------------------------------------------------------------------|
 | Live tank level        | Animated tank graphic; StatCard shows configurable start/stop %   |
 | Flow rate              | YF-G1 sensor data; low-flow warning uses configurable threshold   |
-| Mode control           | AUTO / FORCE ON / FORCE OFF with instant Firebase push           |
-| Smart runs             | Manual and timed runs that auto-stop on duration or safety fault, aligned with firmware Phase 7 |
+| Mode control           | AUTO / FORCE ON / FORCE OFF / COUNTDOWN with instant Firebase push |
+| Smart runs             | Manual and countdown runs with pill-button duration selector; auto-stop on timer, tank full, or safety fault |
 | Dry-run acknowledge    | Red alert banner with ACK; message shows configured timeout (s)   |
 | Device config (gear)   | Tank calibration, pump thresholds, safety, sleep schedule, advanced — with **tooltips** (hover/tap for help) |
 | Notifications (bell)   | Email + **push** (phone/browser); dry-run, low level, pump started, overflow alerts — with **tooltips** |
-| StatusBar              | ESP32 online/offline, uptime, WiFi RSSI, SENSOR/OVERFLOW badges  |
+| StatusBar              | ESP32 online/offline, uptime, WiFi RSSI, mode, error/warning badges |
+| System info panel      | ESP32 heap, sensor health, Firebase connectivity, pump telemetry |
 | History chart          | 60-point rolling area chart (level + flow)                        |
 | Connection status      | Live/disconnected indicator with last-update time                |
 | Responsive layout      | Works on mobile, tablet, and desktop                              |
@@ -206,4 +196,4 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 
 ---
 
-*See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for implemented features. Phase 6 adds tooltips, push notifications (FCM), and PWA installability.*
+*For implemented features and UX details, see [docs/releases/v2.0/dashboard-ux-spec.md](../docs/releases/v2.0/dashboard-ux-spec.md) and [docs/releases/v2.0/dashboard-documentation.md](../docs/releases/v2.0/dashboard-documentation.md). For the v3.0 firmware contract, see [docs/releases/v3.0/firmware-spec.md](../docs/releases/v3.0/firmware-spec.md).*

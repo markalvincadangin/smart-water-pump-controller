@@ -51,7 +51,7 @@ export default function StatCard({
           {value}
         </span>
         {unit && (
-          <span className="text-sm text-text-secondary mb-0.5 font-mono">{unit}</span>
+          <span className="text-xs sm:text-sm text-text-secondary mb-0.5 font-mono">{unit}</span>
         )}
       </div>
 

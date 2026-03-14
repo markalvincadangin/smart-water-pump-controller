@@ -81,35 +81,37 @@ int readUltrasonicSensor() {
   float medianDist = readings[validCount / 2];
 
   ultrasonicLastGoodCmX10 = (uint32_t)(medianDist * 10.0f + 0.5f);
+  return updateLevelFromReading(medianDist);
+}
 
-  // Clamp to calibrated range
-  medianDist = constrain(medianDist, (float)cfgTankFullCm, (float)cfgTankEmptyCm);
-
-  // Convert to percent full (float, then rounded)
+int updateLevelFromReading(float distanceCm) {
+  distanceCm = constrain(distanceCm, (float)cfgTankFullCm, (float)cfgTankEmptyCm);
   float range = (float)(cfgTankEmptyCm - cfgTankFullCm);
-  float levelFloat = 100.0f * ((float)cfgTankEmptyCm - medianDist) / range;
+  float levelFloat = 100.0f * ((float)cfgTankEmptyCm - distanceCm) / range;
   levelFloat = constrain(levelFloat, 0.0f, 100.0f);
-
-  // EMA smoothing
-  if (waterLevelEma < 0.1f && waterLevelPct == 0) {
-    // First reading after boot — initialize EMA directly
-    waterLevelEma = levelFloat;
-  } else {
-    waterLevelEma = ULTRASONIC_EMA_ALPHA * levelFloat + (1.0f - ULTRASONIC_EMA_ALPHA) * waterLevelEma;
-  }
-
-  int newLevel = (int)(waterLevelEma + 0.5f); // Round to nearest int
+  if (waterLevelEma < 0.1f && waterLevelPct == 0) waterLevelEma = levelFloat;
+  else waterLevelEma = ULTRASONIC_EMA_ALPHA * levelFloat + (1.0f - ULTRASONIC_EMA_ALPHA) * waterLevelEma;
+  int newLevel = (int)(waterLevelEma + 0.5f);
   newLevel = constrain(newLevel, 0, 100);
-
-  // Rate-of-change guard: reject implausible jumps (noise spikes on long UTP)
   int delta = abs(newLevel - prevWaterLevelPct);
   if (prevWaterLevelPct > 0 && delta > LEVEL_RATE_OF_CHANGE_MAX) {
-    Serial.printf("[SENSOR][WARN] Level jumped %d%% in 1s (prev=%d%%, new=%d%%). Holding previous.\n",
-                  delta, prevWaterLevelPct, newLevel);
-    return prevWaterLevelPct;  // Return last known good value
+    Serial.printf("[SENSOR][WARN] Level jumped %d%% (prev=%d%%, new=%d%%). Holding previous.\n", delta, prevWaterLevelPct, newLevel);
+    return prevWaterLevelPct;
   }
-
   return newLevel;
+}
+
+void updateFlowBasedEstimate() {
+  if (!isRunning || flowRateLpm < cfgDryRunThresholdLpm) { lastFlowEstimateMs = millis(); return; }
+  unsigned long now = millis();
+  float dtSec = (now - lastFlowEstimateMs) / 1000.0f;
+  lastFlowEstimateMs = now;
+  if (dtSec > 5.0f) return;
+  flowVolumeAddedL += flowRateLpm * (dtSec / 60.0f);
+  if (levelAnchorPct >= 0) {
+    float added = (flowVolumeAddedL / (float)TANK_CAPACITY_L) * 100.0f;
+    estimatedLevelPct = constrain((float)levelAnchorPct + added, 0.0f, 100.0f);
+  }
 }
 
 // ---- Flow rate ----
