@@ -99,9 +99,9 @@ export function usePumpData() {
             return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
           });
 
-          setSnapshot(() => ({
+          setSnapshot((prev) => ({
             status: data,
-            control: controlRef.current,
+            control: prev?.control ?? controlRef.current,
             updatedAt: Date.now(),
           }));
         }
@@ -232,22 +232,24 @@ export function usePumpData() {
     }
   }, [authUser?.email, authUser?.uid]);
 
-  const addCountdownTime = useCallback(async () => {
+  const addCountdownTime = useCallback(async (minutes: number = 5) => {
     try {
+      const addMin = Math.max(1, Math.min(120, Math.floor(minutes)));
       setIsAddingCountdownTime(true);
+      await set(ref(db, `${CONTROL_PATH}/countdown_add_min`), addMin);
       await set(ref(db, `${CONTROL_PATH}/countdown_add_time`), true);
-      // Fallback: reset to false after 5s so the firmware's edge-detection
-      // sees a falling edge even if the firmware's own write-back fails.
+      // Fallback: reset to false after 20s so the device has time to read (e.g. slow poll or after lockout).
       window.setTimeout(() => {
         void set(ref(db, `${CONTROL_PATH}/countdown_add_time`), false);
         setIsAddingCountdownTime(false);
-      }, 5000);
+      }, 20000);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.run_countdown_add_time",
           uid: authUser.uid,
           email: authUser.email ?? null,
-          detail: "5 min added to countdown",
+          meta: { addMin },
+          detail: `${addMin} min added to countdown`,
         });
       }
     } catch (err) {

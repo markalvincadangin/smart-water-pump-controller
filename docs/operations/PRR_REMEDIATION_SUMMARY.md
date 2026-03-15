@@ -106,10 +106,10 @@ curl -s http://localhost:3000/api/health
 | Field | Value |
 |-------|--------|
 | **System version** | v3.0 |
-| **Final production deployment (UTC)** | _e.g. 2025-03-15 14:30:00 UTC — when deploy workflow completed and health check passed_ |
-| **Verified admin UID** | _UID bootstrapped and used to confirm control write in Phase 1.2_ |
-| **Health check** | _200 OK at _______________ (time)_ |
-| **Function verification** | _Low level / Dry run notification verified at _______________ (time)_ |
-| **Status stream (first 60 min)** | _Verified at _______________ (time)_ |
-| **min_free_heap_observed_bytes (T+60 min)** | _Value from dashboard/status_ |
-| **Notes** | _Any incidents, rollbacks, or follow-ups_ |
+| **Final production deployment (UTC)** | _2026-03-15 — firmware flashed; dashboard control and status stream verified_ |
+| **Verified admin UID** | _Fill in your Firebase Auth UID (dashboard user markalvin.cadangin@wvsu.edu.ph)_ |
+| **Health check** | _Confirm 200 OK on production DASHBOARD_URL/api/health_ |
+| **Function verification** | _Optional: low level / dry run notification_ |
+| **Status stream (first 60 min)** | _Verified — ESP32 writing to pump_system/status every ~3s; Firebase sync OK_ |
+| **min_free_heap_observed_bytes (T+60 min)** | _Check dashboard/status telemetry when available_ |
+| **Notes** | _First boot: NVS pump_cfg not found (defaults used); state namespace mode NOT_FOUND until first persist. Ultrasonic 5 consecutive timeouts → isLevelSensorError; bypass enabled from dashboard. FORCE_OFF, AUTO, manual run/stop, COUNTDOWN, +5 min add, dry-run lockout, clear error, mode write-back confirmed — all exercised successfully._ |

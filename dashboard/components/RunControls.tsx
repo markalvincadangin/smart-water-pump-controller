@@ -20,7 +20,7 @@ interface RunControlsProps {
   isAddingCountdownTime?: boolean;
   onStartManual: () => void;
   onStartCountdown: (durationMin: number) => void;
-  onAddCountdownTime: () => void;
+  onAddCountdownTime: (addMinutes: number) => void;
   onStop: () => void;
 }
 
@@ -31,7 +31,10 @@ function formatMmSs(totalSec: number) {
   return `${mm.toString().padStart(2, "0")}:${ss.toString().padStart(2, "0")}`;
 }
 
+const COUNTDOWN_MIN_MIN = 1;
+const COUNTDOWN_MAX_MIN = 120;
 const PRESETS_MIN = [5, 10, 15, 30, 60];
+const ADD_TIME_PRESETS_MIN = [1, 5, 10, 15, 20, 30];
 
 export default function RunControls({
   runMode,
@@ -51,7 +54,9 @@ export default function RunControls({
 }: RunControlsProps) {
   const [busy, setBusy] = useState<"manual" | "countdown" | "add" | "stop" | null>(null);
   const [countdownMin, setCountdownMin] = useState<number>(10);
-
+  const [customDurationInput, setCustomDurationInput] = useState("");
+  const [addTimeMin, setAddTimeMin] = useState(5);
+  const [customAddInput, setCustomAddInput] = useState("");
   const [localRemainingSec, setLocalRemainingSec] = useState<number | null>(null);
 
   useEffect(() => {
@@ -181,8 +186,11 @@ export default function RunControls({
               type="button"
               disabled={busy !== null || !canAct}
               onClick={() => {
+                const n = customDurationInput ? parseInt(customDurationInput, 10) : null;
+                const duration = (n != null && !Number.isNaN(n) && n >= COUNTDOWN_MIN_MIN && n <= COUNTDOWN_MAX_MIN)
+                  ? Math.max(COUNTDOWN_MIN_MIN, Math.min(COUNTDOWN_MAX_MIN, n)) : countdownMin;
                 setBusy("countdown");
-                try { onStartCountdown(countdownMin); } finally { window.setTimeout(() => setBusy(null), 8000); }
+                try { onStartCountdown(duration); } finally { window.setTimeout(() => setBusy(null), 8000); }
               }}
               className={clsx(
                 "px-3 py-2.5 rounded-xl border font-mono text-xs sm:text-sm min-h-[48px] flex items-center justify-center gap-1.5 sm:gap-2 transition-colors touch-manipulation",
@@ -197,19 +205,19 @@ export default function RunControls({
             </button>
           </div>
 
-          {/* Countdown duration — inline with label */}
-          <div className="flex items-center gap-2">
-            <label className="text-[10px] font-mono text-text-muted shrink-0">Duration</label>
-            <div className="flex gap-1 flex-1 min-w-0">
+          {/* Countdown duration — presets + custom (1–120 min) */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-mono text-text-muted block">Duration (min)</label>
+            <div className="flex flex-wrap items-center gap-2">
               {PRESETS_MIN.map((m) => (
                 <button
                   key={m}
                   type="button"
-                  onClick={() => setCountdownMin(m)}
+                  onClick={() => { setCountdownMin(m); setCustomDurationInput(""); }}
                   disabled={busy !== null || showStop}
                   className={clsx(
-                    "flex-1 px-1.5 py-1.5 rounded-lg font-mono text-[10px] sm:text-xs transition-colors min-w-0",
-                    m === countdownMin
+                    "px-2 py-1.5 rounded-lg font-mono text-[10px] sm:text-xs transition-colors",
+                    m === countdownMin && !customDurationInput
                       ? "bg-accent-amber/15 text-accent-amber border border-accent-amber/30"
                       : "bg-surface-2 text-text-muted border border-surface-4 hover:text-text-secondary"
                   )}
@@ -217,24 +225,87 @@ export default function RunControls({
                   {m}m
                 </button>
               ))}
+              <span className="text-[10px] font-mono text-text-muted">or</span>
+              <input
+                type="number"
+                min={COUNTDOWN_MIN_MIN}
+                max={COUNTDOWN_MAX_MIN}
+                step={1}
+                placeholder="Custom"
+                value={customDurationInput}
+                onChange={(e) => setCustomDurationInput(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                onBlur={() => {
+                  const n = parseInt(customDurationInput, 10);
+                  if (!Number.isNaN(n)) {
+                    const clamped = Math.max(COUNTDOWN_MIN_MIN, Math.min(COUNTDOWN_MAX_MIN, n));
+                    setCountdownMin(clamped);
+                    setCustomDurationInput(String(clamped));
+                  } else setCustomDurationInput("");
+                }}
+                disabled={busy !== null || showStop}
+                className="w-14 px-2 py-1.5 rounded-lg font-mono text-xs bg-surface-2 border border-surface-4 text-text-primary disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                aria-label="Custom duration (1–120 min)"
+              />
+              <span className="text-[10px] font-mono text-text-muted">min</span>
             </div>
           </div>
 
-          {/* Add time (during countdown) */}
-          {runMode === "COUNTDOWN" && (
-            <button
-              type="button"
-              disabled={busy !== null || isAddingCountdownTime || controllerOffline}
-              onClick={() => {
-                setBusy("add");
-                try { onAddCountdownTime(); } finally { window.setTimeout(() => setBusy(null), 8000); }
-              }}
-              className="w-full px-3 py-2 rounded-xl border border-accent-amber/30 text-accent-amber font-mono text-xs sm:text-sm hover:bg-accent-amber/10 min-h-[44px] flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation"
-              title={isAddingCountdownTime ? "Waiting for controller…" : "Add 5 minutes to the countdown"}
-            >
-              <Plus size={12} />
-              Add 5 min
-            </button>
+          {/* Add time when countdown is active or mode is COUNTDOWN (e.g. after lockout so Add time still works) */}
+          {(runMode === "COUNTDOWN" || controlMode === "COUNTDOWN") && (
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono text-text-muted block">Add time</label>
+              <div className="flex flex-wrap items-center gap-2">
+                {ADD_TIME_PRESETS_MIN.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setAddTimeMin(m)}
+                    disabled={busy !== null || isAddingCountdownTime || controllerOffline}
+                    className={clsx(
+                      "px-2 py-1.5 rounded-lg font-mono text-[10px] sm:text-xs transition-colors",
+                      m === addTimeMin ? "bg-accent-amber/15 text-accent-amber border border-accent-amber/30" : "bg-surface-2 text-text-muted border border-surface-4"
+                    )}
+                  >
+                    +{m}m
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  min={COUNTDOWN_MIN_MIN}
+                  max={COUNTDOWN_MAX_MIN}
+                  step={1}
+                  placeholder="Min"
+                  value={customAddInput}
+                  onChange={(e) => setCustomAddInput(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                  onBlur={() => {
+                    const n = parseInt(customAddInput, 10);
+                    if (!Number.isNaN(n)) {
+                      const clamped = Math.max(COUNTDOWN_MIN_MIN, Math.min(COUNTDOWN_MAX_MIN, n));
+                      setAddTimeMin(clamped);
+                      setCustomAddInput(String(clamped));
+                    } else setCustomAddInput("");
+                  }}
+                  disabled={busy !== null || isAddingCountdownTime || controllerOffline}
+                  className="w-12 px-2 py-1.5 rounded-lg font-mono text-xs bg-surface-2 border border-surface-4 text-text-primary disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  aria-label="Custom add min (1–120)"
+                />
+                <button
+                  type="button"
+                  disabled={busy !== null || isAddingCountdownTime || controllerOffline}
+                  onClick={() => {
+                    const toAdd = customAddInput ? (() => {
+                      const n = parseInt(customAddInput, 10);
+                      return Number.isNaN(n) ? addTimeMin : Math.max(COUNTDOWN_MIN_MIN, Math.min(COUNTDOWN_MAX_MIN, n));
+                    })() : addTimeMin;
+                    setBusy("add");
+                    try { onAddCountdownTime(toAdd); } finally { window.setTimeout(() => setBusy(null), 8000); }
+                  }}
+                  className="ml-auto min-h-[44px] px-3 py-2 rounded-xl border border-accent-amber/30 text-accent-amber font-mono text-xs sm:text-sm hover:bg-accent-amber/10 disabled:opacity-50"
+                >
+                  <Plus size={12} /> Add {customAddInput ? (parseInt(customAddInput, 10) || addTimeMin) : addTimeMin} min
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Stop */}
