@@ -71,9 +71,10 @@
 #define DEVICE_CONFIG_INTERVAL_MS  30000
 #define ULTRASONIC_TIMEOUT_MS      100
 
-// NVS namespaces
+// NVS namespaces + schema
 #define NVS_NAMESPACE        "pump_cfg"
 #define NVS_STATE_NAMESPACE  "pump_state"
+#define NVS_SCHEMA_VERSION   1
 
 // Crash loop detection
 #define CRASH_LOOP_THRESHOLD    5
@@ -89,6 +90,10 @@
 // Note: With weak WiFi, Firebase RTDB reads can still block long enough to starve loopTask.
 // Keep this comfortably above worst-case network stalls to avoid crash-loop safe mode.
 #define WDT_TIMEOUT_SEC         120
+
+// Status push retry
+#define STATUS_PUSH_RETRY_MAX   3
+#define STATUS_PUSH_RETRY_MS    1000
 
 // NVS wear reduction
 #define NVS_LEVEL_DELTA_THRESHOLD 5
@@ -108,9 +113,12 @@
 #define IDLE_SENSOR_INTERVAL_MS_DEF   10000
 #define IDLE_FIREBASE_INTERVAL_MS_DEF 30000
 
+// v3.0 COUNTDOWN mode (replaces Phase 7 timed run)
 #define COUNTDOWN_ADD_TIME_MIN       5
 #define COUNTDOWN_MAX_DURATION_MIN   120
-#define TANK_CAPACITY_L              660
+
+// v3.0 Sensor resilience
+#define TANK_CAPACITY_L              660   // Bestank WT660
 #define AUTO_BYPASS_FAILURE_SEC_DEF  60
 
 // ---- Firebase objects ----
@@ -137,6 +145,7 @@ extern int  cfgSleepEmergencyLevel;
 extern int  cfgLevelSensorFailureThreshold;
 extern int  cfgIdleSensorIntervalMs;
 extern int  cfgIdleFirebaseIntervalMs;
+/** v3.0 P2: When true, ignore level sensor for start/stop; flow guard (P1) still active. */
 extern bool cfgBypassLevelSensor;
 
 extern volatile uint32_t pulseCount;
@@ -154,16 +163,16 @@ extern bool   isFlowSensorError;
 extern bool   isOverflowError;
 
 extern int           levelSensorFailCount;
-extern unsigned long levelLastValidMs;
-extern float         estimatedLevelPct;
-extern float         flowVolumeAddedL;
-extern unsigned long lastFlowEstimateMs;
-extern int           levelAnchorPct;
-extern unsigned long totalPumpRunSec;
-extern uint32_t      totalPumpCycles;
+extern unsigned long levelLastValidMs;      // v3.0: millis() of last valid level reading
+extern float         estimatedLevelPct;     // v3.0: flow-based estimate (-1 = not set)
+extern float         flowVolumeAddedL;      // v3.0: L added since anchor
+extern unsigned long lastFlowEstimateMs;    // v3.0: for dt in flow estimate
+extern int           levelAnchorPct;        // v3.0: last known good level for estimate
+extern unsigned long totalPumpRunSec;       // v3.0: accumulated runtime (persisted)
+extern uint32_t      totalPumpCycles;       // v3.0: cycle count (persisted)
 extern uint32_t      lastPersistedPumpCycles;
 extern unsigned long lastPersistedPumpRunSec;
-extern unsigned long pumpOnSinceMs;
+extern unsigned long pumpOnSinceMs;         // v3.0: millis() when current run started
 extern bool          cfgAutoBypassOnSensorFail;
 extern int           cfgAutoBypassDelaySec;
 extern bool          autoBypassWasEngaged;
@@ -230,16 +239,24 @@ extern unsigned long lastHeapDiagMs;
 extern uint32_t      minFreeHeapObserved;
 
 // -----------------------------------------------------------------------------
-// Phase 7 manual run + v3.0 COUNTDOWN
+// Phase 7 manual run + v3.0 COUNTDOWN (replaces Phase 7 timed run)
 // -----------------------------------------------------------------------------
 extern String        runMode;               // "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "COUNTDOWN"
-extern String        runPrevPumpMode;
-extern unsigned long runStartMs;
-extern bool          isManualRun;
-extern String        lastFaultCode;
-extern String        lastFaultMessage;
+extern String        runPrevPumpMode;        // stores prior pumpMode when manual run started
+extern unsigned long runStartMs;             // millis() when manual run began
+extern bool          isManualRun;            // true when run started via manual_start; cleared on manual_stop or mode change
+extern String        lastFaultCode;          // e.g. "DRY_RUN", "OVERFLOW", "SENSOR"
+extern String        lastFaultMessage;      // human-readable detail
+
+// v3.0 COUNTDOWN mode state (replaces TIMED runMode / runDurationMs / runRemainingSec)
 extern bool          isCountdownActive;
-extern unsigned long countdownEndMs;
-void checkCountdownExpiry();
-void updateFlowBasedEstimate();
+extern unsigned long countdownEndMs;         // millis() when countdown expires
+extern bool          pendingModeWriteback;   // suppresses stale Firebase mode reads during write-back propagation
+extern unsigned long pendingModeWritebackSentMs;   // rate-limits write-back retries (5s between attempts)
+extern int           cfgLastCountdownDurationMin;  // NVS-persisted last countdown duration for offline use
+extern int           statusPushRetryCount;
+extern unsigned long statusPushRetryMs;
+
+void checkCountdownExpiry();  // v3.0: called from loop() before executePumpLogic()
+void updateFlowBasedEstimate();  // v3.0: call after calculateFlowRate() in loop
 

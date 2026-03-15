@@ -125,7 +125,7 @@ unsigned long lastHeapDiagMs      = 0;
 uint32_t      minFreeHeapObserved = 0;
 
 // Phase 7 manual run + v3.0 COUNTDOWN state
-String        runMode          = "AUTO";
+String        runMode          = "OFF";
 String        runPrevPumpMode  = "AUTO";
 unsigned long runStartMs       = 0;
 bool          isManualRun      = false;  // true when started via manual_start (dashboard never writes run_mode)
@@ -133,3 +133,8 @@ String        lastFaultCode    = "";
 String        lastFaultMessage = "";
 bool          isCountdownActive = false;
 unsigned long countdownEndMs   = 0;
+bool          pendingModeWriteback = false;
+unsigned long pendingModeWritebackSentMs = 0;
+int           cfgLastCountdownDurationMin = 15;
+int           statusPushRetryCount   = 0;
+unsigned long statusPushRetryMs      = 0;

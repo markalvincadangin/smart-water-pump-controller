@@ -11,15 +11,13 @@ import { onValueWritten } from "firebase-functions/v2/database";
 import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions";
 import { Resend } from "resend";
+import { canSend, recordSent } from "./notifications";
 
 admin.initializeApp();
 
 const db = admin.database();
 
 const resendApiKey = defineSecret("RESEND_API_KEY");
-
-// Throttle: minimum seconds between same alert type
-const THROTTLE_SEC = 15 * 60; // 15 minutes
 
 interface PumpStatus {
   water_level_percent: number;
@@ -40,27 +38,6 @@ interface NotificationConfig {
   overflowAlert?: boolean;  // Phase 2: max runtime overflow
 }
 
-interface LastSent {
-  dryRun?: number;
-  lowLevel?: number;
-  pumpStarted?: number;
-  overflow?: number;
-}
-
-async function canSend(uid: string, type: keyof LastSent): Promise<boolean> {
-  const lastRef = db.ref(`pump_system/config/notification_last_sent/${uid}`);
-  const snap = await lastRef.get();
-  const last: LastSent = snap.val() || {};
-  const now = Math.floor(Date.now() / 1000);
-  const lastTime = last[type] ?? 0;
-  if (now - lastTime < THROTTLE_SEC) return false;
-  return true;
-}
-
-async function recordSent(uid: string, type: keyof LastSent): Promise<void> {
-  const lastRef = db.ref(`pump_system/config/notification_last_sent/${uid}`);
-  await lastRef.update({ [type]: Math.floor(Date.now() / 1000) });
-}
 
 async function sendEmail(
   apiKey: string,
@@ -164,7 +141,7 @@ export const onStatusChange = onValueWritten(
 
       // 1. Dry-Run Lockout (highest priority)
       if (after.is_error && (config.dryRunAlert ?? true)) {
-        if (await canSend(uid, "dryRun")) {
+        if (await canSend(db, uid, "dryRun")) {
           const body = `No flow detected. Tank: ${after.water_level_percent}%. Check pump and water source.`;
           let delivered = false;
           if (config.email && apiKey) {
@@ -180,13 +157,13 @@ export const onStatusChange = onValueWritten(
             await sendPush(tokens, "⚠ Dry-Run Lockout", body, "dryRun");
             delivered = true;
           }
-          if (delivered) await recordSent(uid, "dryRun");
+          if (delivered) await recordSent(db, uid, "dryRun");
         }
       }
 
       // 1b. Overflow (max runtime exceeded) — Phase 2
       if (after.is_overflow_error && (config.overflowAlert ?? true)) {
-        if (await canSend(uid, "overflow")) {
+        if (await canSend(db, uid, "overflow")) {
           const body = `Max runtime exceeded. Tank: ${after.water_level_percent}%. Check tank and sensor.`;
           let delivered = false;
           if (config.email && apiKey) {
@@ -202,13 +179,13 @@ export const onStatusChange = onValueWritten(
             await sendPush(tokens, "⚠ Overflow Protection", body, "overflow");
             delivered = true;
           }
-          if (delivered) await recordSent(uid, "overflow");
+          if (delivered) await recordSent(db, uid, "overflow");
         }
       }
 
       // 2. Low tank level warning
       if (after.water_level_percent <= threshold && (config.lowLevelAlert ?? true)) {
-        if (await canSend(uid, "lowLevel")) {
+        if (await canSend(db, uid, "lowLevel")) {
           const body = `Water at ${after.water_level_percent}% (threshold: ${threshold}%).`;
           let delivered = false;
           if (config.email && apiKey) {
@@ -224,13 +201,13 @@ export const onStatusChange = onValueWritten(
             await sendPush(tokens, `⚠ Low Tank (${after.water_level_percent}%)`, body, "lowLevel");
             delivered = true;
           }
-          if (delivered) await recordSent(uid, "lowLevel");
+          if (delivered) await recordSent(db, uid, "lowLevel");
         }
       }
 
       // 3. Pump just started (transition from off → on)
       if ((config.pumpStartedAlert ?? true) && after.is_running && before && !before.is_running) {
-        if (await canSend(uid, "pumpStarted")) {
+        if (await canSend(db, uid, "pumpStarted")) {
           const body = `Tank: ${after.water_level_percent}%, Flow: ${after.flow_rate_lpm.toFixed(1)} LPM`;
           let delivered = false;
           if (config.email && apiKey) {
@@ -246,7 +223,7 @@ export const onStatusChange = onValueWritten(
             await sendPush(tokens, "▶ Pump Started", body, "pumpStarted");
             delivered = true;
           }
-          if (delivered) await recordSent(uid, "pumpStarted");
+          if (delivered) await recordSent(db, uid, "pumpStarted");
         }
       }
     }

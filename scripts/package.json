@@ -1,0 +1,8 @@
+{
+  "name": "smart-pump-scripts",
+  "private": true,
+  "description": "One-off admin bootstrap and ops scripts; run from scripts/",
+  "dependencies": {
+    "firebase-admin": "^13.7.0"
+  }
+}

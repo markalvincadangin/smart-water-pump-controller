@@ -35,8 +35,20 @@ void loadDeviceConfigFromNVS() {
   int sensThresh = prefs.getInt("sens_thresh", SENSOR_FAILURE_THRESHOLD);
   int idleSens = prefs.getInt("idle_sens_ms", IDLE_SENSOR_INTERVAL_MS_DEF);
   int idleFb = prefs.getInt("idle_fb_ms", IDLE_FIREBASE_INTERVAL_MS_DEF);
+  bool autoBypassEn = prefs.getBool("auto_bypass_en", false);
+  int autoBypassSec = prefs.getInt("auto_bypass_sec", AUTO_BYPASS_FAILURE_SEC_DEF);
 
+  int schemaVer = prefs.getInt("schema_ver", 0);
   prefs.end();
+
+  if (schemaVer > NVS_SCHEMA_VERSION) {
+    Serial.println("[NVS] Schema version from newer firmware. Using defaults.");
+    return;
+  }
+  if (schemaVer < NVS_SCHEMA_VERSION) {
+    Serial.printf("[NVS] Schema v%d loaded into firmware v%d — new fields use defaults.\n",
+                  schemaVer, NVS_SCHEMA_VERSION);
+  }
   // Validate: if NVS was corrupted, keep firmware defaults
   if (te < 5 || te > 200 || tf < 1 || tf >= te || ps < 0 || ps > 100 || po < 0 || po > 100 || po <= ps
       || drLpm < 0.1f || drLpm > 10.0f || drSec < 10 || drSec > 300
@@ -63,6 +75,8 @@ void loadDeviceConfigFromNVS() {
   if (sensThresh >= 3 && sensThresh <= 20) cfgLevelSensorFailureThreshold = sensThresh;
   if (idleSens >= 5000 && idleSens <= 60000) cfgIdleSensorIntervalMs = idleSens;
   if (idleFb >= 10000 && idleFb <= 120000) cfgIdleFirebaseIntervalMs = idleFb;
+  cfgAutoBypassOnSensorFail = autoBypassEn;
+  if (autoBypassSec >= 10 && autoBypassSec <= 300) cfgAutoBypassDelaySec = autoBypassSec;
 
   Serial.println("[NVS] Device config loaded.");
 }
@@ -89,6 +103,9 @@ void saveDeviceConfigToNVS() {
   prefs.putInt("sens_thresh", cfgLevelSensorFailureThreshold);
   prefs.putInt("idle_sens_ms", cfgIdleSensorIntervalMs);
   prefs.putInt("idle_fb_ms", cfgIdleFirebaseIntervalMs);
+  prefs.putBool("auto_bypass_en", cfgAutoBypassOnSensorFail);
+  prefs.putInt("auto_bypass_sec", cfgAutoBypassDelaySec);
+  prefs.putInt("schema_ver", NVS_SCHEMA_VERSION);
   prefs.end();
   Serial.println("[NVS] Device config saved.");
 }
@@ -184,12 +201,15 @@ void loadStateFromNVS() {
   lastPersistedPumpCycles = totalPumpCycles;
   lastPersistedPumpRunSec = totalPumpRunSec;
   lastRebootRequestId = prefs.getInt("last_reboot_id", 0);
+  cfgLastCountdownDurationMin = prefs.getInt("cd_dur_min", 15);
   prefs.end();
 
-  // Validate mode
-  if (savedMode == "AUTO" || savedMode == "FORCE_ON" || savedMode == "FORCE_OFF") {
+  if (savedMode == "AUTO" || savedMode == "FORCE_ON" || savedMode == "FORCE_OFF" || savedMode == "COUNTDOWN") {
     pumpMode = savedMode;
     lastPersistedMode = savedMode;
+    if (savedMode == "COUNTDOWN") {
+      Serial.println("[BOOT] Restored COUNTDOWN mode from NVS. Timer will restart on Firebase sync.");
+    }
   }
   isDryRunError = savedDryRun;
   lastPersistedDryRun = savedDryRun;
@@ -208,7 +228,7 @@ void persistStateToNVS() {
   bool telemetryChanged = (totalPumpCycles != lastPersistedPumpCycles) || (totalPumpRunSec != lastPersistedPumpRunSec);
   int levelDelta = abs(waterLevelPct - lastPersistedLevel);
   unsigned long now = millis();
-  bool levelNeedsWrite = (lastPersistedLevel == -1)  // Never written
+  bool levelNeedsWrite = (lastPersistedLevel == -1)
     || (levelDelta >= NVS_LEVEL_DELTA_THRESHOLD)
     || (now - lastLevelWriteMs >= NVS_LEVEL_INTERVAL_MS);
   bool uptimeNeedsWrite = (now - lastUptimeWriteMs >= NVS_UPTIME_INTERVAL_MS);

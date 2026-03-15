@@ -5,27 +5,43 @@
 // ---- Relay control ----
 
 // Relay module is active-low: LOW = pump ON, HIGH = pump OFF.
+// v3.0: Track cycles and runtime for telemetry (persisted in NVS).
 void setPump(bool on) {
-  if (on && !isRunning) { totalPumpCycles++; pumpOnSinceMs = millis(); }
+  if (on && !isRunning) {
+    totalPumpCycles++;
+    pumpOnSinceMs = millis();
+  }
   if (!on && isRunning && pumpOnSinceMs > 0) {
     totalPumpRunSec += (millis() - pumpOnSinceMs) / 1000UL;
     pumpOnSinceMs = 0;
   }
+
   digitalWrite(RELAY_PIN, on ? LOW : HIGH);
   isRunning = on;
-  if (!on) pumpOffStartMs = millis(); else pumpOffStartMs = 0;
+  if (!on) {
+    pumpOffStartMs = millis();
+  } else {
+    pumpOffStartMs = 0;
+  }
 }
 
 // ---- Safety checks ----
 
+/**
+ * @brief Checks for ultrasonic (level) sensor failure.
+ *        After cfgLevelSensorFailureThreshold consecutive timeouts, flags isLevelSensorError.
+ *        v3.0: Updates levelLastValidMs, anchor reset on recovery, optional auto-bypass.
+ */
 void checkLevelSensorFailure(int sensorReading) {
   bool prevLevelError = isLevelSensorError;
+
   if (sensorReading == -1) {
     levelSensorFailCount++;
     if (levelSensorFailCount >= cfgLevelSensorFailureThreshold && !isLevelSensorError) {
       isLevelSensorError = true;
       Serial.printf("[SENSOR][ERROR] Ultrasonic (level) failure: %d consecutive timeouts.\n", levelSensorFailCount);
     }
+    // Auto-bypass after sustained failure (optional, default off)
     if (isLevelSensorError && cfgAutoBypassOnSensorFail && !cfgBypassLevelSensor) {
       if (levelSensorFailStartMs == 0) levelSensorFailStartMs = millis();
       if ((millis() - levelSensorFailStartMs) >= (unsigned long)cfgAutoBypassDelaySec * 1000UL) {
@@ -37,16 +53,21 @@ void checkLevelSensorFailure(int sensorReading) {
     }
   } else {
     levelLastValidMs = millis();
-    if (isLevelSensorError) Serial.println("[SENSOR][INFO] Ultrasonic (level) recovered. Error cleared.");
+    if (isLevelSensorError) {
+      Serial.println("[SENSOR][INFO] Ultrasonic (level) recovered. Error cleared.");
+    }
     levelSensorFailCount = 0;
     isLevelSensorError = false;
     levelSensorFailStartMs = 0;
+
     if (prevLevelError) {
       levelAnchorPct = sensorReading;
       flowVolumeAddedL = 0.0f;
       estimatedLevelPct = (float)sensorReading;
       Serial.println("[ESTIMATE] Anchor reset to recovered sensor reading.");
-    } else levelAnchorPct = sensorReading;
+    } else {
+      levelAnchorPct = sensorReading;  // Keep anchor current for next estimate
+    }
     if (autoBypassWasEngaged) {
       cfgBypassLevelSensor = false;
       autoBypassWasEngaged = false;
@@ -94,8 +115,7 @@ void checkFlowSensorStuck() {
  *        reaching the stop level, flag overflow error and stop pump.
  */
 void checkOverflowProtection() {
-  if (!isRunning || pumpMode != "AUTO") {
-    // Not running or not in AUTO — reset tracking
+  if (!isRunning || !(pumpMode == "AUTO" || pumpMode == "COUNTDOWN")) {
     pumpAutoStartTracking = false;
     pumpAutoStartMs = 0;
     return;
@@ -166,8 +186,17 @@ void checkSafetyCutoff() {
 
 /**
  * @brief Pump state machine — P1 Hard Safety, P2 Bypass, P3 Manual, P4 Countdown, P5 Automation.
+ *   P1: Dry-run lockout, overflow. Cannot be bypassed.
+ *   P2: cfgBypassLevelSensor — in AUTO, ignore level; flow guard still active.
+ *   P3: FORCE_OFF (emergency stop), then FORCE_ON (manual run, P1 still applies).
+ *   P4: COUNTDOWN mode — run until timer or 100% (unless bypass); then revert to AUTO.
+ *   P5: AUTO hysteresis; blocked by isLevelSensorError unless P2 bypass active; sleep suppresses auto-start.
  */
 void executePumpLogic() {
+  // Defensive: keep isManualRun in sync with pumpMode (e.g. after NVS restore to AUTO)
+  if (pumpMode != "FORCE_ON")
+    isManualRun = false;
+
   // Derive runMode first — must execute before any early return so the
   // dashboard always sees the correct state.
   if (isDryRunError || isOverflowError) {
@@ -178,6 +207,8 @@ void executePumpLogic() {
     runMode = "MANUAL";
   } else if (pumpMode == "COUNTDOWN" && isCountdownActive) {
     runMode = "COUNTDOWN";
+  } else if (pumpMode == "COUNTDOWN" && !isCountdownActive) {
+    runMode = "OFF";
   } else if (pumpMode == "AUTO" && isRunning) {
     runMode = "AUTO";
   } else if (pumpMode == "AUTO" && !isRunning) {
@@ -201,6 +232,9 @@ void executePumpLogic() {
     if (isCountdownActive) {
       isCountdownActive = false;
       countdownEndMs = 0;
+      pumpMode = "AUTO";
+      pendingModeWriteback = true;
+      pendingModeWritebackSentMs = 0;
     }
     return;
   }
@@ -226,7 +260,8 @@ void executePumpLogic() {
         isCountdownActive = false;
         countdownEndMs = 0;
         pumpMode = "AUTO";
-        Firebase.RTDB.setString(&fbdo, "/pump_system/control/mode", "AUTO");
+        pendingModeWriteback = true;
+        pendingModeWritebackSentMs = 0;
         return;
       }
       setPump(true);
