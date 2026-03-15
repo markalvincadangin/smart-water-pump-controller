@@ -58,6 +58,7 @@ export default function DashboardPage() {
   const [showDeviceConfig, setShowDeviceConfig] = useState(false);
   const [restartSentAt, setRestartSentAt] = useState<number | null>(null);
   const [restartSawStale, setRestartSawStale] = useState(false);
+  const [bypassAlertBusy, setBypassAlertBusy] = useState(false);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
@@ -232,17 +233,34 @@ export default function DashboardPage() {
                       {pendingAck ? "Sending…" : "Clear Error"}
                     </button>
                   )}
-                  {(alert.id === "level_sensor" || alert.id === "maintenance") && (
+                  {(alert.id === "level_sensor" || alert.id === "maintenance") && (() => {
+                    const bypassAlreadyOn = snapshot?.status?.bypass_level_sensor === true;
+                    const showAsOn = alert.id === "maintenance" || (alert.id === "level_sensor" && bypassAlreadyOn);
+                    return (
                     <button
                       type="button"
-                      onClick={() => isAdmin && setBypassLevelSensor(true)}
-                      disabled={!isAdmin}
+                      onClick={async () => {
+                        if (!isAdmin || showAsOn) return;
+                        setBypassAlertBusy(true);
+                        toast({ kind: "info", title: "Enabling bypass…" });
+                        try {
+                          await setBypassLevelSensor(true);
+                          toast({ kind: "success", title: "Bypass enabled", detail: "Controller will apply when online." });
+                        } catch (e) {
+                          console.error("[Bypass]", e);
+                          toast({ kind: "error", title: "Failed to enable bypass", detail: e instanceof Error ? e.message : "Check connection and permissions." });
+                        } finally {
+                          setBypassAlertBusy(false);
+                        }
+                      }}
+                      disabled={!isAdmin || showAsOn || bypassAlertBusy}
                       className="min-h-[44px] min-w-[44px] shrink-0 px-3 py-2 rounded-lg bg-accent-amber/20 border border-accent-amber/50 text-accent-amber text-xs font-mono font-semibold hover:bg-accent-amber/30 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={!isAdmin ? "Admin access required" : alert.id === "maintenance" ? "Bypass already enabled" : "Enable level sensor bypass"}
+                      title={!isAdmin ? "Admin access required" : showAsOn ? "Bypass already enabled" : "Enable level sensor bypass"}
                     >
-                      {alert.id === "maintenance" ? "Bypass On" : "Enable Bypass"}
+                      {bypassAlertBusy ? "Sending…" : showAsOn ? "Bypass On" : "Enable Bypass"}
                     </button>
-                  )}
+                    );
+                  })()}
                 </div>
                 <span className="min-w-0 text-text-primary">{alert.description}</span>
                 {alert.recovery && <span className="min-w-0 text-text-muted">{alert.recovery}</span>}
@@ -298,9 +316,9 @@ export default function DashboardPage() {
                 toast({ kind: "info", title: `Starting countdown (${durationMin} min)…` });
                 startCountdown(durationMin);
               }}
-              onAddCountdownTime={() => {
-                toast({ kind: "info", title: "Adding 5 min to countdown…" });
-                addCountdownTime();
+              onAddCountdownTime={(addMin) => {
+                toast({ kind: "info", title: `Adding ${addMin} min to countdown…` });
+                addCountdownTime(addMin);
               }}
               isAddingCountdownTime={isAddingCountdownTime}
               onStopRun={() => {

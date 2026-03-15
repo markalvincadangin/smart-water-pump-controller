@@ -26,7 +26,7 @@ interface DashboardMainGridProps {
   onAcknowledge: () => void;
   onStartManualRun: () => void;
   onStartCountdown: (durationMin: number) => void;
-  onAddCountdownTime: () => void;
+  onAddCountdownTime: (addMinutes: number) => void;
   isAddingCountdownTime?: boolean;
   onStopRun: () => void;
 }

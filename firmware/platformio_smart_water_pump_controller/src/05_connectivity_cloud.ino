@@ -230,9 +230,11 @@ void readFirebaseControl() {
             pendingModeWritebackSentMs = 0;
             if (pumpMode == "AUTO") countdownConsumed = false;
             Serial.println("[FIREBASE] Mode write-back confirmed.");
-          } else if (millis() - pendingModeWritebackSentMs >= 5000UL) {
+          } else if (pendingModeWritebackSentMs == 0 ||
+                     millis() - pendingModeWritebackSentMs >= 5000UL) {
             Firebase.RTDB.setString(&fbdo, "/pump_system/control/mode", pumpMode);
             pendingModeWritebackSentMs = millis();
+            Serial.printf("[FIREBASE] Mode write-back: %s (dashboard sync).\n", pumpMode.c_str());
           }
         } else {
           if (pumpMode != newMode) {
@@ -295,14 +297,25 @@ void readFirebaseControl() {
                   Firebase.ready() ? "" : " (offline — using last known duration)");
   }
 
-  if (pumpMode == "COUNTDOWN" && isCountdownActive) {
+  // Process add_time when in COUNTDOWN. Only extend the timer when countdown is actually running.
+  // While dry-run (or other) lockout is active the pump is off; adding time does nothing to pump state.
+  if (pumpMode == "COUNTDOWN") {
     controlJson.get(jd, "countdown_add_time");
     if (jd.success) {
       bool v = jd.boolValue;
       if (v && !lastAddTime) {
-        unsigned long maxEnd = millis() + (unsigned long)COUNTDOWN_MAX_DURATION_MIN * 60000UL;
-        countdownEndMs = min(countdownEndMs + (unsigned long)COUNTDOWN_ADD_TIME_MIN * 60000UL, maxEnd);
-        Serial.printf("[COUNTDOWN] +%d min added.\n", COUNTDOWN_ADD_TIME_MIN);
+        int addMin = COUNTDOWN_ADD_TIME_MIN;
+        controlJson.get(jd, "countdown_add_min");
+        if (jd.success) {
+          int n = (jd.typeNum == FirebaseJson::JSON_INT) ? jd.intValue : (int)jd.doubleValue;
+          if (n >= 1 && n <= COUNTDOWN_MAX_DURATION_MIN) addMin = n;
+        }
+        unsigned long nowMs = millis();
+        if (isCountdownActive && countdownEndMs > nowMs) {
+          unsigned long maxEnd = nowMs + (unsigned long)COUNTDOWN_MAX_DURATION_MIN * 60000UL;
+          countdownEndMs = min(countdownEndMs + (unsigned long)addMin * 60000UL, maxEnd);
+          Serial.printf("[COUNTDOWN] +%d min added.\n", addMin);
+        }
         Firebase.RTDB.setBool(&fbdo, "/pump_system/control/countdown_add_time", false);
       }
       lastAddTime = v;

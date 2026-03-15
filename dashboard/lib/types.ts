@@ -59,7 +59,9 @@ export interface PumpControl {
   manual_stop?: boolean;
   /** v3.0 COUNTDOWN: duration in minutes when starting (1–120). */
   countdown_duration_min?: number;
-  /** v3.0 COUNTDOWN: one-shot to add 5 min to running countdown. */
+  /** v3.0 COUNTDOWN: one-shot to add time; firmware reads this when countdown_add_time is true (1–120 min). */
+  countdown_add_min?: number;
+  /** v3.0 COUNTDOWN: one-shot to add time to running countdown (amount in countdown_add_min if set). */
   countdown_add_time?: boolean;
   /** v3.0: maintenance — ignore level sensor for start/stop; flow guard still active. */
   bypass_level_sensor?: boolean;
