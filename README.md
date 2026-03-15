@@ -318,6 +318,7 @@ See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for the
 |----------|------|
 | Monthly | Verify ultrasonic sensor accuracy against a physical dipstick measurement |
 | Quarterly | Inspect PG16/PG9 cable glands for insect ingress or seal degradation |
+| Quarterly | **Dependency review:** Run `npm audit` in `dashboard/` and `functions/`; follow `docs/operations/DEPENDENCY_PATCHING_PLAN.md` for high-severity fixes |
 | Bi-annually | Tug test all high-current terminal connections (thermal cycling loosens screws) |
 | As needed | Re-calibrate TOR dial if motor is replaced or rewound |
 

@@ -115,8 +115,7 @@ void checkFlowSensorStuck() {
  *        reaching the stop level, flag overflow error and stop pump.
  */
 void checkOverflowProtection() {
-  if (!isRunning || pumpMode != "AUTO") {
-    // Not running or not in AUTO — reset tracking
+  if (!isRunning || !(pumpMode == "AUTO" || pumpMode == "COUNTDOWN")) {
     pumpAutoStartTracking = false;
     pumpAutoStartMs = 0;
     return;
@@ -194,6 +193,10 @@ void checkSafetyCutoff() {
  *   P5: AUTO hysteresis; blocked by isLevelSensorError unless P2 bypass active; sleep suppresses auto-start.
  */
 void executePumpLogic() {
+  // Defensive: keep isManualRun in sync with pumpMode (e.g. after NVS restore to AUTO)
+  if (pumpMode != "FORCE_ON")
+    isManualRun = false;
+
   // Derive runMode first — must execute before any early return so the
   // dashboard always sees the correct state.
   if (isDryRunError || isOverflowError) {
@@ -204,6 +207,8 @@ void executePumpLogic() {
     runMode = "MANUAL";
   } else if (pumpMode == "COUNTDOWN" && isCountdownActive) {
     runMode = "COUNTDOWN";
+  } else if (pumpMode == "COUNTDOWN" && !isCountdownActive) {
+    runMode = "OFF";
   } else if (pumpMode == "AUTO" && isRunning) {
     runMode = "AUTO";
   } else if (pumpMode == "AUTO" && !isRunning) {
@@ -227,6 +232,9 @@ void executePumpLogic() {
     if (isCountdownActive) {
       isCountdownActive = false;
       countdownEndMs = 0;
+      pumpMode = "AUTO";
+      pendingModeWriteback = true;
+      pendingModeWritebackSentMs = 0;
     }
     return;
   }
@@ -252,7 +260,8 @@ void executePumpLogic() {
         isCountdownActive = false;
         countdownEndMs = 0;
         pumpMode = "AUTO";
-        Firebase.RTDB.setString(&fbdo, "/pump_system/control/mode", "AUTO");
+        pendingModeWriteback = true;
+        pendingModeWritebackSentMs = 0;
         return;
       }
       setPump(true);

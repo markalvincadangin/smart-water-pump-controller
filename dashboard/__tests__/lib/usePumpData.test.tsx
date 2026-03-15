@@ -1,0 +1,113 @@
+/**
+ * Gold Standard: usePumpData — Firebase data handling and control writers.
+ * Mocks Firebase ref/onValue/set and auth to test hook behavior.
+ */
+import { renderHook, act, waitFor } from "@testing-library/react";
+import { usePumpData } from "@/lib/usePumpData";
+
+const mockUnsub = jest.fn();
+const mockOnValue = jest.fn(() => mockUnsub);
+const mockSet = jest.fn(() => Promise.resolve());
+const mockRef = jest.fn((db: unknown, path: string) => ({ _path: path }));
+const mockOnAuthStateChanged = jest.fn((auth: unknown, cb: (u: unknown) => void) => {
+  setTimeout(() => cb({ uid: "test-uid", email: "test@example.com" }), 0);
+  return mockUnsub;
+});
+
+jest.mock("firebase/database", () => ({
+  ref: (...args: unknown[]) => mockRef(...args),
+  onValue: (...args: unknown[]) => mockOnValue(...args),
+  set: (...args: unknown[]) => mockSet(...args),
+}));
+
+jest.mock("firebase/auth", () => ({
+  onAuthStateChanged: (...args: unknown[]) => mockOnAuthStateChanged(...args),
+}));
+
+jest.mock("@/lib/firebase", () => ({
+  db: {},
+  auth: {},
+}));
+
+jest.mock("@/lib/audit", () => ({
+  writeAuditEvent: jest.fn(() => Promise.resolve()),
+}));
+
+describe("usePumpData", () => {
+  beforeEach(() => {
+    mockOnValue.mockClear();
+    mockSet.mockClear();
+    mockUnsub.mockClear();
+    mockOnAuthStateChanged.mockImplementation((auth: unknown, cb: (u: unknown) => void) => {
+      setTimeout(() => cb({ uid: "test-uid", email: "test@example.com" }), 0);
+      return mockUnsub;
+    });
+  });
+
+  it("subscribes to status and control paths when auth is ready", async () => {
+    renderHook(() => usePumpData());
+    await waitFor(() => {
+      expect(mockOnValue).toHaveBeenCalled();
+    });
+    expect(mockOnValue).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Function),
+      expect.any(Function)
+    );
+  });
+
+  it("setMode writes only to control/mode path", async () => {
+    let statusCb: ((snap: { exists: () => boolean; val: () => unknown }) => void) | null = null;
+    mockOnValue.mockImplementation((ref: unknown, onData: (snap: unknown) => void) => {
+      statusCb = onData as typeof statusCb;
+      return mockUnsub;
+    });
+
+    const { result } = renderHook(() => usePumpData());
+    await waitFor(() => {
+      expect(result.current.authReady).toBe(true);
+    });
+
+    await act(async () => {
+      result.current.setMode("FORCE_OFF");
+    });
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.anything(),
+      "FORCE_OFF"
+    );
+  });
+
+  it("startCountdown clamps duration to 1–120 and writes countdown_duration_min and mode", async () => {
+    mockOnValue.mockReturnValue(mockUnsub);
+    const { result } = renderHook(() => usePumpData());
+    await waitFor(() => {
+      expect(result.current.authReady).toBe(true);
+    });
+
+    mockSet.mockClear();
+    await act(async () => {
+      result.current.startCountdown(200);
+    });
+
+    expect(mockSet).toHaveBeenCalledWith(expect.anything(), 120);
+    expect(mockSet).toHaveBeenCalledWith(expect.anything(), "COUNTDOWN");
+  });
+
+  it("startCountdown uses 1 when duration is 0 or negative", async () => {
+    mockOnValue.mockReturnValue(mockUnsub);
+    const { result } = renderHook(() => usePumpData());
+    await waitFor(() => {
+      expect(result.current.authReady).toBe(true);
+    });
+
+    mockSet.mockClear();
+    await act(async () => {
+      result.current.startCountdown(0);
+    });
+
+    const setCalls = mockSet.mock.calls;
+    const durationCall = setCalls.find((c: unknown[]) => typeof c[1] === "number");
+    expect(durationCall?.[1]).toBe(1);
+  });
+});

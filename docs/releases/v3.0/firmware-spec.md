@@ -108,10 +108,19 @@ dashboard renders a simple green/amber/red indicator based on this value.
 
 ## 5. Countdown Mode
 
-The v3 firmware implements a robust countdown mode, replacing ad‑hoc timed runs.
+The v3 firmware implements a robust countdown mode, replacing ad-hoc timed runs.
 
-Key behavior:- Entering `mode = "COUNTDOWN"` with `countdown_duration_min = N`:  - Starts a countdown of N minutes.  - Sets `isCountdownActive = true` and records `countdownEndMs`.- While in COUNTDOWN (`pumpMode == "COUNTDOWN"`):  - Pump runs unless:    - Hard safety triggers (P1), or    - Tank reaches stop level and bypass is off (early stop), or    - Timer expires.  - Firmware updates `countdown_remaining_sec` in status.- `countdown_add_time` adds fixed minutes (e.g. +5) up to a max duration.- On expiry:  - `isCountdownActive` is cleared.  - `pumpMode` is set back to `"AUTO"` and RTDB control `mode` is reverted.
-The v2.0 dashboard exposes this via “Start Countdown” and “Add 5 min” buttons
+Key behavior:
+
+- **Starting**: `mode = "COUNTDOWN"` with `countdown_duration_min = N` starts a countdown of N minutes, sets `isCountdownActive = true` and records `countdownEndMs`. A `countdownConsumed` flag prevents re-triggering from stale RTDB values. Duration is persisted to NVS for offline fallback; if Firebase is unavailable, the last-known duration is used.
+- **While active**: pump runs unless hard safety (P1), tank full (if bypass off), or timer expires. Firmware updates `countdown_remaining_sec` in status. Overflow protection (P1) now guards COUNTDOWN runs, preventing indefinite operation.
+- **Add time**: `countdown_add_time` is **edge-triggered** (rising-edge via `lastAddTime` flag). The firmware writes `false` back to Firebase after processing (firmware-reset one-shot). The dashboard also has a 5-second fallback timeout. `lastAddTime` is reset when a new countdown starts to prevent stale edge state.
+- **Stale mode protection (`pendingModeWriteback`)**: When the firmware locally reverts `pumpMode` to `"AUTO"` (manual_stop, expiry, or P4 early-stop), a `pendingModeWriteback` flag suppresses stale Firebase mode reads from overwriting the locally-set value. The flag clears when Firebase confirms the new value; retries the write if it hasn't landed.
+- **On termination** (expiry, manual stop, FORCE_OFF, early stop, or P1 safety): `isCountdownActive` is cleared, `pumpMode` reverts to `"AUTO"`, and `pendingModeWriteback = true` blocks stale reads.
+- **NVS persistence**: `"COUNTDOWN"` is a valid NVS mode. On reboot during countdown, mode is restored and timer restarts from Firebase or last-known duration.
+- **Dashboard belt-and-suspenders**: `stopRun()` writes both `manual_stop = true` AND `mode = "AUTO"` to Firebase, so the mode value updates immediately.
+
+The v2.0 dashboard exposes this via "Start Countdown" and "Add 5 min" buttons
 with busy/timeout handling.
 
 ---
@@ -152,6 +161,12 @@ Derivation order (first match wins):
   runs are still allowed but subject to P1 safety.
 - Auto‑bypass does not remove P1 lockouts: a dry‑run or overflow still latches
   `isDryRunError` / `isOverflowError` until `clear_error` is asserted.
+- **Control read**: `readFirebaseControl()` fetches `/pump_system/control` as a
+  single `getJSON` payload and parses mode, manual_stop, countdown_duration_min,
+  countdown_add_time, manual_start, bypass_level_sensor, clear_error, and
+  reboot_request_id from it. One round-trip per Firebase cycle reduces
+  timeouts on weak WiFi (e.g. -79 dBm) where multiple separate reads would
+  often trigger cooldown.
 
 ## 8. WiFi & Firebase Reconnection
 
@@ -176,12 +191,20 @@ the ESP32 boots in ~5 seconds. If WiFi is unavailable during `setup()`:
 When WiFi drops while the ESP32 is running:
 
 1. `WiFi.status() != WL_CONNECTED` triggers the backoff retry loop.
-2. `WiFi.disconnect(true)` fully resets the radio, followed by `WiFi.mode(WIFI_STA)`
-   and `WiFi.begin()` for a clean reconnection.
+2. `WiFi.disconnect(false)` resets the radio without clearing stored credentials,
+   followed by `WiFi.mode(WIFI_STA)` and `WiFi.begin()` for a clean reconnection.
+   `WiFi.persistent(false)` is set during initial connect to avoid unnecessary
+   flash writes since credentials come from `secrets.h`.
 3. On reconnection, `Firebase.refreshToken(&config)` is called to renew the
    auth token (which may have expired during the outage).
 4. NTP is re-synced to correct any drift.
-5. `firebaseCooldownUntilMs` is cleared so Firebase sync resumes immediately.
+5. `firebaseCooldownUntilMs` is set to `millis() + 10s` (not 0) to give the
+   token 10 seconds to refresh before the next Firebase operation. This prevents
+   the immediate post-reconnect Firebase call from failing due to an unrefreshed
+   token, which would otherwise trigger a longer 30s cooldown.
+6. Network timeout cooldown is 30 seconds (reduced from 120s), but only engages
+   after 3 consecutive failures. Single timeouts trigger a short 1-second retry
+   to keep the dashboard current during brief network hiccups.
 
 ### 8.3 Dashboard-Initiated Restart
 

@@ -236,6 +236,12 @@ export function usePumpData() {
     try {
       setIsAddingCountdownTime(true);
       await set(ref(db, `${CONTROL_PATH}/countdown_add_time`), true);
+      // Fallback: reset to false after 5s so the firmware's edge-detection
+      // sees a falling edge even if the firmware's own write-back fails.
+      window.setTimeout(() => {
+        void set(ref(db, `${CONTROL_PATH}/countdown_add_time`), false);
+        setIsAddingCountdownTime(false);
+      }, 5000);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.run_countdown_add_time",
@@ -259,11 +265,13 @@ export function usePumpData() {
 
   const stopRun = useCallback(async () => {
     try {
-      // One-shot: toggle true then reset to false so repeated stop works.
       await set(ref(db, `${CONTROL_PATH}/manual_stop`), true);
+      // Write mode=AUTO from the dashboard side so Firebase reflects the stop
+      // immediately, even if the firmware's write-back fails on weak WiFi.
+      await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
       window.setTimeout(() => {
         void set(ref(db, `${CONTROL_PATH}/manual_stop`), false);
-        }, 5000); // keep high a bit longer to survive timeouts
+      }, 5000);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.run_stop",

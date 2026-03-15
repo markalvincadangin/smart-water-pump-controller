@@ -160,8 +160,7 @@ void loop() {
     if (now - lastWifiRetryMs >= wifiBackoffMs) {
       lastWifiRetryMs = now;
       Serial.printf("[WIFI] Reconnecting (backoff: %lums)...\n", wifiBackoffMs);
-      WiFi.disconnect(true);
-      delay(100);
+      WiFi.disconnect(false);
       WiFi.mode(WIFI_STA);
       WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -187,7 +186,8 @@ void loop() {
         // stay in a stale-token loop printing "Not ready" forever.
         Serial.println("[FIREBASE] Refreshing auth token after WiFi recovery.");
         Firebase.refreshToken(&config);
-        firebaseCooldownUntilMs = 0;
+        firebaseConsecutiveFailCount = 0;
+        firebaseCooldownUntilMs = millis() + 10000UL;
       }
 
       // Re-sync NTP (may have drifted or never synced if WiFi was down at boot)
@@ -307,9 +307,12 @@ void loop() {
     executePumpLogic();
   }
 
-  // Firebase sync
-  if (now - lastFirebaseMs >= firebaseInterval) {
-    lastFirebaseMs = now;
+  // Firebase sync (with short retry after push failure)
+  bool normalIntervalDue = (now - lastFirebaseMs >= firebaseInterval);
+  bool statusRetryDue = (statusPushRetryCount > 0 && statusPushRetryCount < STATUS_PUSH_RETRY_MAX &&
+                         now - statusPushRetryMs >= STATUS_PUSH_RETRY_MS);
+  if (normalIntervalDue || statusRetryDue) {
+    if (normalIntervalDue) lastFirebaseMs = now;
 
     if (firebaseCooldownUntilMs != 0 && now < firebaseCooldownUntilMs) {
       // Cooling down after token/auth errors

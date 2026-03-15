@@ -71,9 +71,10 @@
 #define DEVICE_CONFIG_INTERVAL_MS  30000
 #define ULTRASONIC_TIMEOUT_MS      100
 
-// NVS namespaces
+// NVS namespaces + schema
 #define NVS_NAMESPACE        "pump_cfg"
 #define NVS_STATE_NAMESPACE  "pump_state"
+#define NVS_SCHEMA_VERSION   1
 
 // Crash loop detection
 #define CRASH_LOOP_THRESHOLD    5
@@ -89,6 +90,10 @@
 // Note: With weak WiFi, Firebase RTDB reads can still block long enough to starve loopTask.
 // Keep this comfortably above worst-case network stalls to avoid crash-loop safe mode.
 #define WDT_TIMEOUT_SEC         120
+
+// Status push retry
+#define STATUS_PUSH_RETRY_MAX   3
+#define STATUS_PUSH_RETRY_MS    1000
 
 // NVS wear reduction
 #define NVS_LEVEL_DELTA_THRESHOLD 5
@@ -246,6 +251,11 @@ extern String        lastFaultMessage;      // human-readable detail
 // v3.0 COUNTDOWN mode state (replaces TIMED runMode / runDurationMs / runRemainingSec)
 extern bool          isCountdownActive;
 extern unsigned long countdownEndMs;         // millis() when countdown expires
+extern bool          pendingModeWriteback;   // suppresses stale Firebase mode reads during write-back propagation
+extern unsigned long pendingModeWritebackSentMs;   // rate-limits write-back retries (5s between attempts)
+extern int           cfgLastCountdownDurationMin;  // NVS-persisted last countdown duration for offline use
+extern int           statusPushRetryCount;
+extern unsigned long statusPushRetryMs;
 
 void checkCountdownExpiry();  // v3.0: called from loop() before executePumpLogic()
 void updateFlowBasedEstimate();  // v3.0: call after calculateFlowRate() in loop
