@@ -1,30 +1,27 @@
 # Firmware — Smart Water Pump Controller
 **Platform:** ESP32 DevKit V1 (38-pin)
 **Framework:** Arduino (via Arduino IDE or VS Code + Arduino extension)  
-**Version:** 5.0.0 (Hierarchical Priority Model, COUNTDOWN v3, MANUAL_OFF sticky mode, bypass, telemetry)
-
-**Detailed system documentation (canonical):**
-
-- For full v5.0 behavior, run modes, and safety logic, see `docs/archive/firmware_master_spec.md`.
-- For the RTDB contract used by the dashboard, see `docs/releases/v2.0/firmware-rtdb-spec.md` (historical) and the v5 mapping in `docs/archive/firmware_master_spec.md` §14–15.
+**Notes:** This README describes current behavior and wiring at a high level. Source-of-truth behavior is the code in `firmware/`.
 
 ---
 
 ## Overview
 
-The firmware runs a non-blocking state machine on the ESP32 that:
+The system is split into:
 
-- Reads tank water level every **1 second** via JSN-SR04T ultrasonic sensor (5-sample median, EMA smoothing)
-  - In long-run installations, the JSN-SR04T is driven by a small NodeMCU V2 (ESP8266, CP2102) "tank node" near the tank and
-    reported over RS-485 to the main enclosure.
-- Reads pipe flow rate every **1 second** via YF-G1 hall-effect sensor (hardware interrupt)
+- **ESP32 master**: pump relay control, safety logic, cloud connectivity, persistence.
+- **ESP8266 tank node** (NodeMCU): reads sensors near the tank and serves data over RS-485.
+
+The ESP32 firmware runs a non-blocking control loop that:
+
+- Polls remote tank data over **RS-485** (level + flow + sensor error code)
 - Syncs status to Firebase Realtime Database every **3 seconds**
 - Reads control commands from Firebase every **3 seconds**
 - Reads device config from Firebase every **30 seconds** (or uses NVS when offline)
 - Automatically starts/stops the pump based on tank level thresholds (AUTO mode)
 - Detects dry-run conditions (configurable threshold and timeout, default 30s of flow < 0.5 LPM)
-- Overflow protection: max runtime cutoff in AUTO mode (default 120 min)
-- Sensor failure detection: consecutive ultrasonic/flow errors → pump OFF in AUTO
+- Overflow protection: max runtime cutoff (default 120 min)
+- Sensor/communications failsafe: stale/unstable remote data blocks starts; stale data stops a running pump
 - Scheduled sleep mode (optional): Light Sleep during idle hours to reduce power/heat
 - Auto-reconnects to WiFi and Firebase if the router reboots
 
@@ -36,7 +33,7 @@ The firmware runs a non-blocking state machine on the ESP32 that:
 firmware/
 ├── arduino_smart_water_pump_controller/
 │   ├── 01_config.ino                      ← Includes, constants, globals
-│   ├── 02_sensors.ino                     ← Flow ISR + ultrasonic + flow calc
+│   ├── 02_rs485_comm.ino                  ← RS-485 request/parse + freshness/stability latch
 │   ├── 03_safety_pump.ino                 ← Safety checks + pump state machine (P0–P5)
 │   ├── 04_persistence.ino                 ← NVS config/state + crash loop helpers
 │   ├── 05_connectivity_cloud.ino          ← WiFi/NTP/Firebase helpers
@@ -44,9 +41,11 @@ firmware/
 │   ├── smart_water_pump_controller_shared.h    ← Shared globals/constants header
 │   ├── secrets.h.example                  ← Template for credentials (copy to secrets.h)
 │   └── secrets.h                          ← Your credentials (create from example, gitignored)
+├── arduino_sensor_node/                   ← Arduino sketch for NodeMCU V2 (ESP8266 tank node)
 ├── platformio_smart_water_pump_controller/     ← PlatformIO project (VS Code)
 │   ├── platformio.ini
 │   └── src/… (mirrors the Arduino tabs)
+├── platformio_sensor_node/                ← PlatformIO project for NodeMCU V2 (ESP8266 tank node)
 ├── libraries.txt                          ← Required libraries and install instructions
 └── README.md                              ← This file
 ```
@@ -68,10 +67,6 @@ firmware/
 
 > **GPIO 34** is input-only on the ESP32 — it has no internal pull-up/pull-down
 > and cannot be used as an output. This makes it ideal for the flow sensor interrupt.
-
-> **CLARIFIED:** The direct-sensor pin mapping above applies only to the legacy “direct wiring” build.
-> With the upgraded RS-485 tank node architecture, the ESP32 uses a UART + MAX485 module to receive
-> `LVL:<percent>;ERR:<flag>` frames (and flow telemetry) from the NodeMCU near the tank.
 
 ---
 
@@ -176,46 +171,35 @@ The default calibration is for **Bestank WT660** (660L, sensor on lid):
 > The sensor measures distance to the water surface — closer distance = higher water level.
 > `TANK_FULL_CM` will always be a smaller number than `TANK_EMPTY_CM`.
 
-When using the **remote tank node**, the same calibration values are applied on the NodeMCU V2 near the tank.
-The main ESP32 only receives an already-calibrated percentage value over RS-485.
+When using the **remote tank node**, the NodeMCU transmits the last good ultrasonic **distance (cm)** over RS‑485 (`DIST:<cm>`).
+The ESP32 master computes level (%) using the configured tank calibration (`cfgTankEmptyCm/cfgTankFullCm`) to prevent drift.
 
 ---
 
-## Remote Ultrasonic Tank Node (RS-485)
+## Remote Tank Sensor Node (RS-485)
 
-For long runs (≈20–30m) between the main enclosure and the tank, the JSN-SR04T sensor is driven by a
+For long runs (≈20–30m) between the main enclosure and the tank, sensors are driven by a
 small NodeMCU V2 (ESP8266, CP2102) node mounted near the tank. This node:
 
 - Drives JSN TRIG/ECHO locally (short wires, level-shifted ECHO).
-- Applies the same 5-sample median + EMA smoothing and tank calibration.
-- Sends a short ASCII status line over RS-485 every 1–2 seconds.
+- Runs a non-blocking acquisition window with median filtering.
+- Reads YF-G1 flow via ISR pulse counting.
+- Replies to the ESP32 over RS-485 on request (CRC framed).
 
-### Frame format
+### Frame format (RS‑485)
 
-Each status update is a single line terminated by `\r\n`:
-
-```text
-LVL:<percent>;ERR:<flag>\r\n
-```
-
-- `LVL`: integer 0–100, current water level percentage.
-- `ERR`: `0` = JSN healthy, `1` = JSN error (e.g. repeated timeouts, invalid echoes).
-
-Examples:
+The tank node replies to `REQ\n` with a framed payload:
 
 ```text
-LVL:87;ERR:0\r\n
-LVL:12;ERR:1\r\n
+STX (0x02)
+LVL:<percent>;DIST:<cm>;FLOW:<lpm>;ERR:<code>;SEQ:<n>;CRC:<hex>
+ETX (0x03)
 ```
 
-The main ESP32:
-
-- Reads these lines from a UART connected via RS-485.
-- Parses `LVL` into `waterLevelPct`.
-- Treats `ERR` as the ultrasonic sensor health flag (sets/clears `isSensorError` accordingly).
-
-All existing pump control, safety, and Firebase telemetry logic continues to use `waterLevelPct` and
-`isSensorError` in exactly the same way as when the JSN was wired directly.
+- `DIST` (cm) is the preferred primary measurement; the master computes `%` using configured calibration.
+- `LVL` is retained for backward compatibility.
+- `ERR` bitfield: bit0=ultrasonic error, bit1=flow signal error.
+- `CRC` is CRC16 (Modbus) over the payload up to the trailing `;` after `SEQ`.
 
 ### Flow Rate (Section 4 in firmware)
 
@@ -238,31 +222,31 @@ The firmware reads `/pump_system/control/mode` from Firebase every 3 seconds.
 | Mode | Behaviour | Set By |
 |------|-----------|--------|
 | `AUTO` | Pump starts at ≤ start level, stops at ≥ stop level (hysteresis) | Dashboard / default |
-| `FORCE_ON` | Pump runs continuously regardless of level | Dashboard override |
-| `FORCE_OFF` | Pump stays off regardless of level | Dashboard emergency stop |
-| `COUNTDOWN` | Pump runs for N minutes (1–120), then reverts to AUTO | Dashboard timed run |
+| `MANUAL` | Operator policy mode; pump ON/OFF is controlled by `manual_desired` (full safety enforced) | Dashboard |
+| `COUNTDOWN` | Timed run started via `countdown_start` (duration 1–120 min), then returns to AUTO | Dashboard |
 
-> **Safety override:** If `isDryRunError` or `isOverflowError` is active, the pump will not run in
-> any mode until the error is acknowledged via the dashboard (`clear_error = true`).
+> **Safety override:** If dry-run or overflow lockout is active, the pump will not run in any mode until the error is acknowledged via `clear_error = true`.
+>
+> **Emergency stop:** The dashboard can latch an immediate STOP via `emergency_stop=true` (one-shot). The pump remains stopped until `reset_stop=true`.
 
-### Run modes (v5.0)
+### Run modes (current)
 
-The firmware tracks a `runMode` alongside `pumpMode` to give the dashboard fine-grained status (see `docs/archive/firmware_master_spec.md` §2.3 for the full table):
+The firmware publishes `run_mode` to describe the *actual* operational state of the pump (distinct from policy `mode`):
 
 | `run_mode`    | Meaning |
 |---------------|---------|
 | `AUTO`        | AUTO mode, pump running |
 | `AUTO_STANDBY`| AUTO mode, pump idle (above start level) |
-| `MANUAL`      | MANUAL mode, pump running (full safety) |
+| `MANUAL_ON`   | MANUAL mode, pump running (full safety) |
 | `MANUAL_OFF`  | MANUAL mode selected, pump off (sticky MANUAL) |
 | `COUNTDOWN`   | Timed run in progress (COUNTDOWN mode active) |
-| `FORCE_ON`    | Absolute override — pump forced ON regardless of errors |
-| `OFF`         | Pump off due to FORCE_OFF or P1 lockout (dry-run/overflow) |
+| `STOPPED`     | Pump stopped by Emergency Stop latch |
+| `OFF`         | Pump off (idle or blocked by lockout) |
 
 Dashboard can request:
-- **Manual run** ("run now until I press Stop") via `manual_start` control flag.
-- **Countdown run** ("run for N minutes, then stop") via COUNTDOWN mode + `countdown_duration_min`.
-- **Add time** (+5 min to a running countdown) via `countdown_add_time`.
+- **MANUAL intent** via `mode="MANUAL"` and `manual_desired=true|false`.
+- **COUNTDOWN run** via `mode="COUNTDOWN"`, `countdown_duration_min=N`, then `countdown_start=true` one-shot.
+- **Add time** (+N minutes to a running countdown) via `countdown_add_min=N` and `countdown_add_time=true` one-shot.
 
 All runs are subject to P1 safety (dry-run, overflow) — manual operation never bypasses safety interlocks.
 
@@ -343,13 +327,16 @@ All runs are subject to P1 safety (dry-run, overflow) — manual operation never
     firebase_last_error:       ""    (string)
 
   control/                           ← Dashboard writes, ESP32 reads every 3s
-    mode:        "AUTO"              (string: AUTO|FORCE_ON|FORCE_OFF|COUNTDOWN)
+    mode:        "AUTO"              (string: AUTO|MANUAL|COUNTDOWN)
     clear_error: false               (bool:  set true to acknowledge errors)
     reboot_request_id: 0             (int:   bump to request soft reboot)
-    manual_start: false              (bool:  one-shot edge to start manual run)
-    manual_stop:  false              (bool:  one-shot edge to stop run → AUTO)
+    manual_desired: false            (bool:  persistent MANUAL intent: true=run, false=stop)
+    emergency_stop: false            (bool:  one-shot latch stop)
+    reset_stop:     false            (bool:  one-shot reset stop latch)
     countdown_duration_min: 10       (int:   1–120, set before COUNTDOWN mode)
-    countdown_add_time: false        (bool:  one-shot to add 5 min)
+    countdown_start: false           (bool:  one-shot start countdown)
+    countdown_add_min: 5             (int:   minutes to add)
+    countdown_add_time: false        (bool:  one-shot to add time)
     bypass_level_sensor: false       (bool:  toggle level sensor bypass)
 
   config/
@@ -370,7 +357,7 @@ Connect at **115200 baud** to see live debug output:
 
 ```
 ====================================
- Smart Water Pump Controller v3.0.0
+ Smart Water Pump Controller
 ====================================
 [INIT] GPIO configured. Pump OFF.
 [INIT] Flow sensor interrupt attached on GPIO 34.
@@ -383,7 +370,7 @@ Connect at **115200 baud** to see live debug output:
 [FIREBASE] Status pushed -> Level:42% | Flow:0.00 LPM | Running:NO | Error:NO
 [AUTO] Water at 28%. Starting pump.
 [SENSOR] Level: 28% | Flow: 13.20 LPM
-[FIREBASE] Mode changed: AUTO -> FORCE_OFF
+[FIREBASE] Mode changed: AUTO -> MANUAL
 [SENSOR] Level: 29% | Flow: 0.00 LPM
 [WARN] Dry-run condition detected. Timer started.
 ```
@@ -442,4 +429,4 @@ the ESP32 re-enters `setup()`, connects to WiFi, and initializes Firebase.
 
 ---
 
-*Firmware version 3.0.0 — for v3.0 firmware specification, see `docs/releases/v3.0/firmware-spec.md`. For end-to-end deployment, use `docs/releases/v2.0/deploy.md`.*
+*For current, canonical documentation: `docs/specs/firmware.md` and `docs/specs/dashboard.md`. Historical release docs live under `docs/archive/releases/`.*

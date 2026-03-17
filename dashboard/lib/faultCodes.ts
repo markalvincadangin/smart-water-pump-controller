@@ -10,6 +10,16 @@ export interface FaultDisplay {
 }
 
 const FAULT_MAP: Record<string, FaultDisplay> = {
+  COMM_LOSS: {
+    title: "Remote sensor link",
+    message: "Remote sensor data is stale or the RS-485 link is unstable. Pump stopped for safety.",
+    recovery: "Check tank node power and RS-485 wiring/termination. Wait for the link to become stable, then try again.",
+  },
+  STALE_LEVEL: {
+    title: "Stale sensor data",
+    message: "Level data is not fresh. Pump stopped for safety.",
+    recovery: "Check the remote sensor node and wait for fresh data, or enable bypass only for supervised maintenance.",
+  },
   DRY_RUN: {
     title: "Dry-run",
     message: "Dry-run detected. Check water supply.",
@@ -19,6 +29,11 @@ const FAULT_MAP: Record<string, FaultDisplay> = {
     title: "Max runtime",
     message: "Max runtime exceeded. Check tank sensor.",
     recovery: "Tap \"Clear Error\" after inspecting.",
+  },
+  E_STOP: {
+    title: "Emergency stop",
+    message: "Emergency stop is latched. Pump is stopped and locked out.",
+    recovery: "Resolve the hazard, then press \"Reset Stop\" (only when safe).",
   },
   LEVEL_SENSOR: {
     title: "Level sensor",
@@ -47,7 +62,13 @@ export function getFaultDisplay(
 ): FaultDisplay | null {
   if (!code || code === "") return null;
   const entry = FAULT_MAP[code];
-  if (!entry) return null;
+  if (!entry) {
+    return {
+      title: code,
+      message: firmwareMessage?.trim() ? firmwareMessage : "An unknown fault was reported by the controller.",
+      recovery: "Check wiring, sensors, and controller logs. If this persists, report the fault code.",
+    };
+  }
   return {
     ...entry,
     message: firmwareMessage?.trim() ? firmwareMessage : entry.message,

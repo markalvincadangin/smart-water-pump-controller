@@ -25,7 +25,7 @@
 - **Requirement shortfall:** PRR objective specifies ">90% code coverage"; current state is **0%**. This is a **Critical Blocker** for a "Zero-Failure" certification.
 
 **Data contract verification:**
-- Dashboard and firmware communicate via Firebase RTDB paths documented in `docs/releases/v2.0/firmware-rtdb-spec.md` and `docs/releases/v3.0/firmware-spec.md`.
+- Dashboard and firmware communicate via Firebase RTDB paths documented in `docs/archive/releases/v2.0/firmware-rtdb-spec.md` and `docs/archive/releases/v3.0/firmware-spec.md` (historical references).
 - No automated tests validate that dashboard writes (e.g. `pump_system/control/mode`, `manual_stop`, `countdown_duration_min`) match firmware expectations or that status payload shape matches dashboard consumers.
 - **Gap:** Integration contracts are not covered by automated tests; regression risk is high.
 
@@ -59,7 +59,7 @@
 
 ### 2.2 Environment Parity
 
-- **Staging vs Production:** No separate staging environment is defined in the repo. Single `.env.local.example` and Firebase project configuration; deploy docs (`docs/releases/v2.0/deploy.md`) describe one production path (e.g. Vercel + Firebase).
+- **Staging vs Production:** No separate staging environment is defined in the repo. Single `.env.local.example` and Firebase project configuration; deploy docs (`docs/archive/releases/v2.0/deploy.md`) describe one production path (e.g. Vercel + Firebase).
 - **Gap:** "Staging/Test environment logic perfectly mirrors Production" **cannot be confirmed** — no staging config or env matrix. Flag as **missing** for strict parity requirement.
 
 ### 2.3 Data Integrity
@@ -105,7 +105,7 @@
 ### 4.1 Rollback Strategy
 
 - **Point of no return:** Not explicitly defined in repo. For Firebase: after `firebase deploy --only database`, rules are live immediately; for dashboard (e.g. Vercel), the last successful deployment can usually be reverted via dashboard or CLI.
-- **Rollback procedure:** Documented only at a high level in `docs/releases/v2.0/deploy.md` (phases 1–7). No step-by-step rollback runbook (e.g. "1. Revert Git tag, 2. Redeploy dashboard, 3. Revert database rules if needed, 4. Verify health").
+- **Rollback procedure:** Documented only at a high level in `docs/archive/releases/v2.0/deploy.md` (phases 1–7). No step-by-step rollback runbook (e.g. "1. Revert Git tag, 2. Redeploy dashboard, 3. Revert database rules if needed, 4. Verify health").
 - **Gap:** A clear "Point of No Return" and a **step-by-step rollback procedure** are **missing** and must be defined for production certification.
 
 ### 4.2 Health Checks

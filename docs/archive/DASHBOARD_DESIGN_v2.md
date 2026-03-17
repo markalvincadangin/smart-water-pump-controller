@@ -1,4 +1,4 @@
-> **Superseded by:** [../releases/v2.0/dashboard-ux-spec.md](../releases/v2.0/dashboard-ux-spec.md) — canonical v2 dashboard UX spec.
+> **Superseded by:** [./releases/v2.0/dashboard-ux-spec.md](./releases/v2.0/dashboard-ux-spec.md) — canonical v2 dashboard UX spec.
 
 ---
 

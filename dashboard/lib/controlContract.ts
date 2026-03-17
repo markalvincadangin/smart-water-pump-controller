@@ -3,12 +3,11 @@
 
 import type { PumpControl } from "./types";
 
-/** Valid control mode strings accepted by firmware (v3.0 spec). */
+/** Valid control mode strings accepted by firmware (vNext). */
 export const VALID_CONTROL_MODES: readonly PumpControl["mode"][] = [
   "AUTO",
-  "FORCE_ON",
-  "FORCE_OFF",
   "COUNTDOWN",
+  "MANUAL",
 ] as const;
 
 export type ValidControlMode = (typeof VALID_CONTROL_MODES)[number];

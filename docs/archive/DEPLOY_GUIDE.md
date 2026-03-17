@@ -1,4 +1,4 @@
-> **Superseded by:** [../releases/v2.0/deploy.md](../releases/v2.0/deploy.md) — use that for deployment steps.
+> **Superseded by:** [./releases/v2.0/deploy.md](./releases/v2.0/deploy.md) — use that for deployment steps.
 
 ---
 
@@ -373,7 +373,7 @@ cd dashboard && npm run build
 | Dashboard setup, env vars | `dashboard/README.md` |
 | Notifications (email, push, testing alerts) | `docs/operations/NOTIFICATIONS_SETUP.md` |
 | Device config from DB | `docs/operations/FIRMWARE_CONFIG_FROM_DATABASE.md` |
-| Deploy (canonical) | `docs/releases/v2.0/deploy.md` |
+| Deploy (canonical) | `docs/archive/releases/v2.0/deploy.md` |
 
 ---
 

@@ -2,7 +2,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Wifi, WifiOff, Clock, AlertTriangle, Signal } from "lucide-react";
+import { Wifi, WifiOff, Clock, AlertTriangle, Signal, Moon } from "lucide-react";
 
 interface StatusBarProps {
   connected: boolean;
@@ -18,6 +18,8 @@ interface StatusBarProps {
   uptimeMinutes?: number;
   levelLastValidAgeSec?: number;
   levelSensorHealthPct?: number;
+  remoteSensorStable?: boolean;
+  levelFresh?: boolean;
 }
 
 function formatUptime(min: number): string {
@@ -33,7 +35,7 @@ function wifiStrengthLabel(rssi: number): { label: string; color: string; bars: 
   return { label: "Weak", color: "text-accent-red", bars: 1 };
 }
 
-export default function StatusBar({ connected, esp32Online, updatedAt, mode, isLevelSensorError, isFlowSensorError, isOverflowError, isSleeping, wifiRssi, bootReason, uptimeMinutes, levelLastValidAgeSec, levelSensorHealthPct }: StatusBarProps) {
+export default function StatusBar({ connected, esp32Online, updatedAt, mode, isLevelSensorError, isFlowSensorError, isOverflowError, isSleeping, wifiRssi, bootReason, uptimeMinutes, levelLastValidAgeSec, levelSensorHealthPct, remoteSensorStable, levelFresh }: StatusBarProps) {
   const timeAgo = updatedAt ? Math.round((Date.now() - updatedAt) / 1000) : null;
   const wifi = wifiRssi != null && wifiRssi !== 0 ? wifiStrengthLabel(wifiRssi) : null;
   const hasAnyWarning = isLevelSensorError || isFlowSensorError || isOverflowError;
@@ -89,6 +91,24 @@ export default function StatusBar({ connected, esp32Online, updatedAt, mode, isL
 
       {/* Right: mode + warnings + freshness */}
       <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        {/* Remote link gates (non-noisy) */}
+        {remoteSensorStable === false && (
+          <span
+            className="badge text-[9px] sm:text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20"
+            title="Remote sensor link is unstable (RS-485). Starts may be blocked for safety."
+          >
+            Link unstable
+          </span>
+        )}
+        {levelFresh === false && (
+          <span
+            className="badge text-[9px] sm:text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20"
+            title="Level data is stale. Starts may be blocked for safety."
+          >
+            Level stale
+          </span>
+        )}
+
         {/* Stale level warning */}
         {typeof levelLastValidAgeSec === "number" && levelLastValidAgeSec > 20 && (
           <span className="badge text-[9px] sm:text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20"
@@ -139,21 +159,19 @@ export default function StatusBar({ connected, esp32Online, updatedAt, mode, isL
 
         {isSleeping && (
           <span className="badge text-[9px] sm:text-[10px] bg-surface-3 text-text-muted border border-surface-4">
-            <span aria-hidden className="text-[8px]">💤</span>
+            <Moon size={10} aria-hidden className="text-text-muted" />
             <span className="hidden sm:inline">Sleep</span>
           </span>
         )}
 
-        {/* Mode badge — v4.0: FORCE_ON = pulsing red override, MANUAL = green */}
+        {/* Mode badge (policy mode) */}
         <span className={clsx(
           "badge text-[9px] sm:text-[10px] font-semibold",
           mode === "AUTO" && "bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20",
           mode === "MANUAL" && "bg-accent-green/10 text-accent-green border border-accent-green/20",
-          mode === "FORCE_ON" && "bg-accent-red/15 text-accent-red border border-accent-red/30 animate-pulse",
-          mode === "FORCE_OFF" && "bg-accent-red/10 text-accent-red border border-accent-red/20",
           mode === "COUNTDOWN" && "bg-accent-amber/10 text-accent-amber border border-accent-amber/20"
         )}>
-          {mode === "FORCE_ON" ? "⚡ OVERRIDE" : mode === "FORCE_OFF" ? "F.OFF" : mode}
+          {mode}
         </span>
 
         {/* Freshness */}

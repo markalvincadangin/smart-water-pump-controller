@@ -1,4 +1,4 @@
-> **Superseded by:** [../releases/v2.0/firmware-rtdb-spec.md](../releases/v2.0/firmware-rtdb-spec.md) — canonical v2 firmware/RTDB spec.
+> **Superseded by:** [./releases/v2.0/firmware-rtdb-spec.md](./releases/v2.0/firmware-rtdb-spec.md) — canonical v2 firmware/RTDB spec.
 
 ---
 

@@ -69,16 +69,16 @@ describe("usePumpData", () => {
     });
 
     await act(async () => {
-      result.current.setMode("FORCE_OFF");
+      result.current.setMode("AUTO");
     });
 
     expect(mockSet).toHaveBeenCalledWith(
       expect.anything(),
-      "FORCE_OFF"
+      "AUTO"
     );
   });
 
-  it("startCountdown clamps duration to 1–120 and writes countdown_duration_min and mode", async () => {
+  it("startCountdown clamps duration to 1–120 and writes duration, mode, and countdown_start", async () => {
     mockOnValue.mockReturnValue(mockUnsub);
     const { result } = renderHook(() => usePumpData());
     await waitFor(() => {
@@ -92,6 +92,7 @@ describe("usePumpData", () => {
 
     expect(mockSet).toHaveBeenCalledWith(expect.anything(), 120);
     expect(mockSet).toHaveBeenCalledWith(expect.anything(), "COUNTDOWN");
+    expect(mockSet).toHaveBeenCalledWith(expect.anything(), true);
   });
 
   it("startCountdown uses 1 when duration is 0 or negative", async () => {

@@ -35,9 +35,13 @@
 
 // ---- GPIO mapping ----
 #define RELAY_PIN        4
-#define TRIG_PIN         5
-#define ECHO_PIN        18
-#define FLOW_SENSOR_PIN 34
+
+// RS-485 (Tank Link) — production pinout (see hardware/wiring_notes.md)
+// ESP32 UART2: TX2=GPIO17, RX2=GPIO16. Half-duplex DE/RE tied to one GPIO.
+#define RS485_UART_BAUD     115200
+#define RS485_TX_PIN        17
+#define RS485_RX_PIN        16
+#define RS485_DE_RE_PIN      5   // LOW=RX, HIGH=TX
 
 // ---- Tank calibration ----
 #define TANK_EMPTY_CM   122
@@ -70,6 +74,13 @@
 #define FIREBASE_AUTH_COOLDOWN_MS  30000UL
 #define DEVICE_CONFIG_INTERVAL_MS  30000
 #define ULTRASONIC_TIMEOUT_MS      100
+
+// RS-485 poll + framing
+#define RS485_REQ_INTERVAL_MS      1000
+#define RS485_FRAME_TIMEOUT_MS     250
+#define RS485_MAX_RETRIES          3
+#define RS485_RX_LINE_MAX          96
+#define REMOTE_SENSOR_OFFLINE_MS   5000UL
 
 // NVS namespaces + schema
 #define NVS_NAMESPACE        "pump_cfg"
@@ -113,19 +124,16 @@
 #define IDLE_SENSOR_INTERVAL_MS_DEF   10000
 #define IDLE_FIREBASE_INTERVAL_MS_DEF 30000
 
-// v3.0 COUNTDOWN mode (replaces Phase 7 timed run)
+// COUNTDOWN mode (semi-automatic timed run)
 #define COUNTDOWN_ADD_TIME_MIN       5
 #define COUNTDOWN_MAX_DURATION_MIN   120
 
-// v3.0 Sensor resilience
+// Sensor resilience
 #define TANK_CAPACITY_L              660   // Bestank WT660
 #define AUTO_BYPASS_FAILURE_SEC_DEF  60
 
-// v4.0: Minimum off-time between pump starts (R-01, motor protection)
+// Minimum off-time between pump starts (motor protection)
 #define MIN_PUMP_OFF_TIME_MS         30000
-
-// v4.0: FORCE_ON auto-timeout default in minutes (R-02, configurable via Firebase)
-#define FORCE_ON_MAX_MIN_DEFAULT     60
 
 // ---- Firebase objects ----
 extern FirebaseData   fbdo;
@@ -151,14 +159,11 @@ extern int  cfgSleepEmergencyLevel;
 extern int  cfgLevelSensorFailureThreshold;
 extern int  cfgIdleSensorIntervalMs;
 extern int  cfgIdleFirebaseIntervalMs;
-/** v3.0 P2: When true, ignore level sensor for start/stop; flow guard (P1) still active. */
+/** When true, ignore level sensor for start/stop; flow guard is still active. */
 extern bool cfgBypassLevelSensor;
 
-extern volatile uint32_t pulseCount;
-extern volatile uint64_t lastPulseUs;
 extern float flowRateLpm;
 extern int   waterLevelPct;
-extern float waterLevelEma;
 extern bool  isRunning;
 extern int   prevWaterLevelPct;
 
@@ -169,16 +174,16 @@ extern bool   isFlowSensorError;
 extern bool   isOverflowError;
 
 extern int           levelSensorFailCount;
-extern unsigned long levelLastValidMs;      // v3.0: millis() of last valid level reading
-extern float         estimatedLevelPct;     // v3.0: flow-based estimate (-1 = not set)
-extern float         flowVolumeAddedL;      // v3.0: L added since anchor
-extern unsigned long lastFlowEstimateMs;    // v3.0: for dt in flow estimate
-extern int           levelAnchorPct;        // v3.0: last known good level for estimate
-extern unsigned long totalPumpRunSec;       // v3.0: accumulated runtime (persisted)
-extern uint32_t      totalPumpCycles;       // v3.0: cycle count (persisted)
+extern unsigned long levelLastValidMs;      // millis() of last valid level reading
+extern float         estimatedLevelPct;     // flow-based estimate (-1 = not set)
+extern float         flowVolumeAddedL;      // liters added since anchor
+extern unsigned long lastFlowEstimateMs;    // timestamp for dt in flow estimate
+extern int           levelAnchorPct;        // last known good level for estimate
+extern unsigned long totalPumpRunSec;       // accumulated runtime (persisted)
+extern uint32_t      totalPumpCycles;       // cycle count (persisted)
 extern uint32_t      lastPersistedPumpCycles;
 extern unsigned long lastPersistedPumpRunSec;
-extern unsigned long pumpOnSinceMs;         // v3.0: millis() when current run started
+extern unsigned long pumpOnSinceMs;         // millis() when current run started
 extern bool          cfgAutoBypassOnSensorFail;
 extern int           cfgAutoBypassDelaySec;
 extern bool          autoBypassWasEngaged;
@@ -187,6 +192,12 @@ extern unsigned long levelSensorFailStartMs;
 extern unsigned long flowStuckStartMs;
 extern bool          flowStuckTimerActive;
 extern unsigned long pumpOffStartMs;
+
+// Remote sensor node telemetry over RS-485 (tank link)
+extern unsigned long remoteSensorLastRxMs;
+extern uint32_t      remoteSensorConsecutiveFailCount;
+extern int           remoteSensorLastErrCode;   // protocol ERR:<code> from sensor node
+extern bool          remoteSensorOnline;        // derived from lastRx age
 
 extern uint32_t ultrasonicCycleOkCount;
 extern uint32_t ultrasonicCycleTimeoutCount;
@@ -245,30 +256,31 @@ extern unsigned long lastHeapDiagMs;
 extern uint32_t      minFreeHeapObserved;
 
 // -----------------------------------------------------------------------------
-// Phase 7 manual run + v3.0 COUNTDOWN (replaces Phase 7 timed run)
-// v4.0: runMode now includes "FORCE_ON" for absolute override display
-// v5.0: runMode now includes "MANUAL_OFF" for MANUAL-mode-pump-off state
+// Runtime mode + operator intent
 // -----------------------------------------------------------------------------
-extern String        runMode;               // "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "MANUAL_OFF" | "COUNTDOWN" | "FORCE_ON"
-extern String        runPrevPumpMode;        // stores prior pumpMode when manual run started
-extern unsigned long runStartMs;             // millis() when manual run began
-extern bool          isManualRun;            // true when run started via manual_start; cleared on manual_stop or mode change
-extern String        lastFaultCode;          // e.g. "DRY_RUN", "OVERFLOW", "SENSOR"
-extern String        lastFaultMessage;      // human-readable detail
+// runMode is derived from mode + state; it is not written by the dashboard.
+extern String        runMode;                // "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL_ON" | "MANUAL_OFF" | "COUNTDOWN" | "STOPPED"
+extern String        runPrevPumpMode;        // reserved for compatibility/debugging
+extern unsigned long runStartMs;             // millis() when the current run was requested
+extern bool          isManualRun;            // true when operating under MANUAL policy (legacy flag kept for compatibility)
+extern String        lastFaultCode;          // short identifier (e.g., "DRY_RUN", "OVERFLOW", "E_STOP")
+extern String        lastFaultMessage;       // human-readable detail
 
-// v4.0: FORCE_ON auto-timeout tracking (R-02)
-extern unsigned long forceOnStartMs;         // millis() when FORCE_ON mode was entered
-extern int           cfgForceOnMaxMin;       // configurable max FORCE_ON runtime (default 60 min)
+// Operator intent and stop latch
+extern bool          manualDesired;
+extern bool          emergencyStopLatched;
 
-// v3.0 COUNTDOWN mode state (replaces TIMED runMode / runDurationMs / runRemainingSec)
+// Countdown state (semi-automatic timed run)
 extern bool          isCountdownActive;
 extern unsigned long countdownEndMs;         // millis() when countdown expires
 extern bool          pendingModeWriteback;   // suppresses stale Firebase mode reads during write-back propagation
 extern unsigned long pendingModeWritebackSentMs;   // rate-limits write-back retries (5s between attempts)
-extern int           cfgLastCountdownDurationMin;  // NVS-persisted last countdown duration for offline use
+extern int           cfgLastCountdownDurationMin;  // NVS-persisted last duration for offline use
 extern int           statusPushRetryCount;
 extern unsigned long statusPushRetryMs;
 
-void checkCountdownExpiry();  // v3.0: called from loop() before executePumpLogic()
-void updateFlowBasedEstimate();  // v3.0: call after calculateFlowRate() in loop
+void checkCountdownExpiry();       // called from loop() before executePumpLogic()
+void updateFlowBasedEstimate();    // call after updating flowRateLpm
+
+bool pollRemoteSensorNode();   // RS-485: updates waterLevelPct/flowRateLpm + error flags
 

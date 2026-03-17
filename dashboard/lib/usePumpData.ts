@@ -212,6 +212,63 @@ export function usePumpData() {
     }
   }, [authUser?.email, authUser?.uid]);
 
+  const setManualDesired = useCallback(async (on: boolean) => {
+    try {
+      // vNext: MANUAL is intent-based and persistent
+      await set(ref(db, `${CONTROL_PATH}/mode`), "MANUAL");
+      await set(ref(db, `${CONTROL_PATH}/manual_desired`), on);
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.manual_desired",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+          meta: { manual_desired: on },
+          detail: on ? "Manual desired: ON" : "Manual desired: OFF",
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] setManualDesired failed:", err);
+    }
+  }, [authUser?.email, authUser?.uid]);
+
+  const triggerEmergencyStop = useCallback(async () => {
+    try {
+      await set(ref(db, `${CONTROL_PATH}/emergency_stop`), true);
+      window.setTimeout(() => {
+        void set(ref(db, `${CONTROL_PATH}/emergency_stop`), false);
+      }, 5000);
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.emergency_stop",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+          detail: "Emergency stop requested",
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] triggerEmergencyStop failed:", err);
+    }
+  }, [authUser?.email, authUser?.uid]);
+
+  const resetEmergencyStop = useCallback(async () => {
+    try {
+      await set(ref(db, `${CONTROL_PATH}/reset_stop`), true);
+      window.setTimeout(() => {
+        void set(ref(db, `${CONTROL_PATH}/reset_stop`), false);
+      }, 5000);
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.reset_stop",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+          detail: "Reset stop requested",
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] resetEmergencyStop failed:", err);
+    }
+  }, [authUser?.email, authUser?.uid]);
+
   const acknowledgeError = useCallback(async () => {
     try {
       await set(ref(db, `${CONTROL_PATH}/clear_error`), true);
@@ -246,37 +303,15 @@ export function usePumpData() {
     }
   }, [authUser?.email, authUser?.uid]);
 
-  // ── Phase 7: Smart manual/timed run writers ───────────────────────────────
-
-  const startManualRun = useCallback(async () => {
-    try {
-      // v4.0: firmware rejects manual_start when FORCE_OFF is active — no need to pre-switch.
-      // One-shot: toggle true then reset to false so firmware edge-detects reliably.
-      await set(ref(db, `${CONTROL_PATH}/manual_start`), true);
-      window.setTimeout(() => {
-        void set(ref(db, `${CONTROL_PATH}/manual_start`), false);
-      }, 5000); // 5s so firmware has two poll cycles to see it [FIX B2]
-      if (authUser?.uid) {
-        await writeAuditEvent({
-          action: "control.run_manual_start",
-          uid: authUser.uid,
-          email: authUser.email ?? null,
-          detail: "Manual run started (MANUAL mode, full safety active)",
-        });
-      }
-    } catch (err) {
-      console.error("[RTDB] startManualRun failed:", err);
-    }
-  }, [authUser?.email, authUser?.uid]);
-
   const startCountdown = useCallback(async (durationMin: number) => {
     try {
       const safeMin = Math.max(1, Math.min(120, Math.floor(durationMin)));
-      if (controlRef.current?.mode === "FORCE_OFF") {
-        await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
-      }
       await set(ref(db, `${CONTROL_PATH}/countdown_duration_min`), safeMin);
       await set(ref(db, `${CONTROL_PATH}/mode`), "COUNTDOWN");
+      await set(ref(db, `${CONTROL_PATH}/countdown_start`), true);
+      window.setTimeout(() => {
+        void set(ref(db, `${CONTROL_PATH}/countdown_start`), false);
+      }, 5000);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.run_countdown_start",
@@ -324,33 +359,20 @@ export function usePumpData() {
     }
   }, [snapshot?.control?.countdown_add_time, isAddingCountdownTime]);
 
-  const stopRun = useCallback(async () => {
+  const stopCountdown = useCallback(async () => {
     try {
-      // v4.0: manual_stop is ignored by firmware when FORCE_ON — don't send spurious writes
-      if (controlRef.current?.mode === "FORCE_ON") {
-        console.warn("[RTDB] stopRun skipped: FORCE_ON active. Use mode selector.");
-        return;
-      }
-      await set(ref(db, `${CONTROL_PATH}/manual_stop`), true);
-      // v5.0: When current mode is MANUAL, keep MANUAL (sticky mode) and only signal manual_stop.
-      // For other modes (AUTO/COUNTDOWN/FORCE_OFF), write mode=AUTO so Firebase reflects the stop promptly.
-      const currentMode = controlRef.current?.mode;
-      if (currentMode && currentMode !== "MANUAL") {
-        await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
-      }
-      window.setTimeout(() => {
-        void set(ref(db, `${CONTROL_PATH}/manual_stop`), false);
-      }, 5000);
+      // vNext: stopping countdown returns to AUTO (non-latching)
+      await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
       if (authUser?.uid) {
         await writeAuditEvent({
-          action: "control.run_stop",
+          action: "control.countdown_stop",
           uid: authUser.uid,
           email: authUser.email ?? null,
-          detail: "Manual run stopped",
+          detail: "Countdown stopped (returned to AUTO)",
         });
       }
     } catch (err) {
-      console.error("[RTDB] stopRun failed:", err);
+      console.error("[RTDB] stopCountdown failed:", err);
     }
   }, [authUser?.email, authUser?.uid]);
 
@@ -395,11 +417,13 @@ export function usePumpData() {
     setMode,
     acknowledgeError,
     requestReboot,
-    startManualRun,
+    setManualDesired,
     startCountdown,
     addCountdownTime,
     isAddingCountdownTime,
-    stopRun,
+    stopCountdown,
+    triggerEmergencyStop,
+    resetEmergencyStop,
     setBypassLevelSensor,
   };
 }

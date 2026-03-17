@@ -3,11 +3,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Timer, Power, PowerOff, Square, Plus } from "lucide-react";
+import { Timer, Power, PowerOff, Square, Plus, AlertOctagon, RotateCcw } from "lucide-react";
 
-/** v5.0: runMode includes MANUAL_OFF for MANUAL-mode-pump-off */
-type RunMode = "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "MANUAL_OFF" | "COUNTDOWN" | "FORCE_ON";
-type ControlMode = "AUTO" | "FORCE_ON" | "FORCE_OFF" | "COUNTDOWN" | "MANUAL";
+/** vNext: runMode includes MANUAL_ON/MANUAL_OFF and STOPPED (E-STOP latch) */
+type RunMode = "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL_ON" | "MANUAL_OFF" | "COUNTDOWN" | "STOPPED";
+type ControlMode = "AUTO" | "COUNTDOWN" | "MANUAL";
 
 interface RunControlsProps {
   runMode: RunMode;
@@ -17,15 +17,17 @@ interface RunControlsProps {
   isOverflowError?: boolean;
   isAdmin: boolean;
   esp32Online?: boolean;
+  manualDesired?: boolean;
+  emergencyStopLatched?: boolean;
   pendingAck?: boolean;
   onAcknowledge?: () => void;
-  /** Optional: deep-link into Emergency Controls section in ModeControls when FORCE_ON is active. */
-  onGoToEmergencyControls?: () => void;
   isAddingCountdownTime?: boolean;
-  onStartManual: () => void;
+  onSetManualDesired: (on: boolean) => void;
   onStartCountdown: (durationMin: number) => void;
   onAddCountdownTime: (addMinutes: number) => void;
-  onStop: () => void;
+  onStopCountdown: () => void;
+  onEmergencyStop: () => void;
+  onResetStop: () => void;
 }
 
 function formatMmSs(totalSec: number) {
@@ -48,14 +50,17 @@ export default function RunControls({
   isOverflowError = false,
   isAdmin,
   esp32Online = true,
+  manualDesired = false,
+  emergencyStopLatched = false,
   pendingAck = false,
   onAcknowledge,
   isAddingCountdownTime = false,
-  onStartManual,
+  onSetManualDesired,
   onStartCountdown,
   onAddCountdownTime,
-  onStop,
-  onGoToEmergencyControls,
+  onStopCountdown,
+  onEmergencyStop,
+  onResetStop,
 }: RunControlsProps) {
   const [busy, setBusy] = useState<"manual" | "countdown" | "add" | "stop" | null>(null);
   const [countdownMin, setCountdownMin] = useState<number>(10);
@@ -89,9 +94,9 @@ export default function RunControls({
   const controllerOffline = !esp32Online;
   const canAct = isAdmin && !isLockedOut && !controllerOffline;
 
-  // v5: Is pump currently active in MANUAL mode?
-  const isManualOn = controlMode === "MANUAL" && runMode === "MANUAL";
-  const isManualOff = controlMode === "MANUAL" && (runMode === "MANUAL_OFF" || runMode === "OFF");
+  // vNext: Is pump currently active in MANUAL mode?
+  const isManualOn = controlMode === "MANUAL" && manualDesired === true && runMode === "MANUAL_ON";
+  const isManualOff = controlMode === "MANUAL" && manualDesired === false && (runMode === "MANUAL_OFF" || runMode === "OFF");
   const isInManualMode = controlMode === "MANUAL";
   // v5: Is pump idle (can start countdown)?
   const isIdle = runMode === "OFF" || runMode === "AUTO_STANDBY" || runMode === "MANUAL_OFF";
@@ -99,16 +104,16 @@ export default function RunControls({
   return (
     <div className="space-y-3">
       {/* Header with run mode badge */}
-      <div className="flex items-center justify-between">
-        <h3 className="font-display font-semibold text-text-primary text-sm uppercase tracking-widest">
+      <div className="flex items-center justify-between min-w-0 gap-2">
+        <h3 className="font-display font-semibold text-text-primary text-sm uppercase tracking-widest min-w-0">
           Controls
         </h3>
         <span
           className={clsx(
-            "badge border font-mono text-[10px]",
-            runMode === "FORCE_ON" ? "bg-accent-red/15 text-accent-red border-accent-red/30 animate-pulse"
+            "badge border font-mono text-[10px] min-w-0 max-w-[60%] truncate",
+            runMode === "STOPPED" ? "bg-accent-red/15 text-accent-red border-accent-red/30"
               : runMode === "COUNTDOWN" ? "bg-accent-amber/10 text-accent-amber border-accent-amber/20"
-                : runMode === "MANUAL" ? "bg-accent-green/10 text-accent-green border-accent-green/20"
+                : runMode === "MANUAL_ON" ? "bg-accent-green/10 text-accent-green border-accent-green/20"
                   : runMode === "MANUAL_OFF" ? "bg-surface-3 text-accent-green border-accent-green/20"
                     : runMode === "AUTO" || runMode === "AUTO_STANDBY" ? "bg-accent-cyan/10 text-accent-cyan border-accent-cyan/20"
                       : "bg-surface-3 text-text-secondary border-surface-4"
@@ -117,43 +122,36 @@ export default function RunControls({
         >
           {runMode === "OFF" ? "OFF"
             : runMode === "AUTO_STANDBY" ? "Standby"
-            : runMode === "FORCE_ON" ? "⚡ OVERRIDE"
+            : runMode === "STOPPED" ? "STOPPED"
             : runMode === "MANUAL_OFF" ? "MANUAL (Off)"
+            : runMode === "MANUAL_ON" ? "MANUAL (On)"
             : runMode}
           {countdown ? ` ${countdown}` : ""}
         </span>
       </div>
 
-      {/* ── FORCE_ON notice ─────────────────────────────────────────── */}
-      {controlMode === "FORCE_ON" && (
-        <div className="p-2.5 rounded-xl bg-accent-red/10 border border-accent-red/25 space-y-1.5">
-          <p className="text-[10px] sm:text-xs font-mono text-accent-red font-semibold uppercase tracking-wide animate-pulse">
-            ⚡ Emergency Override — Run Without Safety
+      {/* ── E-STOP latch state ───────────────────────────────────────── */}
+      {emergencyStopLatched && (
+        <div className="p-2.5 rounded-xl bg-accent-red/10 border border-accent-red/25 space-y-2">
+          <p className="text-[10px] sm:text-xs font-mono text-accent-red font-semibold uppercase tracking-wide">
+            Emergency stop latched
           </p>
           <p className="text-[10px] font-mono text-text-secondary">
-            Pump runs ignoring all protections. To exit, use the Emergency Controls section in the mode selector.
+            Pump is stopped and locked out until Reset Stop is pressed (when safe).
           </p>
-          {onGoToEmergencyControls && (
-            <button
-              type="button"
-              onClick={onGoToEmergencyControls}
-              className="mt-0.5 inline-flex items-center justify-center px-3 py-1.5 rounded-lg border border-accent-amber/40 bg-accent-amber/10 text-accent-amber text-[10px] font-mono font-semibold hover:bg-accent-amber/20 min-h-[32px]"
-            >
-              Go to Emergency Controls
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── FORCE_OFF notice ────────────────────────────────────────── */}
-      {controlMode === "FORCE_OFF" && (
-        <div className="p-2.5 rounded-xl bg-accent-red/10 border border-accent-red/25">
-          <p className="text-[10px] sm:text-xs font-mono text-accent-red font-semibold uppercase tracking-wide">
-            Force Off — Pump Locked Out
-          </p>
-          <p className="text-[10px] font-mono text-text-secondary mt-0.5">
-            Switch to AUTO or MANUAL to enable pump controls.
-          </p>
+          <button
+            type="button"
+            disabled={busy !== null || controllerOffline}
+            onClick={() => {
+              setBusy("stop");
+              try { onResetStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
+            }}
+            className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-accent-amber/40 bg-accent-amber/10 text-accent-amber font-mono text-xs sm:text-sm font-semibold hover:bg-accent-amber/20 disabled:opacity-50"
+            title="Reset emergency stop latch"
+          >
+            <RotateCcw size={14} />
+            Reset Stop
+          </button>
         </div>
       )}
 
@@ -184,20 +182,20 @@ export default function RunControls({
         </div>
       )}
 
-      {/* ── Main controls (hidden when FORCE_ON or FORCE_OFF or locked out) ── */}
-      {!isLockedOut && controlMode !== "FORCE_ON" && controlMode !== "FORCE_OFF" && (
+      {/* ── Main controls ─────────────────────────────────────────────── */}
+      {!isLockedOut && !emergencyStopLatched && (
         <>
           {/* ── AUTO mode: informational ─────────────────────────── */}
           {controlMode === "AUTO" && !isIdle && runMode === "AUTO" && (
-            <div className="p-2.5 rounded-xl bg-accent-cyan/5 border border-accent-cyan/15">
-              <p className="text-[10px] sm:text-xs font-mono text-accent-cyan">
+            <div className="p-3 rounded-xl bg-surface-2 border border-surface-3">
+              <p className="text-[10px] sm:text-xs font-mono text-text-secondary">
                 Pump is running automatically based on water level.
               </p>
             </div>
           )}
 
           {controlMode === "AUTO" && (runMode === "AUTO_STANDBY" || runMode === "OFF") && (
-            <div className="p-2.5 rounded-xl bg-surface-2 border border-surface-3">
+            <div className="p-3 rounded-xl bg-surface-2 border border-surface-3">
               <p className="text-[10px] sm:text-xs font-mono text-text-muted">
                 Automatic mode — pump starts when water drops below threshold.
               </p>
@@ -214,7 +212,7 @@ export default function RunControls({
                   disabled={busy !== null || !canAct || isManualOn}
                   onClick={() => {
                     setBusy("manual");
-                    try { onStartManual(); } finally { window.setTimeout(() => setBusy(null), 8000); }
+                    try { onSetManualDesired(true); } finally { window.setTimeout(() => setBusy(null), 8000); }
                   }}
                   className={clsx(
                     "px-3 py-3 rounded-xl border font-mono text-sm min-h-[56px] flex items-center justify-center gap-2 transition-all duration-200 touch-manipulation active:scale-[0.98]",
@@ -236,7 +234,7 @@ export default function RunControls({
                   disabled={busy !== null || !canAct || isManualOff}
                   onClick={() => {
                     setBusy("stop");
-                    try { onStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
+                    try { onSetManualDesired(false); } finally { window.setTimeout(() => setBusy(null), 8000); }
                   }}
                   className={clsx(
                     "px-3 py-3 rounded-xl border font-mono text-sm min-h-[56px] flex items-center justify-center gap-2 transition-all duration-200 touch-manipulation active:scale-[0.98]",
@@ -275,7 +273,7 @@ export default function RunControls({
                 disabled={busy !== null || controllerOffline}
                 onClick={() => {
                   setBusy("stop");
-                  try { onStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
+                  try { onStopCountdown(); } finally { window.setTimeout(() => setBusy(null), 8000); }
                 }}
                 className="w-full px-4 py-3 rounded-xl bg-accent-red/20 border border-accent-red/40 text-accent-red font-mono text-sm font-semibold hover:bg-accent-red/30 min-h-[56px] flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation active:scale-[0.98]"
                 title="Stop the pump now"
@@ -285,8 +283,10 @@ export default function RunControls({
               </button>
 
               {/* Add time */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[10px] font-mono text-text-muted block">Add time</label>
+              <div className="p-3 rounded-xl bg-surface-2 border border-surface-3 space-y-2">
+                <label className="text-[10px] font-mono text-text-muted uppercase tracking-widest block">
+                  Add time
+                </label>
                 <div className="flex flex-wrap items-center gap-2">
                   {ADD_TIME_PRESETS_MIN.map((m) => (
                     <button
@@ -333,18 +333,22 @@ export default function RunControls({
                       setBusy("add");
                       try { onAddCountdownTime(toAdd); } finally { window.setTimeout(() => setBusy(null), 8000); }
                     }}
-                    className="ml-auto min-h-[44px] px-3 py-2 rounded-xl border border-accent-amber/30 text-accent-amber font-mono text-xs sm:text-sm hover:bg-accent-amber/10 disabled:opacity-50"
+                    className="w-full sm:w-auto sm:ml-auto min-h-[44px] px-3 py-2 rounded-xl border border-accent-amber/30 text-accent-amber font-mono text-xs sm:text-sm hover:bg-accent-amber/10 disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
                     <Plus size={12} /> Add {customAddInput ? (parseInt(customAddInput, 10) || addTimeMin) : addTimeMin} min
                   </button>
                 </div>
+                <p className="text-[9px] font-mono text-text-muted">
+                  Tip: Add time is safer when flow is stable above the dry-run threshold.
+                </p>
               </div>
             </div>
           )}
 
-          {/* ── Semi-Auto Timer (action-first COUNTDOWN per ISA-101) ── */}
-          {/* Shown when pump is idle and NOT already in COUNTDOWN */}
-          {isIdle && controlMode !== "COUNTDOWN" && (
+          {/* ── Semi-Auto Timer (COUNTDOWN only) ───────────────────── */}
+          {/* Mode-specific control: duration selection should only appear in COUNTDOWN mode.
+              We still keep it visible during sync latency (controlMode=COUNTDOWN, runMode!=COUNTDOWN). */}
+          {controlMode === "COUNTDOWN" && isIdle && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-[10px] font-mono text-text-muted uppercase tracking-widest">
@@ -425,13 +429,30 @@ export default function RunControls({
               disabled={busy !== null || controllerOffline}
               onClick={() => {
                 setBusy("stop");
-                try { onStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
+                try { onEmergencyStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
               }}
               className="w-full px-4 py-3 rounded-xl bg-accent-red/20 border border-accent-red/40 text-accent-red font-mono text-sm font-semibold hover:bg-accent-red/30 min-h-[56px] flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation active:scale-[0.98]"
-              title="Stop the pump now"
+              title="Emergency stop"
             >
-              <Square size={16} />
-              Stop
+              <AlertOctagon size={16} />
+              Emergency Stop
+            </button>
+          )}
+
+          {/* E-Stop button visible when running (any mode) */}
+          {(runMode === "AUTO" || runMode === "COUNTDOWN" || runMode === "MANUAL_ON") && (
+            <button
+              type="button"
+              disabled={busy !== null || controllerOffline}
+              onClick={() => {
+                setBusy("stop");
+                try { onEmergencyStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
+              }}
+              className="w-full px-4 py-3 rounded-xl bg-accent-red border border-accent-red/80 text-white font-mono text-sm font-semibold hover:bg-accent-red/90 min-h-[56px] flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation active:scale-[0.98]"
+              title="Emergency stop"
+            >
+              <AlertOctagon size={16} />
+              Emergency Stop
             </button>
           )}
 

@@ -34,11 +34,8 @@ int  cfgIdleSensorIntervalMs   = IDLE_SENSOR_INTERVAL_MS_DEF;
 int  cfgIdleFirebaseIntervalMs = IDLE_FIREBASE_INTERVAL_MS_DEF;
 bool cfgBypassLevelSensor      = false;
 
-volatile uint32_t pulseCount  = 0;
-volatile uint64_t lastPulseUs = 0;
 float flowRateLpm             = 0.0f;
 int   waterLevelPct           = 0;
-float waterLevelEma           = 0.0f;
 bool  isRunning               = false;
 int   prevWaterLevelPct       = 0;
 
@@ -67,6 +64,16 @@ unsigned long levelSensorFailStartMs   = 0;
 unsigned long flowStuckStartMs         = 0;
 bool          flowStuckTimerActive  = false;
 unsigned long pumpOffStartMs        = 0;
+
+unsigned long remoteSensorLastRxMs            = 0;
+uint32_t      remoteSensorConsecutiveFailCount = 0;
+int           remoteSensorLastErrCode         = -1;
+bool          remoteSensorOnline              = false;
+bool          remoteSensorStable              = false;
+uint32_t      remoteSensorOkStreak            = 0;
+uint32_t      remoteSensorFailStreak          = 0;
+
+unsigned long levelLastUpdateMs               = 0;
 
 uint32_t ultrasonicCycleOkCount       = 0;
 uint32_t ultrasonicCycleTimeoutCount  = 0;
@@ -124,17 +131,17 @@ unsigned long lastWifiRetryMs    = 0;
 unsigned long lastHeapDiagMs      = 0;
 uint32_t      minFreeHeapObserved = 0;
 
-// Phase 7 manual run + v3.0 COUNTDOWN state
+// Runtime mode / operator intent
 String        runMode          = "OFF";
 String        runPrevPumpMode  = "AUTO";
 unsigned long runStartMs       = 0;
-bool          isManualRun      = false;  // true when started via manual_start (dashboard never writes run_mode)
+bool          isManualRun      = false;  // legacy flag kept for compatibility
 String        lastFaultCode    = "";
 String        lastFaultMessage = "";
 
-// v4.0: FORCE_ON auto-timeout tracking (R-02)
-unsigned long forceOnStartMs       = 0;
-int           cfgForceOnMaxMin     = FORCE_ON_MAX_MIN_DEFAULT;
+// Operator intent + stop latch
+bool          manualDesired        = false;
+bool          emergencyStopLatched = false;
 
 bool          isCountdownActive = false;
 unsigned long countdownEndMs   = 0;
