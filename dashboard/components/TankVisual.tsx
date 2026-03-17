@@ -11,9 +11,18 @@ interface TankVisualProps {
   levelEstimateActive?: boolean;
   pumpStartLevel?: number;
   pumpStopLevel?: number;
+  levelLastValidAgeSec?: number;
 }
 
-export default function TankVisual({ level, isRunning, isError, levelEstimateActive = false, pumpStartLevel, pumpStopLevel }: TankVisualProps) {
+export default function TankVisual({
+  level,
+  isRunning,
+  isError,
+  levelEstimateActive = false,
+  pumpStartLevel,
+  pumpStopLevel,
+  levelLastValidAgeSec,
+}: TankVisualProps) {
   const fillRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -22,12 +31,20 @@ export default function TankVisual({ level, isRunning, isError, levelEstimateAct
     }
   }, [level]);
 
+  const isStale = typeof levelLastValidAgeSec === "number" && levelLastValidAgeSec > 300;
+
   const fillColor =
-    isError            ? "bg-accent-red/70"
-    : levelEstimateActive ? "bg-accent-amber/50"
-    : level <= 20      ? "bg-accent-amber/80"
-    : level >= 90      ? "bg-accent-cyan/80"
-    :                    "bg-accent-green/70";
+    isError
+      ? "bg-accent-red/70"
+      : levelEstimateActive
+        ? "bg-accent-amber/50"
+        : level <= 10
+          ? "bg-accent-red/70"
+          : level <= 30
+            ? "bg-accent-amber/80"
+            : level >= 100
+              ? "bg-accent-green/80"
+              : "bg-accent-cyan/80";
 
   const glowColor =
     isError ? "shadow-[0_0_30px_rgba(255,59,92,0.4)]"
@@ -50,7 +67,8 @@ export default function TankVisual({ level, isRunning, isError, levelEstimateAct
               "absolute bottom-0 left-0 right-0 transition-all duration-1000 ease-out",
               fillColor,
               glowColor,
-              levelEstimateActive && "border-t-2 border-dashed border-amber-400/60"
+              levelEstimateActive && "border-t-2 border-dashed border-amber-400/60",
+              isStale && "opacity-60"
             )}
             style={{ height: `${level}%` }}
           >
@@ -114,25 +132,39 @@ export default function TankVisual({ level, isRunning, isError, levelEstimateAct
 
       {/* Level readout */}
       <div className="text-center">
-        <div className={clsx(
-          "text-2xl sm:text-4xl font-display font-bold tabular-nums leading-none",
-          isError            ? "text-accent-red"
-          : levelEstimateActive ? "text-accent-amber"
-          : level <= 20      ? "text-accent-amber"
-          :                    "text-gradient-cyan"
-        )}>
-          {levelEstimateActive ? "~" : ""}{level}<span className="text-lg sm:text-xl font-normal opacity-70">%</span>
+        <div
+          className={clsx(
+            "text-3xl sm:text-4xl font-display font-bold tabular-nums leading-none",
+            isError
+              ? "text-accent-red"
+              : levelEstimateActive
+                ? "text-accent-amber"
+                : level <= 10
+                  ? "text-accent-red"
+                  : level <= 30
+                    ? "text-accent-amber"
+                    : level >= 100
+                      ? "text-accent-green"
+                      : "text-gradient-cyan"
+          )}
+        >
+          {(levelEstimateActive || isStale) ? "~" : ""}{level}
+          <span className="text-lg sm:text-xl font-normal opacity-70">%</span>
         </div>
         <div className="text-[10px] sm:text-xs font-mono text-text-secondary mt-1 uppercase tracking-wider">
           {levelEstimateActive
             ? "Estimated · ±5%"
             : isError
               ? "Error — pump stopped"
-              : level <= 20
-                ? "Low Water"
-                : level >= 90
-                  ? "Nearly Full"
-                  : "Normal"}
+              : isStale
+                ? "Level reading stale"
+                : level <= 10
+                  ? "Critical Low"
+                  : level <= 30
+                    ? "Low Water"
+                    : level >= 100
+                      ? "Full"
+                      : "Normal"}
         </div>
       </div>
     </div>

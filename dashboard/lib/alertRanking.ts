@@ -8,11 +8,13 @@ import type { PumpStatus } from "./types";
 import { getFaultDisplay } from "./faultCodes";
 
 export type AlertSeverity = "red" | "amber" | "blue";
+export type AlertTier = "critical" | "warning" | "info";
 
 export interface RankedAlert {
   id: string;
   rank: number;
   severity: AlertSeverity;
+  tier: AlertTier;
   title: string;
   description: string;
   /** Optional recovery line; fault-based alerts use getFaultDisplay recovery. */
@@ -20,6 +22,7 @@ export interface RankedAlert {
 }
 
 const RANK = {
+  force_on_override: 0,    // v5.0: highest priority — absolute safety bypass
   controller_offline: 1,
   dry_run: 2,
   overflow: 3,
@@ -40,11 +43,25 @@ export function getRankedAlerts(
 ): RankedAlert[] {
   const alerts: RankedAlert[] = [];
 
+  // v4.0: FORCE_ON override — highest priority alert
+  if (status?.run_mode === "FORCE_ON") {
+    alerts.push({
+      id: "force_on_override",
+      rank: RANK.force_on_override,
+      severity: "red",
+      tier: "critical",
+      title: "⚡ FORCE ON — All Safety Bypassed",
+      description: "Pump is running in absolute override. All protections are disabled.",
+      recovery: "Exit to AUTO or use FORCE OFF via the Mode selector.",
+    });
+  }
+
   if (!esp32Online) {
     alerts.push({
       id: "controller_offline",
       rank: RANK.controller_offline,
       severity: "red",
+      tier: "critical",
       title: "Controller offline",
       description: "No status update from the pump controller. Check power and network.",
       recovery: "Wait for the controller to come back online or check wiring and WiFi.",
@@ -61,9 +78,11 @@ export function getRankedAlerts(
       id: "dry_run",
       rank: RANK.dry_run,
       severity: "red",
+      tier: "critical",
       title: fault?.title ?? "Dry-run lockout",
-      description: fault?.message ?? "No water flow detected. Pump has been stopped.",
-      recovery: fault?.recovery,
+      description: fault?.message ?? "No water flow detected. Pump has been stopped to protect the motor.",
+      recovery:
+        "1) Check water source and inlet pipe\n2) Restore normal flow or fix any blockage/leaks\n3) Tap Clear Error (or Clear Error & Restart in MANUAL) only when water is available",
     });
   }
 
@@ -73,9 +92,11 @@ export function getRankedAlerts(
       id: "overflow",
       rank: RANK.overflow,
       severity: "red",
+      tier: "critical",
       title: fault?.title ?? "Max runtime exceeded",
-      description: fault?.message ?? "Max runtime exceeded. Check tank sensor.",
-      recovery: fault?.recovery,
+      description: fault?.message ?? "Max runtime exceeded. Pump was stopped to prevent possible overflow or overheating.",
+      recovery:
+        "1) Confirm tank level and overflow/relief path\n2) Inspect level sensor and max runtime settings\n3) Tap Clear Error only after the underlying issue is resolved",
     });
   }
 
@@ -84,6 +105,7 @@ export function getRankedAlerts(
       id: "auto_maintenance",
       rank: RANK.auto_maintenance,
       severity: "amber",
+      tier: "warning",
       title: "Auto-Maintenance active",
       description: "Level sensor offline. System switched to flow-only mode automatically.",
       recovery: "Supervise pump. Bypass clears when the sensor recovers or you turn it off in settings.",
@@ -95,6 +117,7 @@ export function getRankedAlerts(
       id: "maintenance",
       rank: RANK.maintenance,
       severity: "amber",
+      tier: "warning",
       title: "Maintenance active",
       description: "Level sensor bypassed. Flow guard only. Supervise pump.",
       recovery: "Turn off bypass in Device settings when done.",
@@ -106,6 +129,7 @@ export function getRankedAlerts(
       id: "level_sensor",
       rank: RANK.level_sensor,
       severity: "amber",
+      tier: "warning",
       title: "Level sensor offline",
       description: "Ultrasonic sensor is not reporting. Level may be wrong.",
       recovery: "Check sensor wiring. Enable bypass in Device settings for interim operation.",
@@ -116,7 +140,8 @@ export function getRankedAlerts(
     alerts.push({
       id: "flow_sensor",
       rank: RANK.flow_sensor,
-      severity: "amber",
+      severity: "blue",
+      tier: "info",
       title: "Flow sensor abnormal",
       description: "Flow sensor reading is abnormal. Check wiring or replace sensor.",
       recovery: "Auto-clears when the sensor recovers.",
@@ -128,6 +153,7 @@ export function getRankedAlerts(
       id: "sleeping",
       rank: RANK.sleeping,
       severity: "blue",
+      tier: "info",
       title: "Sleeping",
       description: "Quiet hours active. Auto mode paused until end time.",
       recovery: "Manual run and low-water override still work.",

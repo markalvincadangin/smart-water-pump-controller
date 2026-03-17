@@ -144,15 +144,16 @@ export default function StatusBar({ connected, esp32Online, updatedAt, mode, isL
           </span>
         )}
 
-        {/* Mode badge */}
+        {/* Mode badge — v4.0: FORCE_ON = pulsing red override, MANUAL = green */}
         <span className={clsx(
           "badge text-[9px] sm:text-[10px] font-semibold",
           mode === "AUTO" && "bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20",
-          mode === "FORCE_ON" && "bg-accent-green/10 text-accent-green border border-accent-green/20",
+          mode === "MANUAL" && "bg-accent-green/10 text-accent-green border border-accent-green/20",
+          mode === "FORCE_ON" && "bg-accent-red/15 text-accent-red border border-accent-red/30 animate-pulse",
           mode === "FORCE_OFF" && "bg-accent-red/10 text-accent-red border border-accent-red/20",
           mode === "COUNTDOWN" && "bg-accent-amber/10 text-accent-amber border border-accent-amber/20"
         )}>
-          {mode === "FORCE_ON" ? "F.ON" : mode === "FORCE_OFF" ? "F.OFF" : mode}
+          {mode === "FORCE_ON" ? "⚡ OVERRIDE" : mode === "FORCE_OFF" ? "F.OFF" : mode}
         </span>
 
         {/* Freshness */}

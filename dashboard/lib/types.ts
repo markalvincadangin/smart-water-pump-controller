@@ -19,7 +19,8 @@ export interface PumpStatus {
   last_boot_reason: string;  // Phase 2: e.g. 'Power-on', 'Task watchdog'
   uptime_minutes?: number; // Phase 5: Uptime counter (prevents 49-day rollover)
   // Phase 7 manual + v3.0 COUNTDOWN (replaces timed run)
-  run_mode?: "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "COUNTDOWN";
+  /** v5.0: Added "MANUAL_OFF" for MANUAL-mode pump-off state */
+  run_mode?: "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "MANUAL_OFF" | "COUNTDOWN" | "FORCE_ON";
   countdown_remaining_sec?: number;
   last_fault_code?: string;
   last_fault_message?: string;
@@ -52,7 +53,8 @@ export interface PumpStatus {
 
 /** /pump_system/control — Cloud → ESP32 */
 export interface PumpControl {
-  mode: "AUTO" | "FORCE_ON" | "FORCE_OFF" | "COUNTDOWN";
+  /** v4.0: Added "MANUAL" mode — operator-initiated, full safety active */
+  mode: "AUTO" | "FORCE_ON" | "FORCE_OFF" | "COUNTDOWN" | "MANUAL";
   clear_error: boolean;
   reboot_request_id?: number;
   manual_start?: boolean;
@@ -79,6 +81,17 @@ export interface HistoryEntry {
   time: string;  // HH:MM:SS
   level: number;
   flow: number;
+}
+
+/** Lightweight event markers to overlay on the history chart */
+export type HistoryEventType = "mode_change" | "run_start" | "run_stop" | "fault";
+
+export interface HistoryEvent {
+  time: string;            // HH:MM:SS (aligned with HistoryEntry.time)
+  type: HistoryEventType;
+  runMode?: string;
+  prevRunMode?: string;
+  faultCode?: string;
 }
 
 /** /pump_system/config/notifications_by_user/{uid} — per-user notification settings (Dashboard ↔ Cloud Function) */

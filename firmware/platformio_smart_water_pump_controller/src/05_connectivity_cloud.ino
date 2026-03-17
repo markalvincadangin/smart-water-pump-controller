@@ -208,8 +208,11 @@ void readFirebaseControl() {
     newMode.trim();
     newMode.toUpperCase();
     firebaseReadMode = newMode;
-    if (newMode == "AUTO" || newMode == "FORCE_ON" || newMode == "FORCE_OFF" || newMode == "COUNTDOWN") {
-      bool runActive = (runMode == "MANUAL" || (pumpMode == "COUNTDOWN" && isCountdownActive));
+    if (newMode == "AUTO" || newMode == "FORCE_ON" || newMode == "FORCE_OFF" || newMode == "COUNTDOWN" || newMode == "MANUAL") {
+      // v4.0: runActive includes FORCE_ON (absolute override needs run-active intercept)
+      bool runActive = (pumpMode == "MANUAL" && isRunning)
+                    || (pumpMode == "COUNTDOWN" && isCountdownActive)
+                    || (pumpMode == "FORCE_ON");
       if (runActive && newMode == "FORCE_OFF") {
         Serial.println("[FIREBASE] FORCE_OFF received during run — stopping.");
         setPump(false);
@@ -245,6 +248,9 @@ void readFirebaseControl() {
           pumpMode = newMode;
         }
       }
+    } else {
+      // R-03: Log unknown mode values for debugging
+      Serial.printf("[FIREBASE] Unknown mode received: '%s'. Ignoring.\n", newMode.c_str());
     }
   }
 
@@ -252,18 +258,24 @@ void readFirebaseControl() {
   if (jd.success) {
     bool v = jd.boolValue;
     if (v && !lastManualStop) {
-      Serial.println("[FIREBASE] Manual stop requested. Reverting to AUTO.");
-      setPump(false);
-      runMode = "OFF";
-      runStartMs = 0;
-      isManualRun = false;
-      pumpMode = "AUTO";
-      pendingModeWriteback = true;
-      pendingModeWritebackSentMs = millis();
-      Firebase.RTDB.setString(&fbdo, "/pump_system/control/mode", "AUTO");
-      if (isCountdownActive) {
-        isCountdownActive = false;
-        countdownEndMs = 0;
+      // v5.0: manual_stop is IGNORED when FORCE_ON or FORCE_OFF is active.
+      if (pumpMode == "FORCE_ON" || pumpMode == "FORCE_OFF") {
+        Serial.println("[FIREBASE] Manual stop ignored: override/lockout active. Use mode selector.");
+      } else {
+        // v5: manual_stop turns pump off but mode stays (sticky MANUAL).
+        Serial.println("[FIREBASE] Manual stop requested. Pump OFF (mode unchanged).");
+        setPump(false);
+        runMode = "MANUAL_OFF";
+        runStartMs = 0;
+        isManualRun = false;
+        if (isCountdownActive) {
+          isCountdownActive = false;
+          countdownEndMs = 0;
+          pumpMode = "AUTO";
+          pendingModeWriteback = true;
+          pendingModeWritebackSentMs = millis();
+          Firebase.RTDB.setString(&fbdo, "/pump_system/control/mode", "AUTO");
+        }
       }
     }
     lastManualStop = v;
@@ -334,12 +346,17 @@ void readFirebaseControl() {
     if (v && !lastManualStart) {
       if (isDryRunError || isOverflowError) {
         Serial.println("[FIREBASE] Manual run rejected: error lockout active.");
+      } else if (pumpMode == "FORCE_OFF") {
+        // v4.0: manual_start is rejected when FORCE_OFF is active
+        Serial.println("[FIREBASE] Manual run rejected: FORCE_OFF active.");
+      } else if (pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
+        Serial.println("[FIREBASE] Manual run rejected: minimum off-time not elapsed.");
       } else {
-        runPrevPumpMode = pumpMode;
-        pumpMode = "FORCE_ON";
+        // v4.0: manual_start sets MANUAL (full safety), not FORCE_ON
+        pumpMode   = "MANUAL";
         isManualRun = true;
         runStartMs = millis();
-        Serial.println("[FIREBASE] Manual run started.");
+        Serial.println("[FIREBASE] Manual run started (MANUAL mode, full safety active).");
       }
     }
     lastManualStart = v;

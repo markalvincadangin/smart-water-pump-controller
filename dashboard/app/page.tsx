@@ -33,7 +33,9 @@ export default function DashboardPage() {
   const {
     snapshot,
     history,
+    historyEvents,
     connected,
+    degraded,
     authChecked,
     authUser,
     error,
@@ -197,75 +199,107 @@ export default function DashboardPage() {
               );
             })()}
 
-            {/* Ranked alerts (v2 §11.3): controller offline, dry-run, overflow, auto-maintenance, maintenance, level/flow error, sleeping */}
-            {getRankedAlerts(snapshot?.status, esp32Online).map((alert) => (
-              <div
-                key={alert.id}
-                className={alert.severity === "red"
-                  ? "flex flex-col gap-1 sm:gap-2 p-3 rounded-xl bg-accent-red/10 border border-accent-red/30 text-accent-red text-xs sm:text-sm font-mono"
-                  : alert.severity === "amber"
-                    ? "flex flex-col gap-1 p-3 rounded-xl bg-accent-amber/10 border border-accent-amber/30 text-accent-amber text-xs sm:text-sm font-mono"
-                    : "flex flex-col gap-0.5 p-2.5 rounded-lg bg-accent-cyan/10 border border-accent-cyan/20 text-accent-cyan text-xs font-mono"
-                }
-              >
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <AlertTriangle size={14} className="shrink-0" />
-                    <span className="font-semibold uppercase tracking-wide">{alert.title}</span>
-                  </div>
-                  {(alert.id === "dry_run" || alert.id === "overflow") && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPendingAck(true);
-                        toast({ kind: "info", title: "Sending acknowledge…" });
-                        acknowledgeError();
-                        window.setTimeout(() => {
-                          setPendingAck((prev) => {
-                            if (prev) toast({ kind: "warning", title: "Command timed out" });
-                            return false;
-                          });
-                        }, 8000);
-                      }}
-                      disabled={pendingAck || !esp32Online}
-                      className="min-h-[44px] min-w-[44px] shrink-0 px-3 py-2 rounded-lg bg-accent-red/20 border border-accent-red/50 text-accent-red text-xs font-mono font-semibold hover:bg-accent-red/30 touch-manipulation disabled:opacity-50"
+            {/* Ranked alerts with 3-tier hierarchy: critical, warning, informational (collapsed) */}
+            {(() => {
+              const alerts = getRankedAlerts(snapshot?.status, esp32Online);
+              const criticalAndWarning = alerts.filter((a) => a.tier === "critical" || a.tier === "warning");
+              const infoAlerts = alerts.filter((a) => a.tier === "info");
+
+              return (
+                <>
+                  {criticalAndWarning.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className={alert.severity === "red"
+                        ? "flex flex-col gap-1 sm:gap-2 p-3 rounded-xl bg-accent-red/10 border border-accent-red/30 text-accent-red text-xs sm:text-sm font-mono"
+                        : "flex flex-col gap-1 p-3 rounded-xl bg-accent-amber/10 border border-accent-amber/30 text-accent-amber text-xs sm:text-sm font-mono"
+                      }
                     >
-                      {pendingAck ? "Sending…" : "Clear Error"}
-                    </button>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <AlertTriangle size={14} className="shrink-0" />
+                          <span className="font-semibold uppercase tracking-wide">{alert.title}</span>
+                        </div>
+                        {(alert.id === "dry_run" || alert.id === "overflow") && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPendingAck(true);
+                              toast({ kind: "info", title: "Sending acknowledge…" });
+                              acknowledgeError();
+                              window.setTimeout(() => {
+                                setPendingAck((prev) => {
+                                  if (prev) toast({ kind: "warning", title: "Command timed out" });
+                                  return false;
+                                });
+                              }, 8000);
+                            }}
+                            disabled={pendingAck || !esp32Online || degraded}
+                            className="min-h-[44px] min-w-[44px] shrink-0 px-3 py-2 rounded-lg bg-accent-red/20 border border-accent-red/50 text-accent-red text-xs font-mono font-semibold hover:bg-accent-red/30 touch-manipulation disabled:opacity-50"
+                          >
+                            {pendingAck
+                              ? "Sending…"
+                              : snapshot?.control.mode === "MANUAL"
+                                ? "Clear Error & Restart"
+                                : "Clear Error"}
+                          </button>
+                        )}
+                        {(alert.id === "level_sensor" || alert.id === "maintenance") && (() => {
+                          const bypassAlreadyOn = snapshot?.status?.bypass_level_sensor === true;
+                          const showAsOn = alert.id === "maintenance" || (alert.id === "level_sensor" && bypassAlreadyOn);
+                          return (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!isAdmin || showAsOn) return;
+                                setBypassAlertBusy(true);
+                                toast({ kind: "info", title: "Enabling bypass…" });
+                                try {
+                                  await setBypassLevelSensor(true);
+                                  toast({ kind: "success", title: "Bypass enabled", detail: "Controller will apply when online." });
+                                } catch (e) {
+                                  console.error("[Bypass]", e);
+                                  toast({ kind: "error", title: "Failed to enable bypass", detail: e instanceof Error ? e.message : "Check connection and permissions." });
+                                } finally {
+                                  setBypassAlertBusy(false);
+                                }
+                              }}
+                              disabled={!isAdmin || showAsOn || bypassAlertBusy}
+                              className="min-h-[44px] min-w-[44px] shrink-0 px-3 py-2 rounded-lg bg-accent-amber/20 border border-accent-amber/50 text-accent-amber text-xs font-mono font-semibold hover:bg-accent-amber/30 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={!isAdmin ? "Admin access required" : showAsOn ? "Bypass already enabled" : "Enable level sensor bypass"}
+                            >
+                              {bypassAlertBusy ? "Sending…" : showAsOn ? "Bypass On" : "Enable Bypass"}
+                            </button>
+                          );
+                        })()}
+                      </div>
+                      <span className="min-w-0 text-text-primary">{alert.description}</span>
+                      {alert.recovery && <span className="min-w-0 text-text-muted whitespace-pre-line">{alert.recovery}</span>}
+                    </div>
+                  ))}
+
+                  {infoAlerts.length > 0 && (
+                    <div className="flex flex-col gap-0.5 p-2.5 rounded-lg bg-accent-cyan/10 border border-accent-cyan/20 text-accent-cyan text-xs font-mono">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle size={14} className="shrink-0" />
+                        <span className="font-semibold uppercase tracking-wide">
+                          System notices ({infoAlerts.length})
+                        </span>
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5 text-[11px] text-text-primary">
+                        {infoAlerts.map((alert) => (
+                          <li key={alert.id}>
+                            <span className="font-semibold text-accent-cyan">{alert.title}</span>
+                            {": "}
+                            <span>{alert.description}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
-                  {(alert.id === "level_sensor" || alert.id === "maintenance") && (() => {
-                    const bypassAlreadyOn = snapshot?.status?.bypass_level_sensor === true;
-                    const showAsOn = alert.id === "maintenance" || (alert.id === "level_sensor" && bypassAlreadyOn);
-                    return (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!isAdmin || showAsOn) return;
-                        setBypassAlertBusy(true);
-                        toast({ kind: "info", title: "Enabling bypass…" });
-                        try {
-                          await setBypassLevelSensor(true);
-                          toast({ kind: "success", title: "Bypass enabled", detail: "Controller will apply when online." });
-                        } catch (e) {
-                          console.error("[Bypass]", e);
-                          toast({ kind: "error", title: "Failed to enable bypass", detail: e instanceof Error ? e.message : "Check connection and permissions." });
-                        } finally {
-                          setBypassAlertBusy(false);
-                        }
-                      }}
-                      disabled={!isAdmin || showAsOn || bypassAlertBusy}
-                      className="min-h-[44px] min-w-[44px] shrink-0 px-3 py-2 rounded-lg bg-accent-amber/20 border border-accent-amber/50 text-accent-amber text-xs font-mono font-semibold hover:bg-accent-amber/30 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={!isAdmin ? "Admin access required" : showAsOn ? "Bypass already enabled" : "Enable level sensor bypass"}
-                    >
-                      {bypassAlertBusy ? "Sending…" : showAsOn ? "Bypass On" : "Enable Bypass"}
-                    </button>
-                    );
-                  })()}
-                </div>
-                <span className="min-w-0 text-text-primary">{alert.description}</span>
-                {alert.recovery && <span className="min-w-0 text-text-muted">{alert.recovery}</span>}
-              </div>
-            ))}
+                </>
+              );
+            })()}
 
             {snapshot?.status == null ? (
               <DashboardSkeleton />
@@ -279,7 +313,7 @@ export default function DashboardPage() {
               status={snapshot?.status ?? null}
               config={config}
               isAdmin={isAdmin}
-              esp32Online={esp32Online}
+              esp32Online={esp32Online && !degraded}
               pendingMode={pendingMode}
               pendingAck={pendingAck}
               onSetMode={(nextMode) => {
@@ -332,6 +366,7 @@ export default function DashboardPage() {
               connected={connected}
               updateLabel={updateLabel}
               history={history}
+              events={historyEvents}
               pumpStartLevel={config?.pump_start_level ?? DEFAULT_DEVICE_CONFIG.pump_start_level}
               pumpStopLevel={config?.pump_stop_level ?? DEFAULT_DEVICE_CONFIG.pump_stop_level}
             />
