@@ -6,7 +6,15 @@
         "/login"
       ],
       "startServerCommand": "npm run start",
-      "startServerReadyPattern": "started server",
+      "startServerReadyPattern": "Ready in|started server on|Ready on|ready - started server on",
+      "startServerReadyTimeout": 60000,
+      "settings": {
+        "chromeFlags": [
+          "--disable-gpu",
+          "--no-first-run",
+          "--no-default-browser-check"
+        ]
+      },
       "numberOfRuns": 1
     },
     "assert": {

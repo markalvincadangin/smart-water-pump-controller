@@ -3,7 +3,7 @@
 Next.js 14 + Firebase RTDB real-time dashboard for the ESP32 pump controller.  
 Access is protected by **Google sign-in**; only authorized users can view and control the pump.
 
-**Detailed system documentation:** For architecture, data flow, and feature overview, see [docs/releases/v2.0/dashboard-documentation.md](../docs/releases/v2.0/dashboard-documentation.md). For the exact UI structure and behavior, see [docs/releases/v2.0/dashboard-ux-spec.md](../docs/releases/v2.0/dashboard-ux-spec.md).
+**Current specs:** See [docs/specs/dashboard.md](../docs/specs/dashboard.md) and [docs/specs/firmware.md](../docs/specs/firmware.md).
 
 ---
 
@@ -55,8 +55,8 @@ Firebase Console → Project Settings → General → Your apps → Web → SDK 
 
 For the full RTDB contract and dashboard behavior reference, see:
 
-- `docs/releases/v2.0/firmware-rtdb-spec.md`
-- `docs/releases/v2.0/dashboard-ux-spec.md`
+- `docs/specs/firmware.md`
+- `docs/specs/dashboard.md`
 
 ### 5. Enable Firebase services
 In the Firebase Console:
@@ -109,7 +109,7 @@ dashboard/
 │   └── globals.css         # Global styles + Tailwind
 ├── components/
 │   ├── TankVisual.tsx      # Animated tank level + start/stop reference lines, MANUAL_OFF + stale/estimate styling
-│   ├── ModeControls.tsx    # AUTO / MANUAL pill + Emergency Controls (FORCE_OFF, FORCE_ON with 2-step confirm)
+│   ├── ModeControls.tsx    # AUTO / MANUAL / COUNTDOWN selector (vNext)
 │   ├── RunControls.tsx     # MANUAL ON/OFF toggle, Semi-Auto Timer (COUNTDOWN), countdown timer/stop/add-time, inline Clear Error
 │   ├── HistoryChart.tsx    # Dual Y-axis area chart (level + flow)
 │   ├── StatCard.tsx        # Metric display card
@@ -168,7 +168,7 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 |------------------------|-------------------------------------------------------------------|
 | Live tank level        | Animated tank graphic; StatCard shows configurable start/stop %   |
 | Flow rate              | YF-G1 sensor data; low-flow warning uses configurable threshold   |
-| Mode control           | AUTO / FORCE ON / FORCE OFF / COUNTDOWN with instant Firebase push |
+| Mode control           | AUTO / MANUAL (intent ON/OFF) / COUNTDOWN with instant Firebase push |
 | Smart runs             | Manual and countdown runs with pill-button duration selector; auto-stop on timer, tank full, or safety fault |
 | Dry-run acknowledge    | Red alert banner with ACK; message shows configured timeout (s)   |
 | Device config (gear)   | Tank calibration, pump thresholds, safety, sleep schedule, advanced — with **tooltips** (hover/tap for help) |
@@ -190,10 +190,10 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 
 ## Safety Notes
 
-- **FORCE ON** bypasses tank level automation. The TOR thermal protection on the physical hardware remains active regardless of dashboard state.
+- Dashboard does **not** provide any “override safety” controls. All safety protections remain enforced by firmware.
 - **Dry-run lockout** can only be cleared via the ACK button after physically verifying the water source.
 - **clear_error** acknowledges dry-run, sensor failure, and overflow errors in one action.
 
 ---
 
-*For implemented features and UX details, see [docs/releases/v2.0/dashboard-ux-spec.md](../docs/releases/v2.0/dashboard-ux-spec.md) and [docs/releases/v2.0/dashboard-documentation.md](../docs/releases/v2.0/dashboard-documentation.md). For the v3.0 firmware contract, see [docs/releases/v3.0/firmware-spec.md](../docs/releases/v3.0/firmware-spec.md).*
+Historical release notes remain under `docs/releases/` but may not match current code.

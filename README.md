@@ -22,8 +22,8 @@ compromises the physical safety of the motor:
 │  View level & flow, switch modes, acknowledge errors            │
 ├─────────────────────────────────────────────────────────────────┤
 │  LAYER 2 — FIRMWARE (ESP32)                                     │
-│  Reads sensors every 1s · Runs AUTO / FORCE_ON / FORCE_OFF      │
-│  Dry-run lockout after 30s of zero flow while pump is running   │
+│  Polls tank node over RS-485 · Runs AUTO / MANUAL / COUNTDOWN   │
+│  Emergency stop latch · Dry-run lockout · Overflow cutoff       │
 ├─────────────────────────────────────────────────────────────────┤
 │  LAYER 1 — HARDWARE (always active)                             │
 │  20A MCB  →  Contactor (CJX2-2510)  →  TOR (LR2-D13)  →  Pump │
@@ -32,10 +32,11 @@ compromises the physical safety of the motor:
 ```
 
 **Normal AUTO operation:**
-1. JSN-SR04T ultrasonic sensor measures water level in the tank
-2. YF-G1 flow sensor monitors water flow in the discharge pipe
-3. When tank drops to configured start level (default ≤30%) → ESP32 closes relay → contactor energizes → pump starts
-4. When tank reaches configured stop level (default ≥100%) → ESP32 opens relay → contactor releases → pump stops
+1. ESP8266 tank node reads: JSN-SR04T ultrasonic (distance) + YF-G1 flow (pulses)
+2. ESP32 polls the tank node over RS-485 with CRC-framed messages
+3. ESP32 computes level (%) from the configured tank calibration and enforces freshness/stability gates
+4. When tank drops to configured start level → ESP32 closes relay → contactor energizes → pump starts
+5. When tank reaches configured stop level → ESP32 opens relay → contactor releases → pump stops
 5. Live status streams to Firebase and appears on the dashboard in real time
 
 ---
@@ -52,15 +53,8 @@ smart-water-pump-controller/
 │
 ├── docs/
 │   ├── README.md                       ← Docs index
-│   ├── releases/
-│   │   ├── v2.0/
-│   │   │   ├── firmware-rtdb-spec.md   ← Firmware & RTDB contract (v2.0)
-│   │   │   ├── dashboard-ux-spec.md    ← Dashboard UI/UX spec (v2.0)
-│   │   │   ├── deploy.md               ← Deploy guide for v2.0
-│   │   │   └── changelog.md            ← Summary of v2 changes
-│   │   └── v3.0/
-│   │       ├── firmware-spec.md        ← Firmware behavior (v3.0)
-│   │       └── migration-from-v2.md    ← Notes for upgrading from v2 → v3
+│   ├── archive/
+│   │   ├── releases/                   ← Historical versioned docs (v2/v3, etc.)
 │   ├── operations/                     ← Troubleshooting, safety (future)
 │   ├── assets/
 │   │   ├── diagrams/                   ← System diagrams
@@ -71,15 +65,17 @@ smart-water-pump-controller/
 │   ├── arduino_smart_water_pump_controller/
 │   │   ├── arduino_smart_water_pump_controller.ino  ← Open this in Arduino IDE and flash to ESP32
 │   │   ├── 01_config.ino
-│   │   ├── 02_sensors.ino
+│   │   ├── 02_rs485_comm.ino
 │   │   ├── 03_safety_pump.ino
 │   │   ├── 04_persistence.ino
 │   │   ├── 05_connectivity_cloud.ino
 │   │   └── smart_water_pump_controller_shared.h
+│   ├── arduino_sensor_node/                           ← Arduino sketch for NodeMCU V2 (ESP8266 tank node)
 │   ├── platformio_smart_water_pump_controller/      ← PlatformIO project (VS Code)
 │   │   ├── platformio.ini
 │   │   ├── src/
 │   │   └── include/
+│   ├── platformio_sensor_node/                       ← PlatformIO project for NodeMCU V2 (ESP8266 tank node)
 │   ├── libraries.txt                                ← Required Arduino libraries
 │   └── README.md                                    ← Full flash & calibration guide
 │
@@ -101,13 +97,11 @@ smart-water-pump-controller/
     └── wiring_notes.md                ← Complete wiring reference & checklist
 ```
 
-**Firmware & dashboard design (canonical):**
+**Canonical specs (current):**
 
-- For the current v5.0 firmware and run-mode behavior, see `docs/archive/firmware_master_spec.md`.
-- For the current dashboard UX and mode architecture, see `docs/archive/dashboard_master_spec.md`.
-- For the original v2.0 RTDB contract and UX spec (historical reference), see:
-  - [docs/releases/v2.0/firmware-rtdb-spec.md](docs/releases/v2.0/firmware-rtdb-spec.md)
-  - [docs/releases/v2.0/dashboard-ux-spec.md](docs/releases/v2.0/dashboard-ux-spec.md)
+- Firmware spec: [docs/specs/firmware.md](docs/specs/firmware.md)
+- Dashboard spec: [docs/specs/dashboard.md](docs/specs/dashboard.md)
+- Architecture (vNext): [docs/architecture_redesign_vNext.md](docs/architecture_redesign_vNext.md)
 
 ---
 
@@ -169,7 +163,8 @@ Phase 4 is fully checked off.
 | Firebase ESP Client | Mobizt | ≥ 4.4.14 |
 | ArduinoJson | Benoit Blanchon | ≥ 6.21.5 **(v6.x only — not v7)** |
 
-1. Open `firmware/arduino_smart_water_pump_controller/arduino_smart_water_pump_controller.ino` in Arduino IDE (or use PlatformIO: `firmware/platformio_smart_water_pump_controller/`)
+1. Open `firmware/arduino_smart_water_pump_controller/arduino_smart_water_pump_controller.ino` (ESP32 master) in Arduino IDE, and `firmware/arduino_sensor_node/arduino_sensor_node.ino` (ESP8266 tank node) for the sensor node.  
+   Alternatively, use PlatformIO: `firmware/platformio_smart_water_pump_controller/` and `firmware/platformio_sensor_node/`.
 2. Copy `secrets.h.example` to `secrets.h` and fill in WiFi, Firebase, and Email/Password credentials (see `firmware/README.md`)
 3. Set board: **Tools → Board → ESP32 Dev Module**
 4. Set board: **ESP32 Dev Module**; upload speed **115200**; Partition Scheme **Huge APP (3MB No OTA/1MB SPIFFS)**; Flash Mode **QIO**; PSRAM **Disabled**
@@ -240,7 +235,7 @@ Complete every item before switching the MCB on for the first time.
 
 ## Full deployment
 
-For a single, end-to-end deployment guide (Firebase, Functions, Dashboard, ESP32, and smoke tests), use **`docs/releases/v2.0/deploy.md`**.
+For a single, end-to-end deployment guide (Firebase, Functions, Dashboard, ESP32, and smoke tests), use **`docs/archive/releases/v2.0/deploy.md`** (historical) and cross-check against the current specs in `docs/specs/`.
 
 ## Notifications (Optional)
 
@@ -363,4 +358,3 @@ See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for the
 ---
 
 *Smart Water Pump Controller — Leon, Iloilo*
-*Documentation v2.5 — aligned with ENHANCEMENT_PLAN Phases 1–6*

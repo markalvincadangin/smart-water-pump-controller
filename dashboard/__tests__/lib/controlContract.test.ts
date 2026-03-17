@@ -1,6 +1,6 @@
 /**
  * Gold Standard: pump_system/control/mode data contract.
- * Ensures only valid strings (AUTO, FORCE_ON, FORCE_OFF, COUNTDOWN) are processed.
+ * Ensures only valid strings (AUTO, MANUAL, COUNTDOWN) are processed.
  */
 import {
   VALID_CONTROL_MODES,
@@ -10,17 +10,17 @@ import {
 
 describe("controlContract", () => {
   describe("VALID_CONTROL_MODES", () => {
-    it("contains exactly four modes per v3.0 spec", () => {
-      expect(VALID_CONTROL_MODES).toHaveLength(4);
+    it("contains exactly three modes per vNext spec", () => {
+      expect(VALID_CONTROL_MODES).toHaveLength(3);
       expect(VALID_CONTROL_MODES).toContain("AUTO");
-      expect(VALID_CONTROL_MODES).toContain("FORCE_ON");
-      expect(VALID_CONTROL_MODES).toContain("FORCE_OFF");
       expect(VALID_CONTROL_MODES).toContain("COUNTDOWN");
+      expect(VALID_CONTROL_MODES).toContain("MANUAL");
     });
 
     it("does not contain invalid or legacy modes", () => {
       expect(VALID_CONTROL_MODES).not.toContain("OFF");
-      expect(VALID_CONTROL_MODES).not.toContain("MANUAL");
+      expect(VALID_CONTROL_MODES).not.toContain("FORCE_ON");
+      expect(VALID_CONTROL_MODES).not.toContain("FORCE_OFF");
       expect(VALID_CONTROL_MODES).not.toContain("");
     });
   });
@@ -28,9 +28,8 @@ describe("controlContract", () => {
   describe("isValidControlMode", () => {
     it("returns true for each valid mode", () => {
       expect(isValidControlMode("AUTO")).toBe(true);
-      expect(isValidControlMode("FORCE_ON")).toBe(true);
-      expect(isValidControlMode("FORCE_OFF")).toBe(true);
       expect(isValidControlMode("COUNTDOWN")).toBe(true);
+      expect(isValidControlMode("MANUAL")).toBe(true);
     });
 
     it("returns false for invalid strings", () => {
@@ -38,7 +37,8 @@ describe("controlContract", () => {
       expect(isValidControlMode("AUTOMATIC")).toBe(false);
       expect(isValidControlMode("")).toBe(false);
       expect(isValidControlMode("OFF")).toBe(false);
-      expect(isValidControlMode("MANUAL")).toBe(false);
+      expect(isValidControlMode("FORCE_ON")).toBe(false);
+      expect(isValidControlMode("FORCE_OFF")).toBe(false);
     });
 
     it("returns false for non-string values", () => {

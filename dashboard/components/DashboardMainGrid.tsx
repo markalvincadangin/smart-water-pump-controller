@@ -24,11 +24,15 @@ interface DashboardMainGridProps {
   pendingAck: boolean;
   onSetMode: (mode: PumpControl["mode"]) => void;
   onAcknowledge: () => void;
-  onStartManualRun: () => void;
+  onSetManualDesired: (on: boolean) => void;
   onStartCountdown: (durationMin: number) => void;
   onAddCountdownTime: (addMinutes: number) => void;
   isAddingCountdownTime?: boolean;
-  onStopRun: () => void;
+  onStopCountdown: () => void;
+  onEmergencyStop: () => void;
+  onResetStop: () => void;
+  manualDesired: boolean;
+  emergencyStopLatched: boolean;
 }
 
 export default function DashboardMainGrid({
@@ -45,11 +49,15 @@ export default function DashboardMainGrid({
   pendingAck,
   onSetMode,
   onAcknowledge,
-  onStartManualRun,
+  onSetManualDesired,
   onStartCountdown,
   onAddCountdownTime,
   isAddingCountdownTime = false,
-  onStopRun,
+  onStopCountdown,
+  onEmergencyStop,
+  onResetStop,
+  manualDesired,
+  emergencyStopLatched,
 }: DashboardMainGridProps) {
   const runMode = status?.run_mode ?? (running ? "AUTO" : "OFF") as string;
   const remainingSec = status?.countdown_remaining_sec ?? 0;
@@ -158,7 +166,7 @@ export default function DashboardMainGrid({
             sub={
               running
                 ? flow < dryRunThreshold
-                  ? "⚠ Low flow"
+                  ? "Low flow"
                   : "Normal flow"
                 : "Pump idle"
             }
@@ -191,7 +199,7 @@ export default function DashboardMainGrid({
       {/* Col 3: Controls */}
       <div className="card p-4 sm:p-5 space-y-4" id="run-mode-section">
         <RunControls
-          runMode={runMode as "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "MANUAL_OFF" | "COUNTDOWN" | "FORCE_ON"}
+          runMode={runMode as "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL_ON" | "MANUAL_OFF" | "COUNTDOWN" | "STOPPED"}
           remainingSec={remainingSec}
           controlMode={mode}
           isError={isError}
@@ -201,16 +209,14 @@ export default function DashboardMainGrid({
           pendingAck={pendingAck}
           onAcknowledge={onAcknowledge}
           isAddingCountdownTime={isAddingCountdownTime}
-          onStartManual={onStartManualRun}
+          manualDesired={manualDesired}
+          emergencyStopLatched={emergencyStopLatched}
+          onSetManualDesired={onSetManualDesired}
           onStartCountdown={onStartCountdown}
           onAddCountdownTime={onAddCountdownTime}
-          onStop={onStopRun}
-          onGoToEmergencyControls={() => {
-            const emergency = document.querySelector("#emergency-controls");
-            if (emergency instanceof HTMLElement) {
-              emergency.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-          }}
+          onStopCountdown={onStopCountdown}
+          onEmergencyStop={onEmergencyStop}
+          onResetStop={onResetStop}
         />
         <div className="border-t border-surface-3 pt-4">
           <ModeControls
@@ -219,7 +225,6 @@ export default function DashboardMainGrid({
             dryRunTimeoutSec={config?.dry_run_timeout_sec ?? DEFAULT_DEVICE_CONFIG.dry_run_timeout_sec}
             pendingMode={pendingMode}
             pendingAcknowledge={pendingAck}
-            allowForceOn={isAdmin}
             onSetMode={onSetMode}
             onAcknowledge={onAcknowledge}
           />

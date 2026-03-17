@@ -19,8 +19,8 @@ export interface PumpStatus {
   last_boot_reason: string;  // Phase 2: e.g. 'Power-on', 'Task watchdog'
   uptime_minutes?: number; // Phase 5: Uptime counter (prevents 49-day rollover)
   // Phase 7 manual + v3.0 COUNTDOWN (replaces timed run)
-  /** v5.0: Added "MANUAL_OFF" for MANUAL-mode pump-off state */
-  run_mode?: "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "MANUAL_OFF" | "COUNTDOWN" | "FORCE_ON";
+  /** vNext: run_mode values emitted by firmware */
+  run_mode?: "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL_ON" | "MANUAL_OFF" | "COUNTDOWN" | "STOPPED";
   countdown_remaining_sec?: number;
   last_fault_code?: string;
   last_fault_message?: string;
@@ -49,18 +49,34 @@ export interface PumpStatus {
   ultrasonic_cycles_timeout?: number;
   flow_discard_max_sane?: number;
   flow_stuck_high_events?: number;
+
+  // vNext: UI truth signals (added by firmware)
+  manual_desired?: boolean;
+  emergency_stop_latched?: boolean;
+  remote_sensor_stable?: boolean;
+  level_fresh?: boolean;
 }
 
 /** /pump_system/control — Cloud → ESP32 */
 export interface PumpControl {
-  /** v4.0: Added "MANUAL" mode — operator-initiated, full safety active */
-  mode: "AUTO" | "FORCE_ON" | "FORCE_OFF" | "COUNTDOWN" | "MANUAL";
+  /** vNext: only policy modes remain */
+  mode: "AUTO" | "COUNTDOWN" | "MANUAL";
   clear_error: boolean;
   reboot_request_id?: number;
+  /** @deprecated vNext: legacy one-shots (read-only compat). Dashboard no longer writes these. */
   manual_start?: boolean;
+  /** @deprecated vNext: legacy one-shots (read-only compat). Dashboard no longer writes these. */
   manual_stop?: boolean;
+  /** vNext: persistent MANUAL intent */
+  manual_desired?: boolean;
+  /** vNext: Emergency stop latch control (one-shot) */
+  emergency_stop?: boolean;
+  /** vNext: Reset stop latch (one-shot) */
+  reset_stop?: boolean;
   /** v3.0 COUNTDOWN: duration in minutes when starting (1–120). */
   countdown_duration_min?: number;
+  /** vNext: explicit countdown start (one-shot). Preferred over “enter mode starts timer”. */
+  countdown_start?: boolean;
   /** v3.0 COUNTDOWN: one-shot to add time; firmware reads this when countdown_add_time is true (1–120 min). */
   countdown_add_min?: number;
   /** v3.0 COUNTDOWN: one-shot to add time to running countdown (amount in countdown_add_min if set). */

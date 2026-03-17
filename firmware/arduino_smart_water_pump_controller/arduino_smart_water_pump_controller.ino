@@ -3,37 +3,46 @@
 //
 // This file intentionally contains ONLY the entry points: `setup()` and `loop()`.
 // All includes, globals, and helper functions live in the prefixed tabs:
-//   `01_config.ino`, `02_sensors.ino`, `03_safety_pump.ino`,
+//   `01_config.ino`, `02_rs485_comm.ino`, `03_safety_pump.ino`,
 //   `04_persistence.ino`, `05_connectivity_cloud.ino`
 // =============================================================================
 
 #include <smart_water_pump_controller_shared.h>
 
-// Forward declaration for ISR so Arduino's preprocessor limitations don't bite.
-void IRAM_ATTR flowPulseISR(void);
-
 void setup() {
   Serial.begin(115200);
   Serial.println("\n====================================");
-  Serial.println(" Smart Water Pump Controller v3.0.0");
+  Serial.println(" Smart Water Pump Controller");
   Serial.println("====================================");
 
-  // --- Boot reason logging (Phase 2) ---
+  // Boot reason logging
   bootReasonStr = getBootReasonString();
   Serial.printf("[BOOT] Reset reason: %s\n", bootReasonStr.c_str());
 
+  // String heap-fragmentation mitigation (reserve once at boot)
+  pumpMode.reserve(12);
+  runMode.reserve(16);
+  runPrevPumpMode.reserve(16);
+  lastFaultCode.reserve(24);
+  lastFaultMessage.reserve(160);
+  firebaseLastError.reserve(200);
+  bootReasonStr.reserve(32);
+  lastPersistedMode.reserve(12);
+
   // --- GPIO Setup ---
   pinMode(RELAY_PIN,        OUTPUT);
-  pinMode(TRIG_PIN,         OUTPUT);
-  pinMode(ECHO_PIN,         INPUT);
-  pinMode(FLOW_SENSOR_PIN,  INPUT);
+  pinMode(RS485_DE_RE_PIN,  OUTPUT);
 
   // Safety: ensure pump is OFF on boot
   setPump(false);
-  digitalWrite(TRIG_PIN, LOW);
+  digitalWrite(RS485_DE_RE_PIN, LOW);  // RX mode by default
   Serial.println("[INIT] GPIO configured. Pump OFF.");
 
-  // --- Crash loop detection (Phase 2) ---
+  // --- RS-485 UART2 init (tank sensor node) ---
+  Serial2.begin(RS485_UART_BAUD, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+  Serial.println("[INIT] RS-485 UART2 initialized (115200 8N1).");
+
+  // Crash loop detection
   checkCrashLoop();
   if (inSafeMode) {
     // Safe mode: skip everything except Serial output
@@ -42,26 +51,25 @@ void setup() {
     return;  // Exit setup() — loop() handles safe mode
   }
 
-  // --- Attach Flow Sensor Interrupt ---
-  attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN),
-                  flowPulseISR,
-                  RISING);
-  Serial.println("[INIT] Flow sensor interrupt attached on GPIO 34.");
-
   // --- Load device config from NVS ---
   loadDeviceConfigFromNVS();
 
-  // --- Load last known state from NVS (Phase 2) ---
+  // Load last known state from NVS
   loadStateFromNVS();
 
-  // --- Startup stabilization delay (Phase 2) ---
-  Serial.println("[INIT] Stabilization delay (5s) — sensors settling...");
-  delay(5000);
+  // Startup stabilization delay
+  if (STARTUP_STABILIZE_MS > 0) {
+    Serial.printf("[INIT] Stabilization delay (%lums)...\n", (unsigned long)STARTUP_STABILIZE_MS);
+    unsigned long t0 = millis();
+    while ((millis() - t0) < (unsigned long)STARTUP_STABILIZE_MS) {
+      delay(1);
+    }
+  }
 
   // --- WiFi ---
   connectWiFi();
 
-  // --- NTP time sync (Phase 3) — Philippine Standard Time (GMT+8)
+  // NTP time sync — Philippine Standard Time (GMT+8)
   if (WiFi.status() == WL_CONNECTED) {
     configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
     struct tm timeinfo;
@@ -84,7 +92,7 @@ void setup() {
     Serial.println("[FIREBASE] Skipped — no WiFi. Will init when WiFi connects.");
   }
 
-  // --- Hardware Watchdog (Phase 2) ---
+  // Hardware watchdog
   // Core may already init TWDT with a short default (e.g. 5s). We need >= 30s for light sleep.
   // Deinit then reinit with our timeout so 30s sleep does not trigger a reset.
   esp_task_wdt_deinit();
@@ -117,26 +125,60 @@ void setup() {
 }
 
 // =============================================================================
-// SECTION 18: MAIN LOOP
+// MAIN LOOP
 // Non-blocking design using millis() timers.
-// Phase 2: WDT reset, exponential backoff WiFi, NVS state persistence,
-//          safe mode handling, RSSI telemetry.
 // =============================================================================
 
 void loop() {
   unsigned long now = millis();
 
-  // --- WATCHDOG RESET (Phase 2) ---
+  // Watchdog reset
   esp_task_wdt_reset();
 
-  // --- SAFE MODE HANDLING (Phase 2) ---
+  // Safe mode handling
   if (inSafeMode) {
-    // Check if safe mode timeout has elapsed (1 hour)
-    if (now - safeModeEnteredMs >= SAFE_MODE_TIMEOUT_MS) {
-      Serial.println("[SAFE MODE] 1-hour timeout reached. Restarting...");
-      // Clear safe mode in NVS
+    // If we have wall-clock time (NTP), prefer a true 1-hour "real time" latch.
+    // Otherwise fall back to 1-hour continuous uptime in safe mode.
+    uint32_t safeModeEpochSec = 0;
+    if (prefs.begin(NVS_STATE_NAMESPACE, true)) {
+      safeModeEpochSec = prefs.getUInt("safe_mode_epoch_sec", 0);
+      prefs.end();
+    }
+
+    if (ntpSynced && safeModeEpochSec == 0) {
+      struct tm ti;
+      if (getLocalTime(&ti, 1000)) {
+        time_t nowEpoch = mktime(&ti);
+        if (nowEpoch > 0) {
+          if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
+            prefs.putUInt("safe_mode_epoch_sec", (uint32_t)nowEpoch);
+            prefs.end();
+          }
+          safeModeEpochSec = (uint32_t)nowEpoch;
+          Serial.println("[SAFE MODE] Epoch latched for wall-clock auto-clear.");
+        }
+      }
+    }
+
+    bool shouldClear = false;
+    if (ntpSynced && safeModeEpochSec > 0) {
+      struct tm ti;
+      if (getLocalTime(&ti, 1000)) {
+        time_t nowEpoch = mktime(&ti);
+        if (nowEpoch > 0 && (uint32_t)nowEpoch >= safeModeEpochSec) {
+          uint32_t age = (uint32_t)nowEpoch - safeModeEpochSec;
+          shouldClear = (age >= (SAFE_MODE_TIMEOUT_MS / 1000UL));
+        }
+      }
+    } else {
+      shouldClear = (now - safeModeEnteredMs >= SAFE_MODE_TIMEOUT_MS);
+    }
+
+    if (shouldClear) {
+      Serial.println("[SAFE MODE] Timeout reached. Clearing latch and restarting...");
       if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
         prefs.putULong("safe_mode_ms", 0);
+        prefs.putUInt("safe_mode_epoch_sec", 0);
         prefs.putInt("boot_count", 0);
         prefs.end();
       }
@@ -146,14 +188,14 @@ void loop() {
     static unsigned long lastSafeModeLog = 0;
     if (now - lastSafeModeLog >= 30000) {
       lastSafeModeLog = now;
-      unsigned long remaining = (SAFE_MODE_TIMEOUT_MS - (now - safeModeEnteredMs)) / 60000UL;
+      unsigned long remaining = (SAFE_MODE_TIMEOUT_MS - min(SAFE_MODE_TIMEOUT_MS, (now - safeModeEnteredMs))) / 60000UL;
       Serial.printf("[SAFE MODE] Pump OFF. %lu min until auto-clear.\n", remaining);
     }
     delay(100);
     return;
   }
 
-  // --- WIFI RECOVERY (Phase 2: exponential backoff with jitter) ---
+  // WiFi recovery (exponential backoff with jitter)
   if (WiFi.status() != WL_CONNECTED) {
     if (wifiWasConnected) {
       wifiWasConnected = false;
@@ -275,31 +317,33 @@ void loop() {
   if (now - lastSensorMs >= sensorInterval) {
     lastSensorMs = now;
 
-    // 1. Read ultrasonic water level (5-sample median + EMA)
-    int reading = readUltrasonicSensor();
+    // 1. Poll remote tank sensor node over RS-485 (LVL + FLOW + ERR)
+    bool gotFrame = pollRemoteSensorNode();
 
-    // 2. Check for sensor failure (consecutive timeouts)
-    checkLevelSensorFailure(reading);
-
-    if (reading >= 0) {
-      prevWaterLevelPct = waterLevelPct;
-      waterLevelPct = reading;
+    // 2. Convert remote node health into our existing failure model
+    //    (pass -1 when remote reports ultrasonic failure or goes offline)
+    int levelForFailureLogic = gotFrame ? waterLevelPct : -1;
+    if (gotFrame && (remoteSensorLastErrCode == 1 || remoteSensorLastErrCode == 3)) {
+      levelForFailureLogic = -1;
     }
+    checkLevelSensorFailure(levelForFailureLogic);
 
-    // 3. Calculate flow rate from last 1-second pulse window
-    flowRateLpm = calculateFlowRate();
+    // 3. Flow-based estimate (only meaningful while pump runs)
     updateFlowBasedEstimate();
 
-    Serial.printf("[SENSOR] Level:%d%% | Flow:%.2f LPM | SensorErr:%s | OverflowErr:%s | Sleep:%s\n",
+    Serial.printf("[SENSOR] Level:%d%% | Flow:%.2f LPM | Node:%s | ERR:%d | LevelErr:%s | FlowErr:%s | OverflowErr:%s | Sleep:%s\n",
                   waterLevelPct, flowRateLpm,
+                  remoteSensorOnline ? "ONLINE" : "OFFLINE",
+                  remoteSensorLastErrCode,
                   isLevelSensorError ? "Y" : "N",
+                  isFlowSensorError ? "Y" : "N",
                   isOverflowError ? "Y" : "N",
                   isSleeping ? "Y" : "N");
 
     // 4. Run all safety checks (dry-run, flow stuck, overflow)
     checkSafetyCutoff();
 
-    // 4b. v3.0: Check countdown expiry (revert to AUTO when timer ends)
+    // Check countdown expiry (revert to AUTO when timer ends)
     checkCountdownExpiry();
 
     // 5. Execute pump state machine
@@ -342,7 +386,7 @@ void loop() {
     }
   }
 
-  // --- NVS STATE PERSISTENCE (Phase 2: on change + wear-reduced level) ---
+  // NVS state persistence (on change + wear-reduced level)
   persistStateToNVS();
 
   // --- SENSOR NOISE TELEMETRY (rate-limited; 60s window) ---
@@ -362,7 +406,7 @@ void loop() {
     flowStuckHighEventCountWin = 0;
   }
 
-  // --- Phase 3: Light Sleep during scheduled sleep window ---
+  // Light sleep during scheduled sleep window
   if (isSleeping) {
     esp_task_wdt_reset();
     unsigned long nextWake = lastSensorMs + SLEEP_WAKE_INTERVAL_MS;

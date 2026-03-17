@@ -22,15 +22,16 @@ export interface RankedAlert {
 }
 
 const RANK = {
-  force_on_override: 0,    // v5.0: highest priority — absolute safety bypass
+  emergency_stop: 0,
   controller_offline: 1,
   dry_run: 2,
   overflow: 3,
-  auto_maintenance: 4,
-  maintenance: 5,
-  level_sensor: 6,
-  flow_sensor: 7,
-  sleeping: 8,
+  blocked_start: 4,
+  auto_maintenance: 5,
+  maintenance: 6,
+  level_sensor: 7,
+  flow_sensor: 8,
+  sleeping: 9,
 } as const;
 
 /**
@@ -43,16 +44,15 @@ export function getRankedAlerts(
 ): RankedAlert[] {
   const alerts: RankedAlert[] = [];
 
-  // v4.0: FORCE_ON override — highest priority alert
-  if (status?.run_mode === "FORCE_ON") {
+  if (status?.emergency_stop_latched) {
     alerts.push({
-      id: "force_on_override",
-      rank: RANK.force_on_override,
+      id: "emergency_stop",
+      rank: RANK.emergency_stop,
       severity: "red",
       tier: "critical",
-      title: "⚡ FORCE ON — All Safety Bypassed",
-      description: "Pump is running in absolute override. All protections are disabled.",
-      recovery: "Exit to AUTO or use FORCE OFF via the Mode selector.",
+      title: "Emergency stop latched",
+      description: "Pump is stopped and locked out until Reset Stop is pressed (when safe).",
+      recovery: "1) Resolve the hazard\n2) Ensure no dry-run/overflow lockout is active\n3) Press Reset Stop",
     });
   }
 
@@ -70,6 +70,30 @@ export function getRankedAlerts(
 
   const st = status;
   if (!st) return alerts;
+
+  // vNext: Blocked start warning (operator intent ON, but safety gates prevent starting)
+  const manualIntentOn = st.manual_desired === true;
+  const blockedByLink = st.level_fresh === false || st.remote_sensor_stable === false;
+  const notBypassed = !st.bypass_level_sensor;
+  if (
+    manualIntentOn &&
+    !st.is_running &&
+    !st.is_error &&
+    !st.is_overflow_error &&
+    notBypassed &&
+    blockedByLink
+  ) {
+    alerts.push({
+      id: "blocked_start",
+      rank: RANK.blocked_start,
+      severity: "amber",
+      tier: "warning",
+      title: "Start blocked by safety",
+      description:
+        "Manual intent is ON, but the controller is blocking start because sensor data is stale or the remote sensor link is unstable.",
+      recovery: "Check RS-485 wiring/power and wait for the link to become stable. Ensure bypass is OFF unless in maintenance.",
+    });
+  }
 
   // Dry-run: is_error but not overflow (overflow has its own alert)
   if (st.is_error && !st.is_overflow_error) {

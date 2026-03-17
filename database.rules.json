@@ -11,10 +11,25 @@
         "mode": {
           ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
         },
+        "manual_desired": {
+          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+        },
+        "emergency_stop": {
+          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+        },
+        "reset_stop": {
+          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+        },
+        "countdown_start": {
+          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+        },
         "clear_error": {
           ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
         },
         "reboot_request_id": {
+          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+        },
+        "countdown_add_min": {
           ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
         },
         "manual_start": {

@@ -1,9 +1,5 @@
 // =============================================================================
-// Part IV: Configuration and state persistence — Sections 12b, 12b2, 16C, 16D
-// =============================================================================
-
-// =============================================================================
-// SECTION 12b: DEVICE CONFIG — NVS (persist across reboot when offline)
+// Configuration and state persistence (NVS)
 // =============================================================================
 
 void loadDeviceConfigFromNVS() {
@@ -25,13 +21,13 @@ void loadDeviceConfigFromNVS() {
   float flowCal = prefs.getFloat("flow_cal", FLOW_CALIBRATION_FACTOR);
   int maxRuntime = prefs.getInt("max_runtime", MAX_PUMP_RUNTIME_MIN);
 
-  // Phase 3: Sleep config (optional keys — defaults if missing)
+  // Sleep config (optional keys — defaults if missing)
   bool slpEn = prefs.getBool("slp_en", SLEEP_DEFAULT_ENABLED);
   int slpStart = prefs.getInt("slp_start", SLEEP_DEFAULT_START_HOUR);
   int slpEnd = prefs.getInt("slp_end", SLEEP_DEFAULT_END_HOUR);
   int slpEmerg = prefs.getInt("slp_emerg", SLEEP_DEFAULT_EMERGENCY_LVL);
 
-  // Phase 4: Advanced config (optional keys)
+  // Advanced config (optional keys)
   int sensThresh = prefs.getInt("sens_thresh", SENSOR_FAILURE_THRESHOLD);
   int idleSens = prefs.getInt("idle_sens_ms", IDLE_SENSOR_INTERVAL_MS_DEF);
   int idleFb = prefs.getInt("idle_fb_ms", IDLE_FIREBASE_INTERVAL_MS_DEF);
@@ -65,13 +61,13 @@ void loadDeviceConfigFromNVS() {
   cfgFlowCalibration = flowCal;
   cfgMaxPumpRuntimeMin = maxRuntime;
 
-  // Phase 3: Apply sleep config (validate hours 0–23, emergency 0–100)
+  // Apply sleep config (validate hours 0–23, emergency 0–100)
   if (slpStart >= 0 && slpStart <= 23) cfgSleepStartHour = slpStart;
   if (slpEnd >= 0 && slpEnd <= 23) cfgSleepEndHour = slpEnd;
   if (slpEmerg >= 0 && slpEmerg <= 100) cfgSleepEmergencyLevel = slpEmerg;
   cfgSleepEnabled = slpEn;
 
-  // Phase 4: Apply advanced config (validate ranges)
+  // Apply advanced config (validate ranges)
   if (sensThresh >= 3 && sensThresh <= 20) cfgLevelSensorFailureThreshold = sensThresh;
   if (idleSens >= 5000 && idleSens <= 60000) cfgIdleSensorIntervalMs = idleSens;
   if (idleFb >= 10000 && idleFb <= 120000) cfgIdleFirebaseIntervalMs = idleFb;
@@ -94,12 +90,12 @@ void saveDeviceConfigToNVS() {
   prefs.putInt("dry_run_sec", cfgDryRunTimeoutSec);
   prefs.putFloat("flow_cal", cfgFlowCalibration);
   prefs.putInt("max_runtime", cfgMaxPumpRuntimeMin);
-  // Phase 3: Sleep config
+  // Sleep config
   prefs.putBool("slp_en", cfgSleepEnabled);
   prefs.putInt("slp_start", cfgSleepStartHour);
   prefs.putInt("slp_end", cfgSleepEndHour);
   prefs.putInt("slp_emerg", cfgSleepEmergencyLevel);
-  // Phase 4: Advanced config
+  // Advanced config
   prefs.putInt("sens_thresh", cfgLevelSensorFailureThreshold);
   prefs.putInt("idle_sens_ms", cfgIdleSensorIntervalMs);
   prefs.putInt("idle_fb_ms", cfgIdleFirebaseIntervalMs);
@@ -111,7 +107,7 @@ void saveDeviceConfigToNVS() {
 }
 
 // =============================================================================
-// SECTION 12b2: SLEEP WINDOW HELPER (Phase 3)
+// Sleep window helper
 // Handles overnight windows (e.g. 23–5). Returns true if currentHour is within sleep window.
 // =============================================================================
 
@@ -126,7 +122,7 @@ bool isInSleepWindow(int currentHour) {
 }
 
 // =============================================================================
-// SECTION 16C: CRASH LOOP DETECTION (Phase 2)
+// Crash loop detection
 // Reads NVS boot counter and timestamp. If >5 reboots in 5 minutes, enters safe mode.
 // Safe mode auto-clears after 1 hour.
 // =============================================================================
@@ -137,36 +133,24 @@ void checkCrashLoop() {
     return;
   }
 
-  unsigned long now = millis();  // ~0 at boot, but we use relative time
-  unsigned long lastBootTime = prefs.getULong("last_boot_ms", 0);
   int bootCount = prefs.getInt("boot_count", 0);
   unsigned long safeModeStart = prefs.getULong("safe_mode_ms", 0);
 
-  // Check if safe mode should be cleared (1 hour timeout)
   if (safeModeStart > 0) {
-    // Safe mode was previously entered. If this is a fresh power cycle
-    // (millis() near 0), clear safe mode since user likely did a full power cycle
-    if (now < 5000) {
-      // Fresh power cycle — clear safe mode
-      prefs.putULong("safe_mode_ms", 0);
-      prefs.putInt("boot_count", 0);
-      Serial.println("[BOOT] Power cycle detected. Safe mode cleared.");
-      prefs.end();
-      return;
-    }
+    // Persisted safe mode latch across resets. Auto-clear is handled in loop().
+    inSafeMode = true;
+    safeModeEnteredMs = millis();
+    lastFaultCode = "SAFE_MODE";
+    lastFaultMessage = "Crash loop detected. Controller in safe mode. Waiting for timeout or manual recovery.";
+    prefs.end();
+    return;
   }
 
-  // Use esp_timer for more reliable time (microseconds since boot)
-  // For crash loop detection, we track boot_count and reset it if we
-  // had a long uptime before the reboot (indicated by large lastBootTime)
-  if (lastBootTime > (unsigned long)(CRASH_LOOP_WINDOW_SEC * 1000UL)) {
-    // Previous run had uptime > 5 min — not a crash loop
-    bootCount = 0;
-  }
-
+  // Deterministic crash-loop detection:
+  // - Increment boot_count at each boot.
+  // - If the firmware survives long enough, it clears boot_count (see persistStateToNVS()).
   bootCount++;
   prefs.putInt("boot_count", bootCount);
-  prefs.putULong("last_boot_ms", 0);  // Will be updated to millis() periodically
 
   if (bootCount >= CRASH_LOOP_THRESHOLD) {
     inSafeMode = true;
@@ -174,18 +158,17 @@ void checkCrashLoop() {
     lastFaultCode = "SAFE_MODE";
     lastFaultMessage = "Crash loop detected. Controller in safe mode. Power cycle to recover.";
     prefs.putULong("safe_mode_ms", safeModeEnteredMs);
-    Serial.printf("[ERROR] CRASH LOOP DETECTED: %d reboots. Entering SAFE MODE.\n", bootCount);
+    Serial.printf("[ERROR] CRASH LOOP DETECTED: %d boots without reaching stable uptime. Entering SAFE MODE.\n", bootCount);
     Serial.println("[SAFE MODE] Pump OFF. Firebase disabled. Serial only.");
   } else {
-    Serial.printf("[BOOT] Boot count: %d/%d (window: %ds)\n",
-                  bootCount, CRASH_LOOP_THRESHOLD, CRASH_LOOP_WINDOW_SEC);
+    Serial.printf("[BOOT] Boot count (uncleared): %d/%d\n", bootCount, CRASH_LOOP_THRESHOLD);
   }
 
   prefs.end();
 }
 
 // =============================================================================
-// SECTION 16D: NVS STATE PERSISTENCE (Phase 2)
+// State persistence (wear-reduced)
 // Persists pumpMode, isDryRunError on change; waterLevelPct with wear reduction.
 // =============================================================================
 
@@ -204,20 +187,22 @@ void loadStateFromNVS() {
   cfgLastCountdownDurationMin = prefs.getInt("cd_dur_min", 15);
   prefs.end();
 
-  // v4.0: MANUAL is safe to restore (full safety active). FORCE_ON requires explicit re-activation.
-  if (savedMode == "AUTO" || savedMode == "FORCE_OFF"
-      || savedMode == "COUNTDOWN" || savedMode == "MANUAL") {
+  // Only AUTO / MANUAL / COUNTDOWN are valid modes. Legacy values map to AUTO.
+  savedMode.trim();
+  savedMode.toUpperCase();
+  if (savedMode == "AUTO" || savedMode == "COUNTDOWN" || savedMode == "MANUAL") {
     pumpMode = savedMode;
     lastPersistedMode = savedMode;
     if (savedMode == "COUNTDOWN") {
       Serial.println("[BOOT] Restored COUNTDOWN mode from NVS. Timer will restart on Firebase sync.");
     } else if (savedMode == "MANUAL") {
-      Serial.println("[BOOT] Restored MANUAL mode. Pump will start when sensor block runs.");
+      manualDesired = false;  // never auto-start after reboot
+      Serial.println("[BOOT] Restored MANUAL mode. Pump remains OFF until manual_desired is true.");
     }
-  } else if (savedMode == "FORCE_ON") {
+  } else {
     pumpMode = "AUTO";
     lastPersistedMode = "AUTO";
-    Serial.println("[BOOT] FORCE_ON not restored after reboot. Defaulting to AUTO.");
+    Serial.printf("[BOOT] Legacy/invalid mode '%s' not restored. Defaulting to AUTO.\n", savedMode.c_str());
   }
   isDryRunError = savedDryRun;
   lastPersistedDryRun = savedDryRun;
@@ -240,8 +225,10 @@ void persistStateToNVS() {
     || (levelDelta >= NVS_LEVEL_DELTA_THRESHOLD)
     || (now - lastLevelWriteMs >= NVS_LEVEL_INTERVAL_MS);
   bool uptimeNeedsWrite = (now - lastUptimeWriteMs >= NVS_UPTIME_INTERVAL_MS);
+  static bool crashLoopClearedThisBoot = false;
+  bool crashLoopClearDue = (!crashLoopClearedThisBoot) && (now >= 60000UL);
 
-  if (!modeChanged && !dryRunChanged && !bypassChanged && !telemetryChanged && !levelNeedsWrite && !uptimeNeedsWrite) return;
+  if (!modeChanged && !dryRunChanged && !bypassChanged && !telemetryChanged && !levelNeedsWrite && !uptimeNeedsWrite && !crashLoopClearDue) return;
 
   if (!prefs.begin(NVS_STATE_NAMESPACE, false)) return;
 
@@ -271,8 +258,13 @@ void persistStateToNVS() {
     lastLevelWriteMs = now;
   }
   if (uptimeNeedsWrite) {
-    prefs.putULong("last_boot_ms", now);
     lastUptimeWriteMs = now;
+  }
+
+  if (crashLoopClearDue) {
+    prefs.putInt("boot_count", 0);
+    crashLoopClearedThisBoot = true;
+    Serial.println("[BOOT] Stable uptime reached. Crash-loop counter cleared.");
   }
 
   prefs.end();

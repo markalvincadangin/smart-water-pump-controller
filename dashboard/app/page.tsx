@@ -42,11 +42,13 @@ export default function DashboardPage() {
     setMode,
     acknowledgeError,
     requestReboot,
-    startManualRun,
+    setManualDesired,
     startCountdown,
     addCountdownTime,
     isAddingCountdownTime,
-    stopRun,
+    stopCountdown,
+    triggerEmergencyStop,
+    resetEmergencyStop,
     setBypassLevelSensor,
   } = usePumpData();
 
@@ -89,6 +91,8 @@ export default function DashboardPage() {
   const isError = snapshot?.status.is_error ?? false;
   const mode = snapshot?.control.mode ?? "AUTO";
   const isSleeping = snapshot?.status.is_sleeping ?? false;
+  const manualDesired = snapshot?.status.manual_desired ?? snapshot?.control.manual_desired ?? false;
+  const emergencyStopLatched = snapshot?.status.emergency_stop_latched ?? false;
 
   const { pendingMode, setPendingMode, pendingAck, setPendingAck } = usePendingControl(mode);
 
@@ -145,6 +149,8 @@ export default function DashboardPage() {
           uptimeMinutes={snapshot?.status.uptime_minutes}
           levelLastValidAgeSec={snapshot?.status.level_last_valid_age_sec}
           levelSensorHealthPct={snapshot?.status.level_sensor_health_pct}
+          remoteSensorStable={snapshot?.status.remote_sensor_stable}
+          levelFresh={snapshot?.status.level_fresh}
         />
 
         <DashboardHeader
@@ -279,17 +285,17 @@ export default function DashboardPage() {
                   ))}
 
                   {infoAlerts.length > 0 && (
-                    <div className="flex flex-col gap-0.5 p-2.5 rounded-lg bg-accent-cyan/10 border border-accent-cyan/20 text-accent-cyan text-xs font-mono">
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-1 p-3 rounded-xl bg-surface-2 border border-surface-3 text-xs font-mono">
+                      <div className="flex items-center gap-2 text-accent-cyan">
                         <AlertTriangle size={14} className="shrink-0" />
                         <span className="font-semibold uppercase tracking-wide">
                           System notices ({infoAlerts.length})
                         </span>
                       </div>
-                      <ul className="list-disc list-inside space-y-0.5 text-[11px] text-text-primary">
+                      <ul className="list-disc list-inside space-y-1 text-[11px] text-text-secondary">
                         {infoAlerts.map((alert) => (
                           <li key={alert.id}>
-                            <span className="font-semibold text-accent-cyan">{alert.title}</span>
+                            <span className="font-semibold text-text-primary">{alert.title}</span>
                             {": "}
                             <span>{alert.description}</span>
                           </li>
@@ -317,10 +323,6 @@ export default function DashboardPage() {
               pendingMode={pendingMode}
               pendingAck={pendingAck}
               onSetMode={(nextMode) => {
-                if (nextMode === "FORCE_ON" && !isAdmin) {
-                  toast({ kind: "warning", title: "FORCE ON is admin-only" });
-                  return;
-                }
                 setPendingMode(nextMode);
                 toast({ kind: "info", title: `Sending mode: ${nextMode}` });
                 setMode(nextMode);
@@ -342,9 +344,9 @@ export default function DashboardPage() {
                   });
                 }, 8000);
               }}
-              onStartManualRun={() => {
-                toast({ kind: "info", title: "Starting manual run…" });
-                startManualRun();
+              onSetManualDesired={(on) => {
+                toast({ kind: "info", title: on ? "Manual ON requested…" : "Manual OFF requested…" });
+                setManualDesired(on);
               }}
               onStartCountdown={(durationMin) => {
                 toast({ kind: "info", title: `Starting countdown (${durationMin} min)…` });
@@ -355,10 +357,20 @@ export default function DashboardPage() {
                 addCountdownTime(addMin);
               }}
               isAddingCountdownTime={isAddingCountdownTime}
-              onStopRun={() => {
-                toast({ kind: "info", title: "Stopping pump…" });
-                stopRun();
+              onStopCountdown={() => {
+                toast({ kind: "info", title: "Stopping countdown…" });
+                stopCountdown();
               }}
+              onEmergencyStop={() => {
+                toast({ kind: "warning", title: "Emergency stop…" });
+                triggerEmergencyStop();
+              }}
+              onResetStop={() => {
+                toast({ kind: "info", title: "Reset stop…" });
+                resetEmergencyStop();
+              }}
+              manualDesired={manualDesired}
+              emergencyStopLatched={emergencyStopLatched}
             />
             )}
 

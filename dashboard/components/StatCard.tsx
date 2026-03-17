@@ -36,6 +36,17 @@ export default function StatCard({
   proximityLabel,
 }: StatCardProps) {
   const c = colorMap[color];
+  const hasProximity = typeof proximity === "number" && proximity >= 0 && !!proximityLabel;
+  const proximityCapped = hasProximity ? Math.max(0, Math.min(1.5, proximity as number)) : 0;
+  const proximityWidthPct = hasProximity ? (proximityCapped / 1.5) * 100 : 0;
+  const proximityBarColor =
+    !hasProximity
+      ? "bg-accent-green"
+      : (proximity as number) < 1
+        ? "bg-accent-red"
+        : (proximity as number) < 1.5
+          ? "bg-accent-amber"
+          : "bg-accent-green";
 
   return (
     <div className={clsx("card p-3 sm:p-4 flex flex-col gap-2 sm:gap-3 min-w-0", c.glow)}>
@@ -71,15 +82,15 @@ export default function StatCard({
           )}
         </div>
 
-        {typeof proximity === "number" && proximity >= 0 && proximityLabel && (
+        {hasProximity && (
           <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full bg-surface-3 overflow-hidden">
+            <div className="flex-1 h-2 rounded-full bg-surface-3/80 border border-surface-4 overflow-hidden">
               <div
                 className={clsx(
                   "h-full rounded-full transition-all duration-200",
-                  proximity < 1 ? "bg-accent-green" : "bg-accent-red"
+                  proximityBarColor
                 )}
-                style={{ width: `${Math.min(1, proximity) * 100}%` }}
+                style={{ width: `${proximityWidthPct}%` }}
               />
             </div>
             <span className="text-[10px] font-mono text-text-muted">{proximityLabel}</span>

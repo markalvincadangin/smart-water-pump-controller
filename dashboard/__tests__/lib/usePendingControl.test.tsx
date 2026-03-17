@@ -55,10 +55,10 @@ describe("usePendingControl", () => {
       { initialProps: { currentMode: "AUTO" as const } }
     );
     act(() => {
-      result.current.setPendingMode("FORCE_ON");
+      result.current.setPendingMode("MANUAL");
     });
     rerender({ currentMode: "AUTO" });
-    expect(result.current.pendingMode).toBe("FORCE_ON");
+    expect(result.current.pendingMode).toBe("MANUAL");
     expect(toastSpy).not.toHaveBeenCalled();
   });
 });

@@ -12,7 +12,8 @@
     "test:coverage": "jest --coverage",
     "validate:build": "npm run lint && npm run build",
     "validate:lighthouse": "lhci autorun",
-    "validate": "npm run test && npm run validate:build && npm run validate:lighthouse"
+    "validate:lighthouse:ci": "node scripts/validate-lighthouse.mjs",
+    "validate": "npm run test && npm run validate:build && npm run validate:lighthouse:ci"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
