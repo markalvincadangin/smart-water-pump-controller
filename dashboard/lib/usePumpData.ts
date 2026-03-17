@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { ref, onValue, set } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
-import type { PumpStatus, PumpControl, PumpSnapshot, HistoryEntry } from "./types";
+import type { PumpStatus, PumpControl, PumpSnapshot, HistoryEntry, HistoryEvent } from "./types";
 import { writeAuditEvent } from "@/lib/audit";
 
 const STATUS_PATH = "/pump_system/status";
@@ -33,15 +33,20 @@ const DEFAULT_CONTROL: PumpControl = {
 export function usePumpData() {
   const [snapshot, setSnapshot] = useState<PumpSnapshot | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyEvents, setHistoryEvents] = useState<HistoryEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [authUser, setAuthUser] = useState<{ uid: string; email: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isAddingCountdownTime, setIsAddingCountdownTime] = useState(false);
+  const [lastUpdateAtMs, setLastUpdateAtMs] = useState<number | null>(null);
 
   // Keep refs so callbacks don't close over stale state
   const statusRef = useRef<PumpStatus>(DEFAULT_STATUS);
   const controlRef = useRef<PumpControl>(DEFAULT_CONTROL);
+  const lastRunModeRef = useRef<string | null>(null);
+  const lastIsRunningRef = useRef<boolean | null>(null);
+  const lastFaultCodeRef = useRef<string | null>(null);
 
   // authReady = Firebase auth has been checked AND we have a signed-in user
   const authReady = authChecked && !!authUser;
@@ -83,10 +88,13 @@ export function usePumpData() {
           statusRef.current = data;
           setConnected(true);
           setError(null);
+          setLastUpdateAtMs(Date.now());
 
           // Append to rolling history
           const now = new Date();
           const timeLabel = now.toLocaleTimeString(timeLocale, { hour12: false });
+
+          // Append to rolling history (level + flow)
           setHistory((prev) => {
             const next = [
               ...prev,
@@ -96,6 +104,59 @@ export function usePumpData() {
                 flow: parseFloat(data.flow_rate_lpm.toFixed(2)),
               },
             ];
+            return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
+          });
+
+          // Derive lightweight event markers for the history chart
+          const runMode = (data.run_mode ?? "") as string;
+          const isRunning = !!data.is_running;
+          const faultCode = (data.last_fault_code ?? "") as string;
+
+          setHistoryEvents((prev) => {
+            const events: HistoryEvent[] = [];
+
+            const lastRunMode = lastRunModeRef.current;
+            const lastIsRunning = lastIsRunningRef.current;
+            const lastFaultCode = lastFaultCodeRef.current;
+
+            if (lastRunMode && runMode && runMode !== lastRunMode) {
+              events.push({
+                time: timeLabel,
+                type: "mode_change",
+                runMode,
+                prevRunMode: lastRunMode,
+              });
+            }
+
+            if (lastIsRunning === false && isRunning === true) {
+              events.push({
+                time: timeLabel,
+                type: "run_start",
+                runMode,
+              });
+            } else if (lastIsRunning === true && isRunning === false) {
+              events.push({
+                time: timeLabel,
+                type: "run_stop",
+                runMode,
+              });
+            }
+
+            if (faultCode && faultCode !== lastFaultCode && faultCode !== "") {
+              events.push({
+                time: timeLabel,
+                type: "fault",
+                runMode,
+                faultCode,
+              });
+            }
+
+            lastRunModeRef.current = runMode || lastRunMode || null;
+            lastIsRunningRef.current = isRunning;
+            lastFaultCodeRef.current = faultCode || lastFaultCode || null;
+
+            if (events.length === 0) return prev;
+            const next = [...prev, ...events];
             return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
           });
 
@@ -121,6 +182,7 @@ export function usePumpData() {
         setSnapshot((prev) =>
           prev ? { ...prev, control: data } : null
         );
+        setLastUpdateAtMs(Date.now());
       }
     });
 
@@ -188,10 +250,7 @@ export function usePumpData() {
 
   const startManualRun = useCallback(async () => {
     try {
-      // If the policy mode is FORCE_OFF, switch to AUTO first, otherwise the firmware will stop runs immediately.
-      if (controlRef.current?.mode === "FORCE_OFF") {
-        await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
-      }
+      // v4.0: firmware rejects manual_start when FORCE_OFF is active — no need to pre-switch.
       // One-shot: toggle true then reset to false so firmware edge-detects reliably.
       await set(ref(db, `${CONTROL_PATH}/manual_start`), true);
       window.setTimeout(() => {
@@ -202,7 +261,7 @@ export function usePumpData() {
           action: "control.run_manual_start",
           uid: authUser.uid,
           email: authUser.email ?? null,
-          detail: "Manual run started",
+          detail: "Manual run started (MANUAL mode, full safety active)",
         });
       }
     } catch (err) {
@@ -267,10 +326,18 @@ export function usePumpData() {
 
   const stopRun = useCallback(async () => {
     try {
+      // v4.0: manual_stop is ignored by firmware when FORCE_ON — don't send spurious writes
+      if (controlRef.current?.mode === "FORCE_ON") {
+        console.warn("[RTDB] stopRun skipped: FORCE_ON active. Use mode selector.");
+        return;
+      }
       await set(ref(db, `${CONTROL_PATH}/manual_stop`), true);
-      // Write mode=AUTO from the dashboard side so Firebase reflects the stop
-      // immediately, even if the firmware's write-back fails on weak WiFi.
-      await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
+      // v5.0: When current mode is MANUAL, keep MANUAL (sticky mode) and only signal manual_stop.
+      // For other modes (AUTO/COUNTDOWN/FORCE_OFF), write mode=AUTO so Firebase reflects the stop promptly.
+      const currentMode = controlRef.current?.mode;
+      if (currentMode && currentMode !== "MANUAL") {
+        await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
+      }
       window.setTimeout(() => {
         void set(ref(db, `${CONTROL_PATH}/manual_stop`), false);
       }, 5000);
@@ -307,13 +374,17 @@ export function usePumpData() {
 
   const status: PumpStatus | null = snapshot?.status ?? null;
   const control: PumpControl | null = snapshot?.control ?? null;
+  const degraded: boolean =
+    !!lastUpdateAtMs && Date.now() - lastUpdateAtMs > 30000 && Date.now() - lastUpdateAtMs <= 60000;
 
   return {
     // Preferred public fields
     status,
     control,
     history,
+    historyEvents,
     connected,
+    degraded,
     authReady,
     authChecked,
     authUser,

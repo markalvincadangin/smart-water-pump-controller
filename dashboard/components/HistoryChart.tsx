@@ -13,12 +13,13 @@ import {
   Legend,
   ReferenceLine,
 } from "recharts";
-import type { HistoryEntry } from "@/lib/types";
+import type { HistoryEntry, HistoryEvent } from "@/lib/types";
 
 interface HistoryChartProps {
   data: HistoryEntry[];
   pumpStartLevel?: number;
   pumpStopLevel?: number;
+  events?: HistoryEvent[];
 }
 
 type TooltipPayloadItem = {
@@ -31,9 +32,10 @@ interface CustomTooltipProps {
   active?: boolean;
   payload?: TooltipPayloadItem[];
   label?: string;
+  eventsAtLabel?: HistoryEvent[];
 }
 
-const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
+const CustomTooltip = ({ active, payload, label, eventsAtLabel }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-surface-2 border border-surface-4 rounded-lg p-2.5 text-xs font-mono shadow-lg"
@@ -47,11 +49,25 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
           </span>
         </p>
       ))}
+      {eventsAtLabel && eventsAtLabel.length > 0 && (
+        <div className="mt-1.5 border-t border-surface-4 pt-1.5">
+          <p className="text-[9px] text-text-muted mb-0.5">Events</p>
+          {eventsAtLabel.map((evt, idx) => (
+            <p key={`${evt.type}-${idx}`} className="text-[9px] text-text-secondary">
+              {evt.type === "fault" && `Fault: ${evt.faultCode ?? "P1 safety"}`}
+              {evt.type === "mode_change" &&
+                `Mode: ${evt.prevRunMode ?? "?"} → ${evt.runMode ?? "?"}`}
+              {evt.type === "run_start" && `Run: START (${evt.runMode ?? ""})`}
+              {evt.type === "run_stop" && `Run: STOP (${evt.runMode ?? ""})`}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
-export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel }: HistoryChartProps) {
+export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel, events }: HistoryChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
 
@@ -133,7 +149,22 @@ export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel }: Hi
             tickFormatter={(v: number) => `${v}`}
           />
 
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip
+            content={({ active, payload, label }) => {
+              const eventsAtLabel =
+                events && label
+                  ? events.filter((evt) => evt.time === label)
+                  : [];
+              return (
+                <CustomTooltip
+                  active={active}
+                  payload={payload as TooltipPayloadItem[] | undefined}
+                  label={label as string | undefined}
+                  eventsAtLabel={eventsAtLabel}
+                />
+              );
+            }}
+          />
 
           {typeof pumpStartLevel === "number" && (
             <ReferenceLine
@@ -160,6 +191,23 @@ export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel }: Hi
             wrapperStyle={{ fontSize: "clamp(9px, 2.2vw, 11px)", fontFamily: "var(--font-jetbrains)", color: "#7A8BA8" }}
             iconSize={8}
           />
+
+          {/* Event markers: safety, mode changes, and start/stop edges */}
+          {events?.map((evt, idx) => (
+            <ReferenceLine
+              key={`${evt.type}-${idx}-${evt.time}`}
+              x={evt.time}
+              stroke={
+                evt.type === "fault"
+                  ? "#FF4B6E"
+                  : evt.type === "mode_change"
+                    ? "#F5B800"
+                    : "#5C6FFF"
+              }
+              strokeDasharray={evt.type === "mode_change" ? "4 4" : "2 3"}
+              strokeOpacity={0.6}
+            />
+          ))}
 
           <Area
             yAxisId="level"

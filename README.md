@@ -101,10 +101,13 @@ smart-water-pump-controller/
     └── wiring_notes.md                ← Complete wiring reference & checklist
 ```
 
-**Firmware & dashboard design:** The authoritative specifications live under `docs/releases/` — start with:
+**Firmware & dashboard design (canonical):**
 
-- [docs/releases/v2.0/firmware-rtdb-spec.md](docs/releases/v2.0/firmware-rtdb-spec.md)
-- [docs/releases/v2.0/dashboard-ux-spec.md](docs/releases/v2.0/dashboard-ux-spec.md)
+- For the current v5.0 firmware and run-mode behavior, see `docs/archive/firmware_master_spec.md`.
+- For the current dashboard UX and mode architecture, see `docs/archive/dashboard_master_spec.md`.
+- For the original v2.0 RTDB contract and UX spec (historical reference), see:
+  - [docs/releases/v2.0/firmware-rtdb-spec.md](docs/releases/v2.0/firmware-rtdb-spec.md)
+  - [docs/releases/v2.0/dashboard-ux-spec.md](docs/releases/v2.0/dashboard-ux-spec.md)
 
 ---
 

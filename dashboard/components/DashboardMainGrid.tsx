@@ -51,7 +51,7 @@ export default function DashboardMainGrid({
   isAddingCountdownTime = false,
   onStopRun,
 }: DashboardMainGridProps) {
-  const runMode = status?.run_mode ?? (running ? "AUTO" : "OFF");
+  const runMode = status?.run_mode ?? (running ? "AUTO" : "OFF") as string;
   const remainingSec = status?.countdown_remaining_sec ?? 0;
 
   const levelEstimateActive = status?.level_estimate_active ?? false;
@@ -88,6 +88,7 @@ export default function DashboardMainGrid({
           levelEstimateActive={levelEstimateActive}
           pumpStartLevel={startLevel}
           pumpStopLevel={stopLevel}
+          levelLastValidAgeSec={status?.level_last_valid_age_sec}
         />
       </div>
 
@@ -97,17 +98,26 @@ export default function DashboardMainGrid({
         <div className="grid grid-cols-3 gap-2 md:hidden">
           <div className="flex flex-col items-center justify-center min-w-0 p-2.5 rounded-xl bg-surface-2 border border-surface-3">
             <span className="text-[9px] font-mono text-text-muted uppercase">Level</span>
-            <span className={clsx(
-              "text-lg font-display font-bold tabular-nums leading-tight",
-              levelEstimateActive ? "text-accent-amber" : displayLevel <= startLevel ? "text-accent-amber" : "text-accent-cyan"
-            )}>
-              {levelEstimateActive ? `~${displayLevel}` : displayLevel}%
+            <span
+              className={clsx(
+                "text-xl font-display font-bold tabular-nums leading-tight",
+                levelEstimateActive
+                  ? "text-accent-amber"
+                  : displayLevel <= startLevel
+                    ? "text-accent-amber"
+                    : "text-accent-cyan"
+              )}
+            >
+              {(levelEstimateActive || (status?.level_last_valid_age_sec ?? 0) > 300)
+                ? `~${displayLevel}`
+                : displayLevel}
+              %
             </span>
           </div>
           <div className="flex flex-col items-center justify-center min-w-0 p-2.5 rounded-xl bg-surface-2 border border-surface-3">
             <span className="text-[9px] font-mono text-text-muted uppercase">Flow</span>
             <span className={clsx(
-              "text-lg font-display font-bold tabular-nums leading-tight",
+              "text-xl font-display font-bold tabular-nums leading-tight",
               flowColor === "red" ? "text-accent-red" : "text-accent-green"
             )}>
               {flow.toFixed(1)}
@@ -116,7 +126,7 @@ export default function DashboardMainGrid({
           </div>
           <div className="flex flex-col items-center justify-center min-w-0 p-2.5 rounded-xl bg-surface-2 border border-surface-3">
             <span className="text-[9px] font-mono text-text-muted uppercase">Pump</span>
-            <span className={clsx("text-lg font-display font-bold tabular-nums leading-tight", pumpColorMobile)}>
+            <span className={clsx("text-xl font-display font-bold tabular-nums leading-tight", pumpColorMobile)}>
               {pumpLabel}
             </span>
             {runMode === "COUNTDOWN" && remainingSec > 0 && (
@@ -145,25 +155,43 @@ export default function DashboardMainGrid({
             unit="L/min"
             Icon={Wind}
             color={flowColor}
-            sub={running
-              ? (flow < dryRunThreshold ? "⚠ Low flow" : "Normal flow")
-              : "Pump idle"}
+            sub={
+              running
+                ? flow < dryRunThreshold
+                  ? "⚠ Low flow"
+                  : "Normal flow"
+                : "Pump idle"
+            }
             animate={running}
+            proximity={
+              running && dryRunThreshold > 0
+                ? Math.min(1.5, flow / dryRunThreshold)
+                : undefined
+            }
+            proximityLabel={
+              running && dryRunThreshold > 0
+                ? flow < dryRunThreshold
+                  ? "Below dry-run threshold"
+                  : flow < dryRunThreshold * 2
+                    ? "Near dry-run threshold"
+                    : "Well above threshold"
+                : undefined
+            }
           />
           <StatCard
             label="Pump"
             value={isError ? "ERROR" : running ? "ON" : "OFF"}
             Icon={Activity}
             color={isError ? "red" : running ? "green" : "cyan"}
-            sub={`${mode} · ${runMode === "AUTO_STANDBY" ? "Standby" : runMode}`}
+            sub={`${mode} · ${runMode === "AUTO_STANDBY" ? "Standby" : runMode === "MANUAL_OFF" ? "Off" : runMode}`}
           />
         </div>
       </div>
 
       {/* Col 3: Controls */}
-      <div className="card p-4 sm:p-5 space-y-4">
+      <div className="card p-4 sm:p-5 space-y-4" id="run-mode-section">
         <RunControls
-          runMode={runMode as "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "COUNTDOWN"}
+          runMode={runMode as "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "MANUAL_OFF" | "COUNTDOWN" | "FORCE_ON"}
           remainingSec={remainingSec}
           controlMode={mode}
           isError={isError}
@@ -177,6 +205,12 @@ export default function DashboardMainGrid({
           onStartCountdown={onStartCountdown}
           onAddCountdownTime={onAddCountdownTime}
           onStop={onStopRun}
+          onGoToEmergencyControls={() => {
+            const emergency = document.querySelector("#emergency-controls");
+            if (emergency instanceof HTMLElement) {
+              emergency.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          }}
         />
         <div className="border-t border-surface-3 pt-4">
           <ModeControls

@@ -204,12 +204,20 @@ void loadStateFromNVS() {
   cfgLastCountdownDurationMin = prefs.getInt("cd_dur_min", 15);
   prefs.end();
 
-  if (savedMode == "AUTO" || savedMode == "FORCE_ON" || savedMode == "FORCE_OFF" || savedMode == "COUNTDOWN") {
+  // v4.0: MANUAL is safe to restore (full safety active). FORCE_ON requires explicit re-activation.
+  if (savedMode == "AUTO" || savedMode == "FORCE_OFF"
+      || savedMode == "COUNTDOWN" || savedMode == "MANUAL") {
     pumpMode = savedMode;
     lastPersistedMode = savedMode;
     if (savedMode == "COUNTDOWN") {
       Serial.println("[BOOT] Restored COUNTDOWN mode from NVS. Timer will restart on Firebase sync.");
+    } else if (savedMode == "MANUAL") {
+      Serial.println("[BOOT] Restored MANUAL mode. Pump will start when sensor block runs.");
     }
+  } else if (savedMode == "FORCE_ON") {
+    pumpMode = "AUTO";
+    lastPersistedMode = "AUTO";
+    Serial.println("[BOOT] FORCE_ON not restored after reboot. Defaulting to AUTO.");
   }
   isDryRunError = savedDryRun;
   lastPersistedDryRun = savedDryRun;

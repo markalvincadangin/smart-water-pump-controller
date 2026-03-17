@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { RefreshCw } from "lucide-react";
-import type { HistoryEntry } from "@/lib/types";
+import type { HistoryEntry, HistoryEvent } from "@/lib/types";
 import HistoryChart from "@/components/HistoryChart";
 import CollapsibleSection from "@/components/CollapsibleSection";
 
@@ -12,9 +12,10 @@ interface DashboardHistorySectionProps {
   history: HistoryEntry[];
   pumpStartLevel?: number;
   pumpStopLevel?: number;
+  events?: HistoryEvent[];
 }
 
-export default function DashboardHistorySection({ connected, updateLabel, history, pumpStartLevel, pumpStopLevel }: DashboardHistorySectionProps) {
+export default function DashboardHistorySection({ connected, updateLabel, history, pumpStartLevel, pumpStopLevel, events }: DashboardHistorySectionProps) {
   return (
     <div className="card p-4 sm:p-5 card-glow-cyan min-w-0 overflow-hidden">
       <CollapsibleSection
@@ -27,7 +28,7 @@ export default function DashboardHistorySection({ connected, updateLabel, histor
           </div>
         }
       >
-        <HistoryChart data={history} pumpStartLevel={pumpStartLevel} pumpStopLevel={pumpStopLevel} />
+        <HistoryChart data={history} pumpStartLevel={pumpStartLevel} pumpStopLevel={pumpStopLevel} events={events} />
       </CollapsibleSection>
     </div>
   );

@@ -121,6 +121,12 @@
 #define TANK_CAPACITY_L              660   // Bestank WT660
 #define AUTO_BYPASS_FAILURE_SEC_DEF  60
 
+// v4.0: Minimum off-time between pump starts (R-01, motor protection)
+#define MIN_PUMP_OFF_TIME_MS         30000
+
+// v4.0: FORCE_ON auto-timeout default in minutes (R-02, configurable via Firebase)
+#define FORCE_ON_MAX_MIN_DEFAULT     60
+
 // ---- Firebase objects ----
 extern FirebaseData   fbdo;
 extern FirebaseAuth   auth;
@@ -240,13 +246,19 @@ extern uint32_t      minFreeHeapObserved;
 
 // -----------------------------------------------------------------------------
 // Phase 7 manual run + v3.0 COUNTDOWN (replaces Phase 7 timed run)
+// v4.0: runMode now includes "FORCE_ON" for absolute override display
+// v5.0: runMode now includes "MANUAL_OFF" for MANUAL-mode-pump-off state
 // -----------------------------------------------------------------------------
-extern String        runMode;               // "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "COUNTDOWN"
+extern String        runMode;               // "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL" | "MANUAL_OFF" | "COUNTDOWN" | "FORCE_ON"
 extern String        runPrevPumpMode;        // stores prior pumpMode when manual run started
 extern unsigned long runStartMs;             // millis() when manual run began
 extern bool          isManualRun;            // true when run started via manual_start; cleared on manual_stop or mode change
 extern String        lastFaultCode;          // e.g. "DRY_RUN", "OVERFLOW", "SENSOR"
 extern String        lastFaultMessage;      // human-readable detail
+
+// v4.0: FORCE_ON auto-timeout tracking (R-02)
+extern unsigned long forceOnStartMs;         // millis() when FORCE_ON mode was entered
+extern int           cfgForceOnMaxMin;       // configurable max FORCE_ON runtime (default 60 min)
 
 // v3.0 COUNTDOWN mode state (replaces TIMED runMode / runDurationMs / runRemainingSec)
 extern bool          isCountdownActive;

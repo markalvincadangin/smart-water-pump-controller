@@ -115,7 +115,7 @@ void checkFlowSensorStuck() {
  *        reaching the stop level, flag overflow error and stop pump.
  */
 void checkOverflowProtection() {
-  if (!isRunning || !(pumpMode == "AUTO" || pumpMode == "COUNTDOWN")) {
+  if (!isRunning || !(pumpMode == "AUTO" || pumpMode == "COUNTDOWN" || pumpMode == "MANUAL")) {
     pumpAutoStartTracking = false;
     pumpAutoStartMs = 0;
     return;
@@ -132,7 +132,10 @@ void checkOverflowProtection() {
   unsigned long elapsed = millis() - pumpAutoStartMs;
   if (elapsed >= maxRuntimeMs) {
     isOverflowError = true;
-    setPump(false);
+    // In FORCE_ON, P0 owns the relay; P1 only sets flags for monitoring.
+    if (pumpMode != "FORCE_ON") {
+      setPump(false);
+    }
     pumpAutoStartTracking = false;
     Serial.printf("[SAFETY][ERROR] Max runtime exceeded (%d min). Pump stopped.\n", cfgMaxPumpRuntimeMin);
   }
@@ -160,8 +163,13 @@ void checkDryRunProtection() {
       unsigned long elapsed = millis() - dryRunStartMs;
       if (elapsed >= dryRunTimeoutMs) {
         isDryRunError = true;
-        setPump(false);
-        Serial.println("[SAFETY][ERROR] DRY-RUN LOCKOUT. Pump stopped; waiting for acknowledge.");
+        // In FORCE_ON, P0 owns the relay; P1 only sets flags for monitoring.
+        if (pumpMode != "FORCE_ON") {
+          setPump(false);
+          Serial.println("[SAFETY][ERROR] DRY-RUN LOCKOUT. Pump stopped; waiting for acknowledge.");
+        } else {
+          Serial.println("[SAFETY][ERROR] DRY-RUN detected under FORCE_ON (relay held ON by override).");
+        }
       }
     }
   } else {
@@ -182,29 +190,32 @@ void checkSafetyCutoff() {
   checkOverflowProtection();
 }
 
-// ---- Pump state machine (v3.0 Hierarchical Priority Model) ----
+// ---- Pump state machine (v4.0 Hierarchical Priority Model) ----
 
 /**
- * @brief Pump state machine — P1 Hard Safety, P2 Bypass, P3 Manual, P4 Countdown, P5 Automation.
- *   P1: Dry-run lockout, overflow. Cannot be bypassed.
- *   P2: cfgBypassLevelSensor — in AUTO, ignore level; flow guard still active.
- *   P3: FORCE_OFF (emergency stop), then FORCE_ON (manual run, P1 still applies).
- *   P4: COUNTDOWN mode — run until timer or 100% (unless bypass); then revert to AUTO.
- *   P5: AUTO hysteresis; blocked by isLevelSensorError unless P2 bypass active; sleep suppresses auto-start.
+ * @brief Pump state machine — v4.0 six-level priority cascade.
+ *   P0: FORCE_ON — absolute override, all safety bypassed at relay level.
+ *   P1: Hard safety — dry-run lockout, overflow. Cannot be bypassed except by P0.
+ *   P2: FORCE_OFF — persistent emergency stop.
+ *   P3: MANUAL — operator-initiated, full safety (identical to AUTO).
+ *   P4: COUNTDOWN — timed run, full safety.
+ *   P5: AUTO — hysteresis with sleep, bypass, level error, and level checks.
  */
 void executePumpLogic() {
-  // Defensive: keep isManualRun in sync with pumpMode (e.g. after NVS restore to AUTO)
-  if (pumpMode != "FORCE_ON")
-    isManualRun = false;
+  // Sync isManualRun — true only during MANUAL mode
+  isManualRun = (pumpMode == "MANUAL");
 
-  // Derive runMode first — must execute before any early return so the
-  // dashboard always sees the correct state.
-  if (isDryRunError || isOverflowError) {
+  // ── runMode derivation (always before any return) ──────────────────────
+  if (pumpMode == "FORCE_ON") {
+    runMode = "FORCE_ON";
+  } else if (isDryRunError || isOverflowError) {
     runMode = "OFF";
   } else if (pumpMode == "FORCE_OFF") {
     runMode = "OFF";
-  } else if (pumpMode == "FORCE_ON") {
+  } else if (pumpMode == "MANUAL" && isRunning) {
     runMode = "MANUAL";
+  } else if (pumpMode == "MANUAL" && !isRunning) {
+    runMode = "MANUAL_OFF"; // v5: MANUAL mode, pump off (operator or safety)
   } else if (pumpMode == "COUNTDOWN" && isCountdownActive) {
     runMode = "COUNTDOWN";
   } else if (pumpMode == "COUNTDOWN" && !isCountdownActive) {
@@ -213,63 +224,102 @@ void executePumpLogic() {
     runMode = "AUTO";
   } else if (pumpMode == "AUTO" && !isRunning) {
     runMode = "AUTO_STANDBY";
-  } else if (!isRunning) {
-    runMode = "OFF";
   } else {
-    runMode = "AUTO";
+    runMode = isRunning ? "AUTO" : "OFF";
   }
 
-  // P1: HARD SAFETY — dry-run lockout and overflow (cannot be bypassed)
-  if (isDryRunError || isOverflowError) {
-    if (isDryRunError) {
-      lastFaultCode = "DRY_RUN";
-      lastFaultMessage = "Dry-run lockout: low flow while pump was running.";
-    } else {
-      lastFaultCode = "OVERFLOW";
-      lastFaultMessage = "Overflow protection: max runtime exceeded in AUTO.";
+  // ── P0: ABSOLUTE OVERRIDE — FORCE_ON ───────────────────────────────────
+  // checkSafetyCutoff() already ran. Error flags are SET for dashboard display.
+  // The relay is NOT affected by those flags at this priority level.
+  if (pumpMode == "FORCE_ON") {
+    // R-02: FORCE_ON auto-timeout — revert to AUTO after cfgForceOnMaxMin minutes
+    if (forceOnStartMs == 0) {
+      forceOnStartMs = millis();
     }
-    setPump(false);
-    if (isCountdownActive) {
-      isCountdownActive = false;
-      countdownEndMs = 0;
+    unsigned long forceOnElapsed = millis() - forceOnStartMs;
+    if (cfgForceOnMaxMin > 0 && forceOnElapsed >= (unsigned long)cfgForceOnMaxMin * 60000UL) {
+      Serial.printf("[FORCE_ON] Auto-expired after %d min. Reverting to AUTO.\n", cfgForceOnMaxMin);
       pumpMode = "AUTO";
       pendingModeWriteback = true;
       pendingModeWritebackSentMs = 0;
+      forceOnStartMs = 0;
+      // Do NOT setPump here — let P5 evaluate level state on next cycle
+      return;
     }
+    setPump(true);
+    return;
+  } else {
+    forceOnStartMs = 0;  // Reset whenever not in FORCE_ON
+  }
+
+  // ── P1: HARD SAFETY ────────────────────────────────────────────────────
+  if (isDryRunError || isOverflowError) {
+    lastFaultCode    = isDryRunError ? "DRY_RUN" : "OVERFLOW";
+    lastFaultMessage = isDryRunError
+      ? "Dry-run lockout: low flow while pump was running."
+      : "Overflow protection: max runtime exceeded.";
+    setPump(false);
+    // COUNTDOWN: cancel and revert to AUTO
+    if (isCountdownActive) {
+      isCountdownActive = false; countdownEndMs = 0;
+      pumpMode = "AUTO"; pendingModeWriteback = true; pendingModeWritebackSentMs = 0;
+    }
+    // MANUAL: do NOT revert mode. Pump off, mode stays MANUAL.
+    // After clear_error: P3 will restart the pump automatically.
     return;
   }
 
-  // P3: EMERGENCY STOP — FORCE_OFF always wins
+  // ── P2: FORCE_OFF ──────────────────────────────────────────────────────
   if (pumpMode == "FORCE_OFF") {
     setPump(false);
     return;
   }
 
-  // P3: MANUAL RUN — FORCE_ON (P1 still guards above)
-  if (pumpMode == "FORCE_ON") {
+  // ── P3: MANUAL RUN (full safety — same as AUTO) ───────────────────────
+  if (pumpMode == "MANUAL") {
+    // Level sensor error fail-safe (only when bypass is OFF)
+    if (isLevelSensorError && !cfgBypassLevelSensor) {
+      if (isRunning) {
+        Serial.println("[MANUAL] Level sensor error — stopping (fail-safe).");
+        lastFaultCode    = "LEVEL_SENSOR";
+        lastFaultMessage = "Level sensor offline: pump stopped in MANUAL (fail-safe).";
+        setPump(false);
+      }
+      return;  // Mode stays MANUAL; pump off until sensor recovers or bypass enabled
+    }
+    // Tank-full stop — v5: stay in MANUAL (sticky). Operator exits explicitly.
+    if (!cfgBypassLevelSensor && waterLevelPct >= cfgPumpStopLevel) {
+      Serial.printf("[MANUAL] Tank full (%d%%). Stopping pump (mode stays MANUAL).\n", waterLevelPct);
+      setPump(false);
+      return;
+    }
+    // R-01: Minimum off-time check (motor protection)
+    if (!isRunning && pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
+      return;  // Skip start, wait for minimum off-time
+    }
     setPump(true);
     return;
   }
 
-  // P4: COUNTDOWN — run until timer expires or tank 100% (unless bypass)
+  // ── P4: COUNTDOWN ─────────────────────────────────────────────────────
   if (pumpMode == "COUNTDOWN") {
     if (isCountdownActive) {
       if (!cfgBypassLevelSensor && waterLevelPct >= cfgPumpStopLevel) {
-        Serial.printf("[COUNTDOWN] Tank full (%d%%). Stopping pump early.\n", waterLevelPct);
-        setPump(false);
-        isCountdownActive = false;
-        countdownEndMs = 0;
-        pumpMode = "AUTO";
-        pendingModeWriteback = true;
-        pendingModeWritebackSentMs = 0;
+        Serial.printf("[COUNTDOWN] Tank full (%d%%). Stopping early.\n", waterLevelPct);
+        setPump(false); isCountdownActive = false; countdownEndMs = 0;
+        pumpMode = "AUTO"; pendingModeWriteback = true; pendingModeWritebackSentMs = 0;
         return;
+      }
+      // R-01: Minimum off-time check (motor protection)
+      if (!isRunning && pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
+        return;  // Skip start, wait for minimum off-time
       }
       setPump(true);
     }
     return;
   }
 
-  // P5: AUTO (and sleep / P2 bypass / level error / hysteresis)
+  // ── P5: AUTO ─────────────────────────────────────────────────────────
   if (isSleeping) {
     if (isRunning && waterLevelPct >= cfgPumpStopLevel) {
       Serial.printf("[AUTO] Water at %d%%. Stopping pump.\n", waterLevelPct);
@@ -278,12 +328,12 @@ void executePumpLogic() {
     return;
   }
 
-  // P2: Level sensor bypass — ignore level; flow guard (P1) is the only stop condition
+  // P5b: Level sensor bypass — ignore level; flow guard (P1) is the only stop condition
   if (cfgBypassLevelSensor) {
     return;
   }
 
-  // Level sensor error in AUTO: fail-safe pump OFF
+  // P5c: Level sensor error in AUTO: fail-safe pump OFF
   if (isLevelSensorError) {
     if (isRunning) {
       Serial.println("[AUTO] Level sensor error — stopping pump (fail-safe).");
@@ -294,8 +344,12 @@ void executePumpLogic() {
     return;
   }
 
-  // Standard hysteresis control
+  // P5d: Standard hysteresis control
+  // R-01: Minimum off-time check before auto-start (motor protection)
   if (!isRunning && waterLevelPct <= cfgPumpStartLevel) {
+    if (pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
+      return;  // Skip start, wait for minimum off-time
+    }
     Serial.printf("[AUTO] Water at %d%%. Starting pump.\n", waterLevelPct);
     setPump(true);
   } else if (isRunning && waterLevelPct >= cfgPumpStopLevel) {
@@ -303,4 +357,5 @@ void executePumpLogic() {
     setPump(false);
   }
 }
+
 

@@ -1,9 +1,12 @@
 # Firmware — Smart Water Pump Controller
 **Platform:** ESP32 DevKit V1 (38-pin)
-**Framework:** Arduino (via Arduino IDE or VS Code + Arduino extension)
-**Version:** 3.0.0 (Hierarchical Priority Model, COUNTDOWN, bypass, telemetry)
+**Framework:** Arduino (via Arduino IDE or VS Code + Arduino extension)  
+**Version:** 5.0.0 (Hierarchical Priority Model, COUNTDOWN v3, MANUAL_OFF sticky mode, bypass, telemetry)
 
-**Detailed system documentation:** For architecture, hardware interface, safety logic, and integration details, see [docs/releases/v2.0/firmware-documentation.md](../docs/releases/v2.0/firmware-documentation.md). For the RTDB contract (status/control/config schemas), see [docs/releases/v2.0/firmware-rtdb-spec.md](../docs/releases/v2.0/firmware-rtdb-spec.md).
+**Detailed system documentation (canonical):**
+
+- For full v5.0 behavior, run modes, and safety logic, see `docs/archive/firmware_master_spec.md`.
+- For the RTDB contract used by the dashboard, see `docs/releases/v2.0/firmware-rtdb-spec.md` (historical) and the v5 mapping in `docs/archive/firmware_master_spec.md` §14–15.
 
 ---
 
@@ -12,7 +15,7 @@
 The firmware runs a non-blocking state machine on the ESP32 that:
 
 - Reads tank water level every **1 second** via JSN-SR04T ultrasonic sensor (5-sample median, EMA smoothing)
-  - In long-run installations, the JSN-SR04T is driven by a small NodeMCU v3 (ESP8266) "tank node" near the tank and
+  - In long-run installations, the JSN-SR04T is driven by a small NodeMCU V2 (ESP8266, CP2102) "tank node" near the tank and
     reported over RS-485 to the main enclosure.
 - Reads pipe flow rate every **1 second** via YF-G1 hall-effect sensor (hardware interrupt)
 - Syncs status to Firebase Realtime Database every **3 seconds**
@@ -31,21 +34,24 @@ The firmware runs a non-blocking state machine on the ESP32 that:
 
 ```
 firmware/
-├── smart_pump_controller/
-│   ├── 01_config.ino               ← Includes, constants, globals
-│   ├── 02_sensors.ino              ← Flow ISR + ultrasonic + flow calc
-│   ├── 03_safety_pump.ino          ← Safety checks + pump state machine
-│   ├── 04_persistence.ino          ← NVS config/state + crash loop helpers
-│   ├── 05_connectivity_cloud.ino   ← WiFi/NTP/Firebase helpers
-│   ├── smart_pump_controller.ino   ← Entry points only (open this in Arduino IDE)
-│   ├── secrets.h.example           ← Template for credentials (copy to secrets.h)
-│   └── secrets.h                  ← Your credentials (create from example, gitignored)
-├── libraries.txt                   ← Required libraries and install instructions
-└── README.md                       ← This file
+├── arduino_smart_water_pump_controller/
+│   ├── 01_config.ino                      ← Includes, constants, globals
+│   ├── 02_sensors.ino                     ← Flow ISR + ultrasonic + flow calc
+│   ├── 03_safety_pump.ino                 ← Safety checks + pump state machine (P0–P5)
+│   ├── 04_persistence.ino                 ← NVS config/state + crash loop helpers
+│   ├── 05_connectivity_cloud.ino          ← WiFi/NTP/Firebase helpers
+│   ├── arduino_smart_water_pump_controller.ino ← Entry point (open this in Arduino IDE)
+│   ├── smart_water_pump_controller_shared.h    ← Shared globals/constants header
+│   ├── secrets.h.example                  ← Template for credentials (copy to secrets.h)
+│   └── secrets.h                          ← Your credentials (create from example, gitignored)
+├── platformio_smart_water_pump_controller/     ← PlatformIO project (VS Code)
+│   ├── platformio.ini
+│   └── src/… (mirrors the Arduino tabs)
+├── libraries.txt                          ← Required libraries and install instructions
+└── README.md                              ← This file
 ```
 
-> **Arduino IDE requirement:** The sketch must live in a folder named
-> `smart_pump_controller/` and you should open `smart_pump_controller.ino`.
+> **Arduino IDE requirement:** Open `arduino_smart_water_pump_controller/arduino_smart_water_pump_controller.ino`.  
 > Arduino concatenates all `.ino` tabs **alphabetically**, so the numeric prefixes
 > (`01_...05_`) lock in the build order.
 
@@ -56,12 +62,16 @@ firmware/
 | GPIO | Direction | Connected To | Notes |
 |------|-----------|-------------|-------|
 | 4 | OUTPUT | 5V Relay Module IN | Active LOW — LOW = pump ON |
-| 5 | OUTPUT | JSN-SR04T TRIG | 10µs pulse to trigger ranging |
-| 18 | INPUT | JSN-SR04T ECHO | Via 1kΩ/2kΩ voltage divider |
-| 34 | INPUT | YF-G1 Signal (Yellow wire) | Via 1kΩ/2kΩ voltage divider; interrupt on RISING edge |
+| 17 | OUTPUT | RS-485 TX (UART2 TX) → MAX485 DI | **FINAL:** UART2 TX for RS-485 |
+| 16 | INPUT | RS-485 RX (UART2 RX) ← MAX485 RO | **FINAL:** UART2 RX for RS-485 |
+| 5 | OUTPUT | RS-485 DE/RE (tied) | **FINAL:** LOW=RX, HIGH=TX |
 
 > **GPIO 34** is input-only on the ESP32 — it has no internal pull-up/pull-down
 > and cannot be used as an output. This makes it ideal for the flow sensor interrupt.
+
+> **CLARIFIED:** The direct-sensor pin mapping above applies only to the legacy “direct wiring” build.
+> With the upgraded RS-485 tank node architecture, the ESP32 uses a UART + MAX485 module to receive
+> `LVL:<percent>;ERR:<flag>` frames (and flow telemetry) from the NodeMCU near the tank.
 
 ---
 
@@ -166,7 +176,7 @@ The default calibration is for **Bestank WT660** (660L, sensor on lid):
 > The sensor measures distance to the water surface — closer distance = higher water level.
 > `TANK_FULL_CM` will always be a smaller number than `TANK_EMPTY_CM`.
 
-When using the **remote tank node**, the same calibration values are applied on the NodeMCU near the tank.
+When using the **remote tank node**, the same calibration values are applied on the NodeMCU V2 near the tank.
 The main ESP32 only receives an already-calibrated percentage value over RS-485.
 
 ---
@@ -174,7 +184,7 @@ The main ESP32 only receives an already-calibrated percentage value over RS-485.
 ## Remote Ultrasonic Tank Node (RS-485)
 
 For long runs (≈20–30m) between the main enclosure and the tank, the JSN-SR04T sensor is driven by a
-small NodeMCU v3 (ESP8266) node mounted near the tank. This node:
+small NodeMCU V2 (ESP8266, CP2102) node mounted near the tank. This node:
 
 - Drives JSN TRIG/ECHO locally (short wires, level-shifted ECHO).
 - Applies the same 5-sample median + EMA smoothing and tank calibration.
@@ -235,17 +245,19 @@ The firmware reads `/pump_system/control/mode` from Firebase every 3 seconds.
 > **Safety override:** If `isDryRunError` or `isOverflowError` is active, the pump will not run in
 > any mode until the error is acknowledged via the dashboard (`clear_error = true`).
 
-### Run modes (v3.0)
+### Run modes (v5.0)
 
-The firmware tracks a `run_mode` alongside `mode` to give the dashboard fine-grained status:
+The firmware tracks a `runMode` alongside `pumpMode` to give the dashboard fine-grained status (see `docs/archive/firmware_master_spec.md` §2.3 for the full table):
 
-| `run_mode` | Meaning |
-|------------|--------|
-| `AUTO` | AUTO mode, pump running |
-| `AUTO_STANDBY` | AUTO mode, pump idle (tank above start level) |
-| `MANUAL` | FORCE_ON active |
-| `COUNTDOWN` | Timed run in progress |
-| `OFF` | FORCE_OFF or error lockout |
+| `run_mode`    | Meaning |
+|---------------|---------|
+| `AUTO`        | AUTO mode, pump running |
+| `AUTO_STANDBY`| AUTO mode, pump idle (above start level) |
+| `MANUAL`      | MANUAL mode, pump running (full safety) |
+| `MANUAL_OFF`  | MANUAL mode selected, pump off (sticky MANUAL) |
+| `COUNTDOWN`   | Timed run in progress (COUNTDOWN mode active) |
+| `FORCE_ON`    | Absolute override — pump forced ON regardless of errors |
+| `OFF`         | Pump off due to FORCE_OFF or P1 lockout (dry-run/overflow) |
 
 Dashboard can request:
 - **Manual run** ("run now until I press Stop") via `manual_start` control flag.

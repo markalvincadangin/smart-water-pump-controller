@@ -108,9 +108,9 @@ dashboard/
 │   ├── page.tsx            # Main dashboard page
 │   └── globals.css         # Global styles + Tailwind
 ├── components/
-│   ├── TankVisual.tsx      # Animated tank level + start/stop reference lines
-│   ├── ModeControls.tsx    # AUTO / FORCE_ON / FORCE_OFF mode selector
-│   ├── RunControls.tsx     # Manual start, countdown (pill buttons), stop
+│   ├── TankVisual.tsx      # Animated tank level + start/stop reference lines, MANUAL_OFF + stale/estimate styling
+│   ├── ModeControls.tsx    # AUTO / MANUAL pill + Emergency Controls (FORCE_OFF, FORCE_ON with 2-step confirm)
+│   ├── RunControls.tsx     # MANUAL ON/OFF toggle, Semi-Auto Timer (COUNTDOWN), countdown timer/stop/add-time, inline Clear Error
 │   ├── HistoryChart.tsx    # Dual Y-axis area chart (level + flow)
 │   ├── StatCard.tsx        # Metric display card
 │   ├── StatusBar.tsx       # Top bar: connectivity, mode, warning badges

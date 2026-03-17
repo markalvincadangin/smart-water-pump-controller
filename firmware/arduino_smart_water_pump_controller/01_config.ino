@@ -131,6 +131,11 @@ unsigned long runStartMs       = 0;
 bool          isManualRun      = false;  // true when started via manual_start (dashboard never writes run_mode)
 String        lastFaultCode    = "";
 String        lastFaultMessage = "";
+
+// v4.0: FORCE_ON auto-timeout tracking (R-02)
+unsigned long forceOnStartMs       = 0;
+int           cfgForceOnMaxMin     = FORCE_ON_MAX_MIN_DEFAULT;
+
 bool          isCountdownActive = false;
 unsigned long countdownEndMs   = 0;
 bool          pendingModeWriteback = false;
@@ -138,3 +143,4 @@ unsigned long pendingModeWritebackSentMs = 0;
 int           cfgLastCountdownDurationMin = 15;
 int           statusPushRetryCount   = 0;
 unsigned long statusPushRetryMs      = 0;
+

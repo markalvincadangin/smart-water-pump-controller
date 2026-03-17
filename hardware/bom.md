@@ -27,13 +27,12 @@
 |---|-----------|-------------|-----|------|
 | 6 | ESP32 Development Board | 38-Pin DevKit V1, 3.3V logic, Wi-Fi | 1 | Main controller — runs the firmware state machine |
 | 7 | 5V Relay Module | 1-channel, 5V coil, 10A AC rated, opto-isolated | 1 | Bridges ESP32 GPIO to the 220V contactor coil trigger circuit |
-| 8 | DC Power Adapter | 5V, 3A, AC-to-DC | 1 | Powers ESP32 and relay module from the 220V panel |
+| 8 | DC Power Adapter | **5V, 3A**, AC-to-DC | 1 | **UPDATED/CLARIFIED:** Main enclosure local supply (powers ESP32 + relay + local components) |
 | 9 | Resistors — 1kΩ | 1/4W, through-hole | 2 | Series resistors for both voltage dividers (ECHO + Flow signal) |
 | 10 | Resistors — 2kΩ | 1/4W, through-hole | 2 | Shunt resistors to GND for both voltage dividers |
 
-> **Voltage divider purpose:** The YF-G1 and JSN-SR04T both output 5V signals.
-> The ESP32 GPIO pins are **3.3V max**. Each signal line needs a 1kΩ/2kΩ divider.
-> `V_out = 5V × (2kΩ / (1kΩ + 2kΩ)) = 3.33V` ✓
+> **UPDATED:** Voltage dividers are still required where 5V sensor signals enter 3.3V GPIO
+> (ESP32 or NodeMCU). Exact divider values are documented in `hardware/wiring_notes.md`.
 
 ---
 
@@ -70,19 +69,24 @@
 
 | # | Component | Model / Spec | Qty | Role |
 |---|-----------|-------------|-----|------|
-| 28 | NodeMCU v3 Development Board | ESP8266 (ESP-12E) NodeMCU v3, 3.3V logic, Wi-Fi | 1 | Tank-side microcontroller that reads JSN-SR04T and sends level over RS-485 |
-| 29 | RS-485 Transceiver Module (Main Box) | 3.3V-compatible, e.g. MAX3485 or equivalent | 1 | Converts ESP32 UART (main enclosure) to RS-485 A/B for the 30–40m CAT6 run |
-| 30 | RS-485 Transceiver Module (Tank Box) | 3.3V-compatible, same family as above | 1 | Converts NodeMCU UART (tank) to RS-485 A/B |
+| 28 | NodeMCU V2 Development Board | **ESP8266 + CP2102**, 3.3V logic | 1 | **UPDATED:** Remote sensor node — reads ultrasonic + flow and sends over RS-485 |
+| 29 | RS-485 to TTL Module (Main Box) | **MAX485** module | 1 | **UPDATED:** ESP32 UART ↔ RS-485 A/B (half-duplex) |
+| 30 | RS-485 to TTL Module (Tank Box) | **MAX485** module | 1 | **UPDATED:** NodeMCU UART ↔ RS-485 A/B (half-duplex) |
 | 31 | Tank-Side IP65 Enclosure | ~15×15×10 cm ABS, 1× PG gland for CAT6 | 1 | Weatherproof housing for NodeMCU, JSN-SR04T PCB, RS-485 module near the tank |
-| 32 | Inline Fuse / Polyfuse | 500 mA @ 5V DC | 1 | Protects 5V branch feeding CAT6 to tank node |
-| 33 | Electrolytic Capacitor | 100–470 µF, ≥10V | 1 | Bulk decoupling for 5V rail inside tank box (handles cable voltage drop / transients) |
-| 34 | Ceramic Capacitors | 100 nF | 2 | Local decoupling near NodeMCU and RS-485 module |
-| 35 | Resistors — JSN ECHO divider | 10 kΩ and 20 kΩ, 1/4W | 2 each | On-board voltage divider to convert JSN ECHO 5V → ~3.3V for NodeMCU GPIO |
-| 36 | Small terminal block strip | 4–8 way, screw or push-in | 1 | Terminates CAT6 pairs inside tank box (5V, GND, RS-485 A/B) |
+| 32 | DC Power Adapter (Remote) | **12V, 3A**, AC-to-DC | 1 | **NEW/CLARIFIED:** Injects 12V into CAT6 to power the tank enclosure |
+| 33 | Buck Converter Module (Tank Box) | **LM2596** (12V → 5V adjustable) | 1 | **NEW/CLARIFIED:** Tank enclosure 12V→5V conversion (powers NodeMCU + sensors + MAX485) |
+| 34 | DC Barrel Jack (Panel Mount) | Female socket | 1 | **NEW:** Clean 12V DC injection entry point (near main enclosure, or junction box) |
+| 35 | DC Barrel Plug | Male plug | 1 | **NEW:** Mates with the 12V adapter lead / extension |
+| 36 | Inline Fuse / Polyfuse | 500 mA @ 12V DC | 1 | **UPDATED:** Protects the 12V branch feeding CAT6 to tank box |
+| 37 | Electrolytic Capacitors | Assorted (e.g. 47–470 µF), ≥16V | 2–4 | **UPDATED:** Bulk decoupling at LM2596 input/output and near MAX485 |
+| 38 | Ceramic Capacitors | 100 nF | 4–6 | **UPDATED:** Local decoupling (NodeMCU, MAX485, buck output) |
+| 39 | Termination Resistors | 120 Ω, 1/4W | 2 | **NEW:** RS-485 termination (one at each end of the bus) |
+| 40 | Resistors — JSN ECHO divider | 10 kΩ and 20 kΩ, 1/4W | 2 each | On-board voltage divider to convert JSN ECHO 5V → ~3.3V for NodeMCU GPIO |
+| 41 | Small terminal block strip | 4–8 way, screw or push-in | 1 | Terminates CAT6 pairs inside tank box (+12V, GND, RS-485 A/B) |
 
-> **Remote node power note:** The existing 5V adapter in the main enclosure now also feeds the tank node
-> over CAT6. Two CAT6 pairs are paralleled for +5V and two for GND to reduce voltage drop; see
-> `hardware/wiring_notes.md` for the exact pinout.
+> **UPDATED/CLARIFIED power note:** There are two separate power systems:
+> - **Main enclosure (local):** 5V adapter → ESP32 + relay + local components.
+> - **Tank enclosure (remote):** 12V adapter injected into CAT6 → LM2596 in tank box → 5V rail for NodeMCU + sensors + MAX485.
 
 ---
 
@@ -103,7 +107,7 @@
 | Category | Items |
 |----------|-------|
 | High-voltage electrical | 5 |
-| Low-voltage / logic | 9 |
+| Low-voltage / logic | 6 |
 | Sensors | 2 |
 | Enclosure & cabling | 11 |
 | Consumables | 5 |

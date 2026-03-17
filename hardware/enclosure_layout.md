@@ -61,7 +61,7 @@ Mount a 4-position DIN screw terminal strip immediately to the left of the MCB o
 
 | Component | Position | Notes |
 |-----------|----------|-------|
-| 5V 3A DC Power Adapter | Left-center, mounted with standoffs or adhesive bracket | 220V input wires come down from neutral busbar and MCB; 5V output wires go down to ESP32 zone |
+| **UPDATED/CLARIFIED: 5V 3A DC Adapter** | Left-center, mounted with standoffs or adhesive bracket | 220V input wires come down from neutral busbar and MCB; 5V output goes down to ESP32 zone |
 | Neutral Busbar terminal strip | Right of power adapter | 3 branches: Contactor A2 coil, pump output neutral, power adapter neutral |
 
 **Wire segregation:** Use a plastic cable duct or cable ties to keep the 220V wires on the left side of the enclosure and DC wires on the right side as they descend from this zone.
@@ -76,7 +76,7 @@ Mount a 4-position DIN screw terminal strip immediately to the left of the MCB o
 |-----------|----------|----------|-------|
 | ESP32 DevKit V1 (38-pin) | Bottom-left | M3 nylon standoffs, 5mm height | USB port faces left wall for potential laptop access |
 | 5V Relay Module | Bottom-center | M3 nylon standoffs | IN pin faces toward ESP32; NO/COM/NC terminals face right toward HV zone edge |
-| Voltage divider resistors | On small perfboard or terminal strip, mounted adjacent to ESP32 | Solder or terminal-mount | Label: "G34-Flow" (flow sensor signal divider) |
+| REMOVED: Flow divider board | — | — | Flow sensor now terminates at tank node (sent via RS-485) |
 | RS-485 Module (Tank Link) | Bottom-right, near CAT6 entry | M3 standoffs or adhesive | DI/RO/DE/RE wired to ESP32 UART & GPIO; A/B wired to CAT6 Green pair |
 
 ---
@@ -102,7 +102,7 @@ Left edge ──────────────── Right edge
 
 ---
 
-## Tank-Side Mini Enclosure — Remote Ultrasonic Node
+## Tank-Side Mini Enclosure — Remote Sensor Node (RS-485)
 
 A small IP65 box is mounted near the tank to host the remote ultrasonic node.
 
@@ -112,11 +112,11 @@ A small IP65 box is mounted near the tank to host the remote ultrasonic node.
 ┌──────────────────────────────┐
 │  JSN-SR04T probe cable  ─────┼──→ Down into tank
 │                              │
-│  [ Terminal Block ]          │  ← CAT6 5V/GND/A/B
+│  [ Terminal Block ]          │  ← CAT6 +12V/GND/A/B
 │                              │
 │  [ RS-485 Module ]           │
 │                              │
-│  [ NodeMCU v3 (ESP8266) ]    │
+│  [ NodeMCU V2 (ESP8266) ]    │
 │                              │
 │  [ 5V / GND bus + caps ]     │
 └──────────────────────────────┘
@@ -124,10 +124,11 @@ A small IP65 box is mounted near the tank to host the remote ultrasonic node.
 
 - CAT6 enters through a small gland at the bottom.
 - The terminal block breaks out:
-  - Paralleled +5V (Orange/Orange-White)
+  - Paralleled +12V (Orange/Orange-White)
   - Paralleled GND (Blue/Blue-White)
   - RS-485 A/B (Green/Green-White)
-- The NodeMCU, JSN module PCB, and RS-485 module are mounted on standoffs or a small perfboard.
+- The NodeMCU, sensor modules, and RS-485 module are mounted on standoffs or a small perfboard.
+- **NEW:** LM2596 inside tank box converts CAT6 +12V to local 5V rail.
 - A 100–470 µF electrolytic capacitor and 100 nF ceramic capacitor are placed close to the NodeMCU
   between 5V and GND.
 
