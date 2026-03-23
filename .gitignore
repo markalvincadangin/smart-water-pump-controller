@@ -24,6 +24,7 @@ functions/.env
 .env.test.local
 .env.production.local
 firmware/**/secrets.h
+firmware/**/secrets_ota.h
 
 # IDE and OS
 .idea/

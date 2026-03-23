@@ -9,11 +9,10 @@
 
 #include <smart_water_pump_controller_shared.h>
 
-void setup() {
-  Serial.begin(115200);
   Serial.println("\n====================================");
-  Serial.println(" Smart Water Pump Controller");
+  Serial.println("         SmartFlow (ESP32)");
   Serial.println("====================================");
+
 
   // Boot reason logging
   bootReasonStr = getBootReasonString();

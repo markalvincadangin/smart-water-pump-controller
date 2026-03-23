@@ -10,19 +10,31 @@
 void setup() {
   Serial.begin(115200);
   delay(50);
-  Serial.println("\n====================================");
-  Serial.println(" Sensor Node (ESP8266) - RS485 Slave");
-  Serial.println("====================================");
+#if SENSOR_DEBUG_ENABLED
+#if !DEBUG_USB_MODE
+  SENSOR_DBG_PORT.begin(SENSOR_DEBUG_BAUD);
+  delay(10);
+  SENSOR_DBGLN("\n[SN] Boot: Sensor node debug enabled (Serial1 GPIO2 TX).");
+#else
+  SENSOR_DBGLN("\n[SN] Boot: DEBUG_USB_MODE enabled (UART0 over USB). RS-485 slave disabled.");
+#endif
+  SENSOR_DBGF("[SN] RS485 UART0 baud: %lu\n", (unsigned long)RS485_BAUD);
+#endif
+
 
   pinMode(PIN_RS485_DE_RE, OUTPUT);
   digitalWrite(PIN_RS485_DE_RE, LOW);  // RX by default
 
   initSensors();
+#if !DEBUG_USB_MODE
   initRs485Slave();
+#endif
 }
 
 void loop() {
+#if !DEBUG_USB_MODE
   serviceRs485Slave();
+#endif
   serviceSensorsNonBlocking();
   delay(1);
 }

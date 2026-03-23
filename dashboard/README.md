@@ -1,4 +1,4 @@
-# Smart Water Pump Controller — Web Dashboard
+# SmartFlow — Web Dashboard
 
 Next.js 14 + Firebase RTDB real-time dashboard for the ESP32 pump controller.  
 Access is protected by **Google sign-in**; only authorized users can view and control the pump.
@@ -15,10 +15,10 @@ Access is protected by **Google sign-in**; only authorized users can view and co
 | Language   | TypeScript                              |
 | Styling    | Tailwind CSS                            |
 | Charts     | Recharts                                |
-| Icons      | Lucide React                            |
+| Icons      | Local SVG asset set + selected Lucide UI icons |
 | Database   | Firebase Realtime Database              |
 | Auth       | Firebase Google Authentication          |
-| Fonts      | Syne · DM Sans · JetBrains Mono (Google)|
+| Fonts      | Geist · Geist Mono (Vercel/Google)      |
 
 ---
 
@@ -46,7 +46,7 @@ cp .env.local.example .env.local
 Edit `.env.local` and fill in your Firebase credentials. Optionally:
 
 - Set `NEXT_PUBLIC_AUTHORIZED_UIDS` (comma-separated Firebase UIDs) to restrict which Google accounts can sign in.
-- Set `NEXT_PUBLIC_TANK_LABEL` to customize the tank label text shown under the logo (defaults to `"Deep Well Pump · 660L Tank"` if omitted).
+- Set `NEXT_PUBLIC_TANK_LABEL` to customize the tank label text shown under the logo (defaults to `"SmartFlow · 660L Tank"` if omitted).
 
 **Where to find Firebase values:**  
 Firebase Console → Project Settings → General → Your apps → Web → SDK setup and configuration
@@ -109,7 +109,7 @@ dashboard/
 │   └── globals.css         # Global styles + Tailwind
 ├── components/
 │   ├── TankVisual.tsx      # Animated tank level + start/stop reference lines, MANUAL_OFF + stale/estimate styling
-│   ├── ModeControls.tsx    # AUTO / MANUAL / COUNTDOWN selector (vNext)
+│   ├── ModeControls.tsx    # AUTO / MANUAL / COUNTDOWN selector
 │   ├── RunControls.tsx     # MANUAL ON/OFF toggle, Semi-Auto Timer (COUNTDOWN), countdown timer/stop/add-time, inline Clear Error
 │   ├── HistoryChart.tsx    # Dual Y-axis area chart (level + flow)
 │   ├── StatCard.tsx        # Metric display card

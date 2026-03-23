@@ -45,6 +45,12 @@
 
 > **⚠ Part verification:** Confirm the ultrasonic sensor has a **separate torpedo-shaped probe on a cable**
 > (JSN-SR04T-2.0), not two exposed PCB transducers (HC-SR04). Only the JSN-SR04T is waterproof.
+>
+> **Firmware note:** The NodeMCU firmware still drives it like an **HC-SR04** (TRIG pulse + ECHO pulse width → distance).
+> The `widthUs / 58.0f` cm conversion is the usual speed-of-sound approximation; **level %** is a separate
+> **two-point calibration** (`TANK_US_DIST_EMPTY_CM` / `TANK_US_DIST_FULL_CM` in `platformio_sensor_node` `config.h`).
+> Check the JSN-SR04T-2.0 datasheet for **minimum range / blind zone** (often ~20 cm class): if the water surface
+> is closer than that, readings can be wrong or stick near a limit—mount the probe so the path stays in the valid range.
 
 ---
 

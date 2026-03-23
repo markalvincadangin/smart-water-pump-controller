@@ -9,28 +9,28 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        display: ["'Syne'", "sans-serif"],
-        mono: ["'JetBrains Mono'", "monospace"],
-        body: ["'DM Sans'", "sans-serif"],
+        display: ["var(--font-ui)", "system-ui", "sans-serif"],
+        mono: ["var(--font-data)", "monospace"],
+        body: ["var(--font-ui)", "system-ui", "sans-serif"],
       },
       colors: {
         surface: {
-          DEFAULT: "#0A0E1A",
-          1: "#0F1524",
-          2: "#151C30",
-          3: "#1C253D",
-          4: "#243050",
+          DEFAULT: "rgb(var(--c-bg-base) / <alpha-value>)",
+          1: "rgb(var(--c-bg-surface) / <alpha-value>)",
+          2: "rgb(var(--c-bg-elevated) / <alpha-value>)",
+          3: "rgb(var(--c-border-subtle) / <alpha-value>)",
+          4: "rgb(var(--c-border-default) / <alpha-value>)",
         },
         accent: {
-          cyan: "#00E5FF",
-          green: "#00FF88",
-          amber: "#FFB800",
-          red: "#FF3B5C",
+          cyan: "rgb(var(--c-brand-500) / <alpha-value>)",
+          green: "rgb(var(--c-status-ok) / <alpha-value>)",
+          amber: "rgb(var(--c-status-warn) / <alpha-value>)",
+          red: "rgb(var(--c-status-error) / <alpha-value>)",
         },
         text: {
-          primary: "#E8EDF8",
-          secondary: "#7A8BA8",
-          muted: "#3D4F6B",
+          primary: "rgb(var(--c-text-primary) / <alpha-value>)",
+          secondary: "rgb(var(--c-text-secondary) / <alpha-value>)",
+          muted: "rgb(var(--c-text-tertiary) / <alpha-value>)",
         },
       },
       animation: {
@@ -50,8 +50,8 @@ const config: Config = {
           to: { opacity: "1", transform: "translateY(0)" },
         },
         glowPulse: {
-          "0%, 100%": { boxShadow: "0 0 20px rgba(0, 229, 255, 0.3)" },
-          "50%": { boxShadow: "0 0 40px rgba(0, 229, 255, 0.7)" },
+          "0%, 100%": { boxShadow: "0 0 20px rgb(var(--c-brand-500) / 0.3)" },
+          "50%": { boxShadow: "0 0 40px rgb(var(--c-brand-500) / 0.7)" },
         },
       },
     },

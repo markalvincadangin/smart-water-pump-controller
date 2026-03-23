@@ -39,7 +39,13 @@ static void sendFrame() {
   rs485SetTx(true);
   Serial.write((const uint8_t*)frame, (size_t)m);
   Serial.flush();
+  delay(2); // Wait for hardware shift register to fully empty
   rs485SetTx(false);
+
+#if SENSOR_DEBUG_ENABLED
+  SENSOR_DBGF("[SN] TX frame seq=%u err=%d lvl=%d dist=%.1f flow=%.2f\n",
+              (unsigned)seq, err, lvl, dist, flow);
+#endif
 }
 
 void rs485_slave_init() {
@@ -57,8 +63,12 @@ void rs485_slave_poll() {
       rxLine[rxPos] = '\0';
       rxPos = 0;
 
-      if (strcmp(rxLine, "REQ") == 0) {
+      if (strstr(rxLine, "REQ") != nullptr) {
         sendFrame();
+      } else {
+#if SENSOR_DEBUG_ENABLED
+        SENSOR_DBGF("[SN] RX unknown cmd: '%s'\n", rxLine);
+#endif
       }
       return;
     }

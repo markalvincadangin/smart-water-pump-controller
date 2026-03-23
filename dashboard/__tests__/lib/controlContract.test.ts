@@ -10,14 +10,14 @@ import {
 
 describe("controlContract", () => {
   describe("VALID_CONTROL_MODES", () => {
-    it("contains exactly three modes per vNext spec", () => {
+    it("contains exactly three supported policy modes", () => {
       expect(VALID_CONTROL_MODES).toHaveLength(3);
       expect(VALID_CONTROL_MODES).toContain("AUTO");
       expect(VALID_CONTROL_MODES).toContain("COUNTDOWN");
       expect(VALID_CONTROL_MODES).toContain("MANUAL");
     });
 
-    it("does not contain invalid or legacy modes", () => {
+    it("does not contain invalid or unsupported modes", () => {
       expect(VALID_CONTROL_MODES).not.toContain("OFF");
       expect(VALID_CONTROL_MODES).not.toContain("FORCE_ON");
       expect(VALID_CONTROL_MODES).not.toContain("FORCE_OFF");

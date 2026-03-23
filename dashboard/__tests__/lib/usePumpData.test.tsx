@@ -111,4 +111,35 @@ describe("usePumpData", () => {
     const durationCall = setCalls.find((c: unknown[]) => typeof c[1] === "number");
     expect(durationCall?.[1]).toBe(1);
   });
+
+  it("stopCountdown writes countdown_stop one-shot", async () => {
+    mockOnValue.mockReturnValue(mockUnsub);
+    const { result } = renderHook(() => usePumpData());
+    await waitFor(() => {
+      expect(result.current.authReady).toBe(true);
+    });
+
+    mockSet.mockClear();
+    await act(async () => {
+      result.current.stopCountdown();
+    });
+
+    expect(mockSet).toHaveBeenCalledWith(expect.anything(), true);
+  });
+
+  it("setBypassFlowSensor writes bypass_flow_sensor field", async () => {
+    mockOnValue.mockReturnValue(mockUnsub);
+    const { result } = renderHook(() => usePumpData());
+    await waitFor(() => {
+      expect(result.current.authReady).toBe(true);
+    });
+
+    mockSet.mockClear();
+    await act(async () => {
+      await result.current.setBypassFlowSensor(true);
+    });
+
+    const values = mockSet.mock.calls.map((c: unknown[]) => c[1]);
+    expect(values).toContain(true);
+  });
 });

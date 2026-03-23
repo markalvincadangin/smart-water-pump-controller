@@ -153,6 +153,7 @@ void loadStateFromNVS() {
   String savedMode = prefs.getString("mode", "AUTO");
   bool savedDryRun = prefs.getBool("dry_run_err", false);
   bool savedBypass = prefs.getBool("bypass_lvl", false);
+  bool savedBypassFlow = prefs.getBool("bypass_flow", false);
   int savedLevel = prefs.getInt("level_pct", -1);
   totalPumpCycles = prefs.getUInt("pump_cycles", 0);
   totalPumpRunSec = prefs.getULong("pump_run_sec", 0);
@@ -169,7 +170,7 @@ void loadStateFromNVS() {
     pumpMode = savedMode;
     lastPersistedMode = savedMode;
     if (savedMode == "COUNTDOWN") {
-      Serial.println("[BOOT] Restored COUNTDOWN mode from NVS. Timer will restart on Firebase sync.");
+      Serial.println("[BOOT] Restored COUNTDOWN mode from NVS. Pump idle until user starts a new timer.");
     } else if (savedMode == "MANUAL") {
       manualDesired = false;  // never auto-start after reboot
       Serial.println("[BOOT] Restored MANUAL mode. Pump remains OFF until manual_desired is true.");
@@ -183,9 +184,11 @@ void loadStateFromNVS() {
   lastPersistedDryRun = savedDryRun;
   cfgBypassLevelSensor = savedBypass;
   lastPersistedBypass = savedBypass;
+  cfgBypassFlowSensor = savedBypassFlow;
+  lastPersistedBypassFlow = savedBypassFlow;
 
-  Serial.printf("[BOOT] Last state: Level=%d%%, Mode=%s, DryRun=%s, Bypass=%s, Cycles=%lu, RunSec=%lu\n",
-                savedLevel, pumpMode.c_str(), isDryRunError ? "YES" : "NO", savedBypass ? "YES" : "NO",
+  Serial.printf("[BOOT] Last state: Level=%d%%, Mode=%s, DryRun=%s, BypassLvl=%s, BypassFlow=%s, Cycles=%lu, RunSec=%lu\n",
+                savedLevel, pumpMode.c_str(), isDryRunError ? "YES" : "NO", savedBypass ? "YES" : "NO", savedBypassFlow ? "YES" : "NO",
                 (unsigned long)totalPumpCycles, (unsigned long)totalPumpRunSec);
 }
 
@@ -193,6 +196,7 @@ void persistStateToNVS() {
   bool modeChanged = (pumpMode != lastPersistedMode);
   bool dryRunChanged = (isDryRunError != lastPersistedDryRun);
   bool bypassChanged = (cfgBypassLevelSensor != lastPersistedBypass);
+  bool bypassFlowChanged = (cfgBypassFlowSensor != lastPersistedBypassFlow);
   bool telemetryChanged = (totalPumpCycles != lastPersistedPumpCycles) || (totalPumpRunSec != lastPersistedPumpRunSec);
   int levelDelta = abs(waterLevelPct - lastPersistedLevel);
   unsigned long now = millis();
@@ -205,7 +209,7 @@ void persistStateToNVS() {
   static bool crashLoopClearedThisBoot = false;
   bool crashLoopClearDue = (!crashLoopClearedThisBoot) && (now >= 60000UL);
 
-  if (!modeChanged && !dryRunChanged && !bypassChanged && !telemetryChanged && !levelNeedsWrite && !uptimeNeedsWrite && !crashLoopClearDue) return;
+  if (!modeChanged && !dryRunChanged && !bypassChanged && !bypassFlowChanged && !telemetryChanged && !levelNeedsWrite && !uptimeNeedsWrite && !crashLoopClearDue) return;
 
   if (!prefs.begin(NVS_STATE_NAMESPACE, false)) return;
 
@@ -222,6 +226,11 @@ void persistStateToNVS() {
     prefs.putBool("bypass_lvl", cfgBypassLevelSensor);
     lastPersistedBypass = cfgBypassLevelSensor;
     Serial.printf("[NVS] Bypass level sensor persisted: %s\n", cfgBypassLevelSensor ? "ON" : "OFF");
+  }
+  if (bypassFlowChanged) {
+    prefs.putBool("bypass_flow", cfgBypassFlowSensor);
+    lastPersistedBypassFlow = cfgBypassFlowSensor;
+    Serial.printf("[NVS] Bypass flow sensor persisted: %s\n", cfgBypassFlowSensor ? "ON" : "OFF");
   }
   if (telemetryChanged) {
     prefs.putUInt("pump_cycles", totalPumpCycles);

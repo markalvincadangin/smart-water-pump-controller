@@ -1,11 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { Bell, Settings, RotateCw } from "lucide-react";
 import OverflowMenu from "@/components/OverflowMenu";
+import AppIcon from "@/components/AppIcon";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const TANK_LABEL =
-  process.env.NEXT_PUBLIC_TANK_LABEL ?? "Deep Well Pump · 660L Tank";
+  process.env.NEXT_PUBLIC_TANK_LABEL ?? "SmartFlow · 660L Tank";
 
 interface DashboardHeaderProps {
   userEmail: string;
@@ -40,7 +41,7 @@ export default function DashboardHeader({
               {TANK_LABEL}
             </p>
             <h1 className="font-display text-lg sm:text-2xl md:text-3xl font-bold text-text-primary truncate leading-tight">
-              Smart Water Pump <span className="text-gradient-cyan">System</span>
+              SmartFlow <span className="text-gradient-cyan">Dashboard</span>
             </h1>
           </div>
 
@@ -51,7 +52,7 @@ export default function DashboardHeader({
               className={clsx(
                 "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border transition-all duration-500",
                 running && !isError
-                  ? "bg-accent-green/10 border-accent-green/30 shadow-[0_0_20px_rgba(0,255,136,0.15)]"
+                  ? "bg-accent-green/10 border-accent-green/30 shadow-[0_0_20px_rgb(var(--c-status-ok)/0.15)]"
                   : isError
                     ? "bg-accent-red/10 border-accent-red/30"
                     : "bg-surface-2 border-surface-3"
@@ -74,6 +75,8 @@ export default function DashboardHeader({
                 {isError ? "ERR" : running ? "RUN" : "IDLE"}
               </span>
             </div>
+
+            <ThemeToggle />
 
             {/* Mobile: overflow menu */}
             <OverflowMenu
@@ -100,7 +103,7 @@ export default function DashboardHeader({
                          hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
                          focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 disabled:opacity-50"
               >
-                <RotateCw size={16} />
+                <AppIcon name="rotate-cw" size={16} className="text-current" />
               </button>
             )}
             <button
@@ -110,7 +113,7 @@ export default function DashboardHeader({
                        hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
                        focus:outline-none focus:ring-2 focus:ring-accent-cyan/50"
             >
-              <Settings size={16} />
+              <AppIcon name="settings" size={16} className="text-current" />
             </button>
             <button
               onClick={onOpenNotifications}
@@ -119,7 +122,7 @@ export default function DashboardHeader({
                        hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
                        focus:outline-none focus:ring-2 focus:ring-accent-cyan/50"
             >
-              <Bell size={16} />
+              <AppIcon name="bell" size={16} className="text-current" />
             </button>
             <button
               onClick={onSignOut}

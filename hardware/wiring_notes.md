@@ -64,7 +64,7 @@ This section is the **single source of truth** for all GPIO assignments used for
 |----------|------|------|
 | Relay control (to relay IN) | GPIO 4 | Existing pump relay control (keep unchanged) |
 | RS-485 UART TX (ESP32 → MAX485 DI) | GPIO 17 | UART2 TX (HardwareSerial) |
-| RS-485 UART RX (MAX485 RO → ESP32) | GPIO 16 | UART2 RX (HardwareSerial) |
+| RS-485 UART RX (MAX485 RO → ESP32) | GPIO 25 | UART2 RX (HardwareSerial) |
 | RS-485 DE/RE (tied) | GPIO 5 | Output; LOW=RX mode, HIGH=TX mode |
 | Debug UART (USB Serial) | GPIO 1/3 | UART0; used by Serial Monitor; do not use for RS-485 |
 
@@ -75,9 +75,9 @@ This section is the **single source of truth** for all GPIO assignments used for
 | RS-485 UART TX (NodeMCU → MAX485 DI) | TX | GPIO 1 | Hardware UART0 TX; **shares pins with USB flashing** |
 | RS-485 UART RX (MAX485 RO → NodeMCU) | RX | GPIO 3 | Hardware UART0 RX; **shares pins with USB flashing** |
 | RS-485 DE/RE (tied) | D5 | GPIO 14 | Output; LOW=RX mode, HIGH=TX mode |
-| Flow sensor input (YF-G1 pulse) | D6 | GPIO 12 | Interrupt-capable; use local level shifting if sensor output is 5V |
+| Flow sensor input (YF-G1 pulse) | D7 | GPIO 13 | Interrupt-capable; use local level shifting if sensor output is 5V |
 | Ultrasonic TRIG (to JSN TRIG) | D1 | GPIO 5 | Output 10µs pulse |
-| Ultrasonic ECHO (from JSN ECHO via divider) | D2 | GPIO 4 | Input; MUST be level-shifted to 3.3V |
+| Ultrasonic ECHO (from JSN ECHO via divider) | D0 | GPIO 16 | Input; MUST be level-shifted to 3.3V |
 
 ---
 
@@ -249,7 +249,7 @@ UPDATED: YF-G1 signal terminates at the tank-side NodeMCU sensor node. The main 
 ```
 JSN-SR04T ECHO pin (5V, at tank)
   → Local 10 kΩ resistor (series, inline) ─┐
-                                           ├──→ NodeMCU D2 (GPIO4)
+                                           ├──→ NodeMCU D0 (GPIO16)
   → Local 20 kΩ resistor (shunt to GND) ───┘
 ```
 
@@ -265,7 +265,7 @@ The long CAT6 run no longer carries the raw ECHO signal.
 ```text
 YF-G1 Signal (5V pulse)
   → Local 1 kΩ resistor (series) ─┐
-                                  ├──→ NodeMCU D6 (GPIO12)
+                                  ├──→ NodeMCU D7 (GPIO13)
   → Local 2 kΩ / 2.2 kΩ to GND ───┘
 ```
 
@@ -352,12 +352,12 @@ JSN-SR04T module:
   VCC  → 5V bus
   GND  → GND bus
   TRIG → NodeMCU D1 (GPIO5)
-  ECHO → 10 kΩ series → NodeMCU D2 (GPIO4), with 20 kΩ from GPIO to GND
+  ECHO → 10 kΩ series → NodeMCU D0 (GPIO16), with 20 kΩ from GPIO to GND
 
 YF-G1 flow sensor:
   VCC   → 5V bus
   GND   → GND bus
-  SIG   → NodeMCU D6 (GPIO12) via local divider (required if sensor output is 5V)
+  SIG   → NodeMCU D7 (GPIO13) via local divider (required if sensor output is 5V)
 
 NodeMCU UART (half-duplex):
   TX   → RS-485 DI (NodeMCU TX / GPIO1)
@@ -458,7 +458,7 @@ RS-485 is differential, but the transceivers still need a common reference to ke
    - Connect the **5V adapter** to ESP32 VIN/GND and relay VCC/GND.
    - Install the MAX485 module and connect:
      - ESP32 GPIO17 (TX2) → MAX485 DI
-     - ESP32 GPIO16 (RX2) ← MAX485 RO
+     - ESP32 GPIO25 (RX2) ← MAX485 RO
      - ESP32 GPIO5        → MAX485 DE and RE (tied)
 
 3) **CAT6 distribution**
@@ -525,20 +525,20 @@ RS-485 is differential, but the transceivers still need a common reference to ke
 
 ### ESP32 (main enclosure)
 
-- **Safe boot behaviour:** Uses GPIO16/17 (UART2) and GPIO5 for DE/RE. These do not interfere with flashing (UART0 remains on GPIO1/3 via USB).
+- **Safe boot behaviour:** Uses GPIO25/17 (UART2) and GPIO5 for DE/RE. These do not interfere with flashing (UART0 remains on GPIO1/3 via USB).
 - **No UART conflicts:** RS-485 uses UART2. Debug logs remain on UART0 (USB Serial).
 - **No pin overlap:** GPIO4 remains dedicated to relay control.
 
 ### NodeMCU V2 (tank enclosure)
 
-- **Safe boot behaviour:** Does not use GPIO0/GPIO2/GPIO15 for sensors/DE-RE. Uses D1/D2/D5/D6 which are stable.
+- **Safe boot behaviour:** Does not use GPIO0/GPIO2/GPIO15 for sensors/DE-RE. Uses D1/D0/D5/D7 which are stable.
 - **UART choice justification:** RS-485 uses the hardware UART pins (GPIO1/3) for reliable timing at 115200 8N1.
 - **Flashing consideration (REQUIRED):** Because RS-485 shares the hardware UART, **disconnect the MAX485 from NodeMCU TX/RX (or remove the NodeMCU from the circuit / use jumpers)** while flashing firmware over USB. Reconnect after flashing.
 
 ### Sensor timing
 
-- **Ultrasonic timing:** TRIG on D1 and ECHO on D2 are stable pins; ECHO is level-shifted to 3.3V.
-- **Flow pulses:** Flow input on D6 supports interrupt-based counting; ensure proper divider if sensor output is 5V.
+- **Ultrasonic timing:** TRIG on D1 and ECHO on D0 are stable pins; ECHO is level-shifted to 3.3V.
+- **Flow pulses:** Flow input on D7 supports interrupt-based counting; ensure proper divider if sensor output is 5V.
 
 ### Unstable sensor readings (still noisy)
 

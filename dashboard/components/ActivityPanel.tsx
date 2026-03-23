@@ -6,6 +6,7 @@ import { Clock, Settings, Bell, Zap, ShieldCheck, Timer, Square, RotateCw, Activ
 import { useAuditEvents } from "@/lib/useAuditEvents";
 import type { AuditAction } from "@/lib/audit";
 import CollapsibleSection from "@/components/CollapsibleSection";
+import { formatPhtDateTime, getPhtTimezoneLabel } from "@/lib/time";
 
 type AuditMeta = {
   mode?: string;
@@ -23,6 +24,7 @@ function formatAction(action: AuditAction) {
     case "control.run_countdown_add_time": return "Added 5 min to countdown";
     case "control.countdown_stop": return "Stopped countdown";
     case "control.bypass_level_sensor": return "Level sensor bypass";
+    case "control.bypass_flow_sensor": return "Flow sensor bypass";
     case "config.device.save": return "Saved device settings";
     case "config.notifications.save": return "Saved alert settings";
     default: return "Activity";
@@ -41,6 +43,7 @@ function iconFor(action: AuditAction): LucideIcon {
     case "control.run_countdown_add_time": return Timer;
     case "control.countdown_stop": return Square;
     case "control.bypass_level_sensor": return Settings;
+    case "control.bypass_flow_sensor": return Settings;
     case "config.device.save": return Settings;
     case "config.notifications.save": return Bell;
     default: return Activity;
@@ -48,15 +51,8 @@ function iconFor(action: AuditAction): LucideIcon {
 }
 
 function safeTime(at: unknown) {
-  // If rules store a numeric timestamp, show a relative-ish time. Otherwise show an em dash.
   if (typeof at !== "number") return "—";
-  const s = Math.max(0, Math.round((Date.now() - at) / 1000));
-  if (s < 5) return "Just now";
-  if (s < 60) return `${s}s`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.round(m / 60);
-  return `${h}h`;
+  return formatPhtDateTime(at);
 }
 
 export default function ActivityPanel() {
@@ -66,7 +62,7 @@ export default function ActivityPanel() {
     <div className="card p-4 sm:p-5 border-surface-3 min-w-0">
       <CollapsibleSection
         title="Activity"
-        subtitle="Showing last 10 actions · Recent changes from all users"
+        subtitle={`Showing last 10 actions · Recent changes from all users · ${getPhtTimezoneLabel()}`}
         headerExtra={
           <div className="flex items-center gap-2 text-text-muted">
             <Clock size={12} />

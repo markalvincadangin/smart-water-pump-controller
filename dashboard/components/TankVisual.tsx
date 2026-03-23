@@ -47,8 +47,8 @@ export default function TankVisual({
               : "bg-accent-cyan/80";
 
   const glowColor =
-    isError ? "shadow-[0_0_30px_rgba(255,59,92,0.4)]"
-    : isRunning && !isError ? "shadow-[0_0_30px_rgba(0,255,136,0.35)]"
+    isError ? "shadow-[0_0_30px_rgb(var(--c-status-error)/0.4)]"
+    : isRunning && !isError ? "shadow-[0_0_30px_rgb(var(--c-status-ok)/0.35)]"
     : "";
 
   return (

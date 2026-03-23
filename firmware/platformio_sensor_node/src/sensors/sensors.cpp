@@ -19,11 +19,14 @@ static void IRAM_ATTR flowIsr() {
 }
 
 static int cmToPercent(float distanceCm) {
-  const float emptyCm = 122.0f;
-  const float fullCm  = 8.0f;
+  const float emptyCm = TANK_US_DIST_EMPTY_CM;
+  const float fullCm  = TANK_US_DIST_FULL_CM;
 
   distanceCm = constrain(distanceCm, fullCm, emptyCm);
   float range = (emptyCm - fullCm);
+  if (range <= 1.0f) {
+    return 0;
+  }
   float pct = 100.0f * (emptyCm - distanceCm) / range;
   pct = constrain(pct, 0.0f, 100.0f);
   return (int)(pct + 0.5f);
@@ -229,6 +232,20 @@ void sensors_update_nonblocking() {
 
   // Aggregate ERR code
   snErrCode = (snLevelError ? 1 : 0) | (snFlowError ? 2 : 0);
+
+#if SENSOR_DEBUG_ENABLED
+  static uint32_t lastDbgMs = 0;
+  if ((uint32_t)(now - lastDbgMs) >= SENSOR_DEBUG_INTERVAL_MS) {
+    lastDbgMs = now;
+    SENSOR_DBGF("[SN] lvl=%d%% dist=%.1fcm flow=%.2fLPM err=%d seq=%u pulses_discarded=%lu\n",
+                snWaterLevelPct,
+                snLastDistanceCm,
+                snFlowRateLpm,
+                snErrCode,
+                (unsigned)snSeq,
+                (unsigned long)flowPulseDiscardCount);
+  }
+#endif
 }
 
 void sensors_get_last_values(int& levelPctOut, float& distanceCmOut, float& flowLpmOut, int& errCodeOut, uint8_t& seqOut) {

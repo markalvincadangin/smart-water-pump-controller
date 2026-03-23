@@ -153,12 +153,10 @@ void readDeviceConfigFromFirebase() {
 void checkCountdownExpiry() {
   if (!isCountdownActive || pumpMode != "COUNTDOWN") return;
   if (millis() >= countdownEndMs) {
-    Serial.println("[COUNTDOWN] Timer expired. Reverting to AUTO mode.");
+    Serial.println("[COUNTDOWN] Timer expired. Pump stopped. Mode stays COUNTDOWN.");
     isCountdownActive = false;
-    countdownEndMs = 0;
-    pumpMode = "AUTO";
-    pendingModeWriteback = true;
-    pendingModeWritebackSentMs = 0;
+    countdownEndMs    = 0;
+    // Option B: pumpMode stays "COUNTDOWN" — pump is idle, user must start a new timer.
   }
 }
 
@@ -170,6 +168,17 @@ void readFirebaseControl() {
   static bool lastEmergencyStop = false;
   static bool lastResetStop = false;
   static bool lastCountdownStart = false;
+
+  // Option B boot guard: on first call after reboot, if mode is COUNTDOWN mark timer
+  // as already consumed so the firmware doesn't auto-rearm without an explicit countdown_start.
+  static bool bootConsumedInit = false;
+  if (!bootConsumedInit) {
+    bootConsumedInit = true;
+    if (pumpMode == "COUNTDOWN") {
+      countdownConsumed = true;
+      Serial.println("[COUNTDOWN] Boot guard: countdownConsumed set. Waiting for explicit start.");
+    }
+  }
 
   if (!Firebase.RTDB.getJSON(&fbdo, "/pump_system/control")) {
     String err = fbdo.errorReason();
@@ -354,6 +363,27 @@ void readFirebaseControl() {
     Serial.println("[COUNTDOWN] Mode exited. Countdown cleared.");
   }
 
+  // countdown_stop one-shot (Option B): stop active timer without changing mode
+  controlJson.get(jd, "countdown_stop");
+  if (jd.success && jd.boolValue) {
+    if (isCountdownActive && pumpMode == "COUNTDOWN") {
+      Serial.println("[COUNTDOWN] Stop requested. Timer cleared. Mode stays COUNTDOWN.");
+      isCountdownActive = false;
+      countdownEndMs = 0;
+    }
+    Firebase.RTDB.setBool(&fbdo, "/pump_system/control/countdown_stop", false);
+  }
+
+  // bypass_flow_sensor
+  controlJson.get(jd, "bypass_flow_sensor");
+  if (jd.success) {
+    bool v = jd.boolValue;
+    if (v != cfgBypassFlowSensor) {
+      cfgBypassFlowSensor = v;
+      Serial.printf("[FIREBASE] Bypass flow sensor: %s\n", v ? "ON" : "OFF");
+    }
+  }
+
   controlJson.get(jd, "manual_start");
   if (jd.success) {
     bool v = jd.boolValue;
@@ -435,6 +465,7 @@ void pushFirebaseStatus() {
   statusJson.set("is_flow_sensor_error",  isFlowSensorError);
   statusJson.set("is_overflow_error",   isOverflowError);
   statusJson.set("bypass_level_sensor", cfgBypassLevelSensor);
+  statusJson.set("bypass_flow_sensor",  cfgBypassFlowSensor);
   statusJson.set("auto_bypass_active",  autoBypassActive);
   statusJson.set("is_sleeping",         isSleeping);
   statusJson.set("wifi_rssi",           wifiRssi);
@@ -583,6 +614,22 @@ String getBootReasonString() {
     case ESP_RST_BROWNOUT: return "Brownout";
     case ESP_RST_SDIO:     return "SDIO reset";
     default:               return "Unknown";
+  }
+}
+
+void pushFirebaseErrorLog(const String& level, const String& component, const String& message) {
+  if (!Firebase.ready()) return;
+  
+  FirebaseJson logJson;
+  logJson.set("timestamp", (int)(esp_timer_get_time() / 1000000ULL)); // Or NTP time if available
+  logJson.set("level", level);
+  logJson.set("component", component);
+  logJson.set("message", message);
+  
+  if (Firebase.RTDB.pushJSON(&fbdo, "/pump_system/logs/errors", &logJson)) {
+    Serial.println("[FIREBASE] Error log pushed successfully.");
+  } else {
+    Serial.printf("[FIREBASE] Error log push failed: %s\n", fbdo.errorReason().c_str());
   }
 }
 

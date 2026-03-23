@@ -33,6 +33,7 @@ int  cfgLevelSensorFailureThreshold = SENSOR_FAILURE_THRESHOLD;
 int  cfgIdleSensorIntervalMs   = IDLE_SENSOR_INTERVAL_MS_DEF;
 int  cfgIdleFirebaseIntervalMs = IDLE_FIREBASE_INTERVAL_MS_DEF;
 bool cfgBypassLevelSensor      = false;
+bool cfgBypassFlowSensor       = false;
 
 float flowRateLpm             = 0.0f;
 int   waterLevelPct           = 0;
@@ -112,6 +113,7 @@ unsigned long firebaseLastErrorLogMs   = 0;
 String        lastPersistedMode   = "AUTO";
 bool          lastPersistedDryRun = false;
 bool          lastPersistedBypass = false;
+bool          lastPersistedBypassFlow = false;
 int           lastPersistedLevel  = -1;
 unsigned long lastLevelWriteMs    = 0;
 unsigned long lastUptimeWriteMs   = 0;

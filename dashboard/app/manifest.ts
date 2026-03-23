@@ -6,13 +6,13 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Smart Water Pump System",
-    short_name: "Water Pump",
-    description: "Real-time monitoring and control for the Smart Water Pump System. Deep well pump with dry-run protection.",
+    name: "SmartFlow",
+    short_name: "SmartFlow",
+    description: "Water, managed. Real-time monitoring and pump control with safety-first automation.",
     start_url: "/",
     display: "standalone",
     background_color: "#0a0e14",
-    theme_color: "#0A0E1A",
+    theme_color: "#0A0E14",
     orientation: "any",
     icons: [
       { src: "/icons/icon-72.png", sizes: "72x72", type: "image/png", purpose: "any" },

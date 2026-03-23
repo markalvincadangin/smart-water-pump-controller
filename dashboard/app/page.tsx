@@ -50,6 +50,7 @@ export default function DashboardPage() {
     triggerEmergencyStop,
     resetEmergencyStop,
     setBypassLevelSensor,
+    setBypassFlowSensor,
   } = usePumpData();
 
   const { config } = useDeviceConfig();
@@ -125,7 +126,7 @@ export default function DashboardPage() {
         <div className="text-center space-y-4">
           <div className="w-10 h-10 border-2 border-accent-cyan/30 border-t-accent-cyan
                           rounded-full animate-spin mx-auto" />
-          <p className="text-text-secondary font-mono text-sm">Connecting to Smart Water Pump System…</p>
+          <p className="text-text-secondary font-mono text-sm">Connecting to SmartFlow…</p>
         </div>
       </div>
     );
@@ -250,18 +251,25 @@ export default function DashboardPage() {
                                 : "Clear Error"}
                           </button>
                         )}
-                        {(alert.id === "level_sensor" || alert.id === "maintenance") && (() => {
+                        {(alert.id === "level_sensor" || alert.id === "maintenance" || alert.id === "flow_sensor" || alert.id === "maintenance_flow") && (() => {
                           const bypassAlreadyOn = snapshot?.status?.bypass_level_sensor === true;
+                          const flowBypassAlreadyOn = snapshot?.status?.bypass_flow_sensor === true;
                           const showAsOn = alert.id === "maintenance" || (alert.id === "level_sensor" && bypassAlreadyOn);
+                          const showFlowAsOn = alert.id === "maintenance_flow" || (alert.id === "flow_sensor" && flowBypassAlreadyOn);
+                          const isFlowAlert = alert.id === "flow_sensor" || alert.id === "maintenance_flow";
                           return (
                             <button
                               type="button"
                               onClick={async () => {
-                                if (!isAdmin || showAsOn) return;
+                                if (!isAdmin || (isFlowAlert ? showFlowAsOn : showAsOn)) return;
                                 setBypassAlertBusy(true);
                                 toast({ kind: "info", title: "Enabling bypass…" });
                                 try {
-                                  await setBypassLevelSensor(true);
+                                  if (isFlowAlert) {
+                                    await setBypassFlowSensor(true);
+                                  } else {
+                                    await setBypassLevelSensor(true);
+                                  }
                                   toast({ kind: "success", title: "Bypass enabled", detail: "Controller will apply when online." });
                                 } catch (e) {
                                   console.error("[Bypass]", e);
@@ -270,11 +278,17 @@ export default function DashboardPage() {
                                   setBypassAlertBusy(false);
                                 }
                               }}
-                              disabled={!isAdmin || showAsOn || bypassAlertBusy}
+                              disabled={!isAdmin || (isFlowAlert ? showFlowAsOn : showAsOn) || bypassAlertBusy}
                               className="min-h-[44px] min-w-[44px] shrink-0 px-3 py-2 rounded-lg bg-accent-amber/20 border border-accent-amber/50 text-accent-amber text-xs font-mono font-semibold hover:bg-accent-amber/30 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={!isAdmin ? "Admin access required" : showAsOn ? "Bypass already enabled" : "Enable level sensor bypass"}
+                              title={
+                                !isAdmin
+                                  ? "Admin access required"
+                                  : isFlowAlert
+                                    ? (showFlowAsOn ? "Bypass already enabled" : "Enable flow sensor bypass")
+                                    : (showAsOn ? "Bypass already enabled" : "Enable level sensor bypass")
+                              }
                             >
-                              {bypassAlertBusy ? "Sending…" : showAsOn ? "Bypass On" : "Enable Bypass"}
+                              {bypassAlertBusy ? "Sending…" : (isFlowAlert ? (showFlowAsOn ? "Bypass On" : "Enable Bypass") : (showAsOn ? "Bypass On" : "Enable Bypass"))}
                             </button>
                           );
                         })()}
@@ -407,7 +421,9 @@ export default function DashboardPage() {
           esp32Online={esp32Online}
           onRequestReboot={handleRequestReboot}
           bypassLevelSensor={snapshot?.status.bypass_level_sensor ?? false}
+          bypassFlowSensor={snapshot?.status.bypass_flow_sensor ?? false}
           onSetBypassLevelSensor={setBypassLevelSensor}
+          onSetBypassFlowSensor={setBypassFlowSensor}
         />
       )}
       <InstallPrompt />
