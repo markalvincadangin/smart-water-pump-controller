@@ -47,7 +47,7 @@ The main ESP32:
 **ESP32 (main enclosure):**
 
 - TX2 (GPIO17) → MAX485 DI
-- RX2 (GPIO16) ← MAX485 RO
+- RX2 (GPIO25) ← MAX485 RO
 - DE/RE (GPIO5) → MAX485 DE+RE (tied)
 
 **NodeMCU V2 (tank enclosure):**

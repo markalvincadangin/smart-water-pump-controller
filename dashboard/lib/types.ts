@@ -19,13 +19,15 @@ export interface PumpStatus {
   last_boot_reason: string;  // Phase 2: e.g. 'Power-on', 'Task watchdog'
   uptime_minutes?: number; // Phase 5: Uptime counter (prevents 49-day rollover)
   // Phase 7 manual + v3.0 COUNTDOWN (replaces timed run)
-  /** vNext: run_mode values emitted by firmware */
+  /** run_mode values emitted by firmware */
   run_mode?: "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL_ON" | "MANUAL_OFF" | "COUNTDOWN" | "STOPPED";
   countdown_remaining_sec?: number;
   last_fault_code?: string;
   last_fault_message?: string;
   /** v3.0: maintenance bypass active — level sensor ignored */
   bypass_level_sensor?: boolean;
+  /** v3.0: maintenance bypass active — flow dry-run/flow-stuck checks ignored. */
+  bypass_flow_sensor?: boolean;
   /** v3.0: true when bypass was auto-enabled by firmware (sensor failure); distinct from manual bypass */
   auto_bypass_active?: boolean;
   /** @deprecated Use bypass_level_sensor only. Kept for backward compat with older firmware. */
@@ -50,7 +52,7 @@ export interface PumpStatus {
   flow_discard_max_sane?: number;
   flow_stuck_high_events?: number;
 
-  // vNext: UI truth signals (added by firmware)
+  // UI truth signals (added by firmware)
   manual_desired?: boolean;
   emergency_stop_latched?: boolean;
   remote_sensor_stable?: boolean;
@@ -59,23 +61,23 @@ export interface PumpStatus {
 
 /** /pump_system/control — Cloud → ESP32 */
 export interface PumpControl {
-  /** vNext: only policy modes remain */
+  /** Policy modes only */
   mode: "AUTO" | "COUNTDOWN" | "MANUAL";
   clear_error: boolean;
   reboot_request_id?: number;
-  /** @deprecated vNext: legacy one-shots (read-only compat). Dashboard no longer writes these. */
+  /** @deprecated Legacy one-shots (read-only compatibility). Dashboard no longer writes these. */
   manual_start?: boolean;
-  /** @deprecated vNext: legacy one-shots (read-only compat). Dashboard no longer writes these. */
+  /** @deprecated Legacy one-shots (read-only compatibility). Dashboard no longer writes these. */
   manual_stop?: boolean;
-  /** vNext: persistent MANUAL intent */
+  /** Persistent MANUAL intent */
   manual_desired?: boolean;
-  /** vNext: Emergency stop latch control (one-shot) */
+  /** Emergency stop latch control (one-shot) */
   emergency_stop?: boolean;
-  /** vNext: Reset stop latch (one-shot) */
+  /** Reset stop latch (one-shot) */
   reset_stop?: boolean;
   /** v3.0 COUNTDOWN: duration in minutes when starting (1–120). */
   countdown_duration_min?: number;
-  /** vNext: explicit countdown start (one-shot). Preferred over “enter mode starts timer”. */
+  /** Explicit countdown start (one-shot). Preferred over “enter mode starts timer”. */
   countdown_start?: boolean;
   /** v3.0 COUNTDOWN: one-shot to add time; firmware reads this when countdown_add_time is true (1–120 min). */
   countdown_add_min?: number;
@@ -83,6 +85,8 @@ export interface PumpControl {
   countdown_add_time?: boolean;
   /** v3.0: maintenance — ignore level sensor for start/stop; flow guard still active. */
   bypass_level_sensor?: boolean;
+  /** v3.0: maintenance — ignore flow sensor dry-run/flow-stuck guard. */
+  bypass_flow_sensor?: boolean;
 }
 
 /** Combined snapshot used by the dashboard UI */
@@ -153,7 +157,7 @@ export interface DeviceConfig {
   // Phase 4: Advanced
   /** Preferred key; firmware accepts level_sensor_failure_threshold or sensor_failure_threshold */
   level_sensor_failure_threshold?: number;  // 3–20
-  sensor_failure_threshold: number;  // 3–20, legacy; use level_sensor_failure_threshold when writing
+  sensor_failure_threshold: number;  // 3–20, compatibility key; use level_sensor_failure_threshold when writing
   idle_sensor_interval_ms: number;   // 5000–60000, slow-poll when tank ≥90%
   idle_firebase_interval_ms: number; // 10000–120000
   auto_bypass_on_sensor_fail?: boolean;

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { MoreVertical, Settings, Bell, RotateCw, LogOut } from "lucide-react";
 import clsx from "clsx";
+import AppIcon from "@/components/AppIcon";
 
 interface OverflowMenuProps {
   userEmail: string;
@@ -46,7 +46,7 @@ export default function OverflowMenu({
         aria-label="Menu"
         aria-expanded={open}
       >
-        <MoreVertical size={20} />
+        <AppIcon name="menu-vertical" size={20} className="text-current" />
       </button>
 
       {open && (
@@ -64,7 +64,7 @@ export default function OverflowMenu({
               onClick={() => { onOpenDeviceConfig(); setOpen(false); }}
               className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-mono text-text-primary hover:bg-surface-3"
             >
-              <Settings size={16} />
+              <AppIcon name="settings" size={16} className="text-current" />
               Device settings
             </button>
             <button
@@ -72,7 +72,7 @@ export default function OverflowMenu({
               onClick={() => { onOpenNotifications(); setOpen(false); }}
               className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-mono text-text-primary hover:bg-surface-3"
             >
-              <Bell size={16} />
+              <AppIcon name="bell" size={16} className="text-current" />
               Notifications
             </button>
             {isAdmin && (
@@ -86,7 +86,7 @@ export default function OverflowMenu({
                   esp32Online ? "text-text-primary" : "text-text-muted opacity-60"
                 )}
               >
-                <RotateCw size={16} />
+                <AppIcon name="rotate-cw" size={16} className="text-current" />
                 Restart controller
               </button>
             )}
@@ -95,7 +95,7 @@ export default function OverflowMenu({
               onClick={() => { onSignOut(); setOpen(false); }}
               className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-mono text-accent-red hover:bg-surface-3"
             >
-              <LogOut size={16} />
+              <AppIcon name="logout" size={16} className="text-current" />
               Sign out
             </button>
           </div>

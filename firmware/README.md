@@ -45,7 +45,7 @@ firmware/
 ├── platformio_smart_water_pump_controller/     ← PlatformIO project (VS Code)
 │   ├── platformio.ini
 │   └── src/… (mirrors the Arduino tabs)
-├── platformio_sensor_node/                ← PlatformIO project for NodeMCU V2 (ESP8266 tank node)
+├── platformio_sensor_node/                ← PlatformIO project for NodeMCU V2 (ESP8266 tank node; see its README for OTA)
 ├── libraries.txt                          ← Required libraries and install instructions
 └── README.md                              ← This file
 ```

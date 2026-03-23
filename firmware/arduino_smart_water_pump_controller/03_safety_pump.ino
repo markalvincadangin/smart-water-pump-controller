@@ -83,6 +83,14 @@ void checkLevelSensorFailure(int sensorReading) {
  *        flags isFlowSensorError.
  */
 void checkFlowSensorStuck() {
+  if (cfgBypassFlowSensor) {
+    if (isFlowSensorError) {
+      Serial.println("[SENSOR][INFO] Flow bypass active. Clearing flow-stuck error.");
+      isFlowSensorError = false;
+    }
+    flowStuckTimerActive = false;
+    return;
+  }
   if (!isRunning && flowRateLpm > FLOW_STUCK_THRESHOLD_LPM) {
     if (!flowStuckTimerActive) {
       flowStuckTimerActive = true;
@@ -144,9 +152,13 @@ void checkOverflowProtection() {
  *        of sustained low-flow. Reset only via Firebase clear_error signal.
  */
 void checkDryRunProtection() {
-  if (!isRunning) {
+  if (!isRunning || cfgBypassFlowSensor) {
     dryRunTimerActive = false;
     dryRunStartMs = 0;
+    if (isRunning && cfgBypassFlowSensor && isDryRunError) {
+       Serial.println("[SAFETY] Flow bypass active. Clearing dry-run error.");
+       isDryRunError = false;
+    }
     return;
   }
 

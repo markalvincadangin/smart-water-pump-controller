@@ -109,20 +109,20 @@ export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel, even
         <AreaChart data={data} margin={{ top: 8, right: 40, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="levelGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="#00E5FF" stopOpacity={0.2} />
-              <stop offset="95%" stopColor="#00E5FF" stopOpacity={0}   />
+              <stop offset="5%"  stopColor="rgb(var(--c-brand-500))" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="rgb(var(--c-brand-500))" stopOpacity={0}   />
             </linearGradient>
             <linearGradient id="flowGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="#00FF88" stopOpacity={0.2} />
-              <stop offset="95%" stopColor="#00FF88" stopOpacity={0}   />
+              <stop offset="5%"  stopColor="rgb(var(--c-status-ok))" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="rgb(var(--c-status-ok))" stopOpacity={0}   />
             </linearGradient>
           </defs>
 
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--c-text-primary) / 0.08)" />
 
           <XAxis
             dataKey="time"
-            tick={{ fill: "#3D4F6B", fontSize: 10, fontFamily: "var(--font-jetbrains)" }}
+            tick={{ fill: "rgb(var(--c-text-tertiary))", fontSize: 10, fontFamily: "var(--font-data)" }}
             interval={tickInterval}
             axisLine={false}
             tickLine={false}
@@ -132,7 +132,7 @@ export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel, even
           <YAxis
             yAxisId="level"
             domain={[0, 100]}
-            tick={{ fill: "#4A6080", fontSize: 9, fontFamily: "var(--font-jetbrains)" }}
+            tick={{ fill: "rgb(var(--c-text-secondary))", fontSize: 9, fontFamily: "var(--font-data)" }}
             axisLine={false}
             tickLine={false}
             tickFormatter={(v: number) => `${v}%`}
@@ -143,7 +143,7 @@ export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel, even
             yAxisId="flow"
             orientation="right"
             domain={[0, maxFlow]}
-            tick={{ fill: "#3D6050", fontSize: 9, fontFamily: "var(--font-jetbrains)" }}
+            tick={{ fill: "rgb(var(--c-status-ok))", fontSize: 9, fontFamily: "var(--font-data)" }}
             axisLine={false}
             tickLine={false}
             tickFormatter={(v: number) => `${v}`}
@@ -170,25 +170,25 @@ export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel, even
             <ReferenceLine
               yAxisId="level"
               y={pumpStartLevel}
-              stroke="#F5B800"
+              stroke="rgb(var(--c-status-warn))"
               strokeDasharray="4 4"
               strokeOpacity={0.5}
-              label={{ value: `Start ${pumpStartLevel}%`, position: "insideTopRight", fill: "#F5B800", fontSize: 9 }}
+              label={{ value: `Start ${pumpStartLevel}%`, position: "insideTopRight", fill: "rgb(var(--c-status-warn))", fontSize: 9 }}
             />
           )}
           {typeof pumpStopLevel === "number" && (
             <ReferenceLine
               yAxisId="level"
               y={pumpStopLevel}
-              stroke="#00FF88"
+              stroke="rgb(var(--c-status-ok))"
               strokeDasharray="4 4"
               strokeOpacity={0.5}
-              label={{ value: `Full ${pumpStopLevel}%`, position: "insideBottomRight", fill: "#00FF88", fontSize: 9 }}
+              label={{ value: `Full ${pumpStopLevel}%`, position: "insideBottomRight", fill: "rgb(var(--c-status-ok))", fontSize: 9 }}
             />
           )}
 
           <Legend
-            wrapperStyle={{ fontSize: "clamp(9px, 2.2vw, 11px)", fontFamily: "var(--font-jetbrains)", color: "#7A8BA8" }}
+            wrapperStyle={{ fontSize: "clamp(9px, 2.2vw, 11px)", fontFamily: "var(--font-data)", color: "rgb(var(--c-text-secondary))" }}
             iconSize={8}
           />
 
@@ -199,10 +199,10 @@ export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel, even
               x={evt.time}
               stroke={
                 evt.type === "fault"
-                  ? "#FF4B6E"
+                  ? "rgb(var(--c-status-error))"
                   : evt.type === "mode_change"
-                    ? "#F5B800"
-                    : "#5C6FFF"
+                    ? "rgb(var(--c-status-warn))"
+                    : "rgb(var(--c-brand-500))"
               }
               strokeDasharray={evt.type === "mode_change" ? "4 4" : "2 3"}
               strokeOpacity={0.6}
@@ -214,22 +214,22 @@ export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel, even
             type="monotone"
             dataKey="level"
             name="Water Level (%)"
-            stroke="#00E5FF"
+            stroke="rgb(var(--c-brand-500))"
             strokeWidth={2}
             fill="url(#levelGrad)"
             dot={false}
-            activeDot={{ r: 4, fill: "#00E5FF", strokeWidth: 0 }}
+            activeDot={{ r: 4, fill: "rgb(var(--c-brand-500))", strokeWidth: 0 }}
           />
           <Area
             yAxisId="flow"
             type="monotone"
             dataKey="flow"
             name="Flow (L/min)"
-            stroke="#00FF88"
+            stroke="rgb(var(--c-status-ok))"
             strokeWidth={1.5}
             fill="url(#flowGrad)"
             dot={false}
-            activeDot={{ r: 3, fill: "#00FF88", strokeWidth: 0 }}
+            activeDot={{ r: 3, fill: "rgb(var(--c-status-ok))", strokeWidth: 0 }}
           />
         </AreaChart>
       </ResponsiveContainer>

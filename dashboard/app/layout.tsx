@@ -1,34 +1,18 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from "next";
-import { Syne, DM_Sans, JetBrains_Mono } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import ToastHost from "@/components/ToastHost";
-
-const syne = Syne({
-  subsets: ["latin"],
-  variable: "--font-syne",
-  weight: ["400", "600", "700", "800"],
-});
-
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-dm-sans",
-  weight: ["300", "400", "500"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
-  weight: ["300", "400", "500"],
-});
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "Smart Water Pump System — Control Dashboard",
-  description: "Real-time monitoring and control for the Smart Water Pump System. Deep well pump with dry-run protection and cloud connectivity.",
+  title: "SmartFlow — Water Management Dashboard",
+  description: "Real-time water system monitoring and pump control with safety lockouts, alerts, and remote diagnostics.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Smart Water Pump",
+    title: "SmartFlow",
   },
   icons: {
     icon: [
@@ -46,7 +30,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#0A0E1A",
+  themeColor: "#0A0E14",
 };
 
 export default function RootLayout({
@@ -55,18 +39,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${syne.variable} ${dmSans.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="bg-surface text-text-primary font-body antialiased overflow-x-hidden">
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[9999]
+        <ThemeProvider attribute="data-theme" defaultTheme="dark" enableSystem={false}>
+          <a
+            href="#main"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[9999]
                      focus:px-3 focus:py-2 focus:rounded-lg focus:bg-surface-2 focus:border focus:border-surface-4
                      focus:text-text-primary focus:font-mono focus:text-xs"
-        >
-          Skip to main content
-        </a>
-        <ToastHost />
-        {children}
+          >
+            Skip to main content
+          </a>
+          <ToastHost />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

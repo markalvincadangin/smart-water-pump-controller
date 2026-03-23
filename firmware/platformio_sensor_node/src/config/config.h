@@ -4,17 +4,39 @@
 
 // NodeMCU V2 (ESP8266) production pinout (see hardware/wiring_notes.md)
 #define PIN_RS485_DE_RE   14   // D5 / GPIO14
-#define PIN_FLOW_INPUT    12   // D6 / GPIO12
+#define PIN_FLOW_INPUT    13   // D7 / GPIO13
 #define PIN_US_TRIG        5   // D1 / GPIO5
-#define PIN_US_ECHO        4   // D2 / GPIO4
+#define PIN_US_ECHO       16   // D0 / GPIO16
 
 #define RS485_BAUD        115200
 #define RS485_TX_TURNAROUND_US  60
+
+// ----------------------------
+// Debug transport selection
+// ----------------------------
+// 0 = production: RS-485 on UART0, debug on Serial1 (GPIO2 TX-only)
+// 1 = debug bench mode: use USB Serial (UART0) for readable logs, disable RS-485 slave traffic
+#ifndef DEBUG_USB_MODE
+  #define DEBUG_USB_MODE            0
+#endif
 
 // Ultrasonic
 #define US_TIMEOUT_US       100000UL
 #define US_SAMPLES          5
 #define US_SAMPLE_DELAY_MS  60
+
+// Tank level mapping (two-point calibration, distance sensor → water surface in cm).
+// The HC-SR04 reports distance from the module to the water surface (round-trip time).
+// - TANK_US_DIST_FULL_CM: reading when the tank is physically FULL (water close to sensor).
+// - TANK_US_DIST_EMPTY_CM: reading when the tank is physically EMPTY (water far from sensor).
+// Level% = 100 * (EMPTY - measured) / (EMPTY - FULL), clamped 0–100.
+// Defaults (122 / 8) match the original install; change these to match YOUR tank and mounting.
+#ifndef TANK_US_DIST_EMPTY_CM
+  #define TANK_US_DIST_EMPTY_CM  122.0f
+#endif
+#ifndef TANK_US_DIST_FULL_CM
+  #define TANK_US_DIST_FULL_CM   8.0f
+#endif
 
 // Flow calibration (YF-G1 typical).
 // Convert pulse frequency (Hz) to liters per minute:
@@ -38,4 +60,42 @@
 
 // Ultrasonic plausibility (percent points per update)
 #define LEVEL_MAX_DELTA_PCT        20
+
+// ----------------------------
+// Debug output (does not use UART0/RS-485)
+// ----------------------------
+// ESP8266 Serial1 is TX-only on GPIO2. Use a USB-TTL adapter (RX to GPIO2, GND common)
+// to read debug logs while UART0 remains dedicated to RS-485.
+#ifndef SENSOR_DEBUG_ENABLED
+  #define SENSOR_DEBUG_ENABLED       1
+#endif
+#ifndef SENSOR_DEBUG_BAUD
+  #define SENSOR_DEBUG_BAUD     115200
+#endif
+#ifndef SENSOR_DEBUG_INTERVAL_MS
+  #define SENSOR_DEBUG_INTERVAL_MS 3000UL
+#endif
+
+// Syslog configuration
+#ifndef SYSLOG_SERVER
+  #define SYSLOG_SERVER "255.255.255.255" // Broadcast by default
+#endif
+#ifndef SYSLOG_PORT
+  #define SYSLOG_PORT 514
+#endif
+
+#if SENSOR_DEBUG_ENABLED
+  #if DEBUG_USB_MODE
+    #define SENSOR_DBG_PORT Serial
+  #else
+    #define SENSOR_DBG_PORT Serial1
+  #endif
+  extern void send_syslog(const char* msg);
+  extern void send_syslog_f(const char* format, ...);
+  #define SENSOR_DBGLN(msg) do { SENSOR_DBG_PORT.println(msg); send_syslog(msg); } while (0)
+  #define SENSOR_DBGF(...)  do { SENSOR_DBG_PORT.printf(__VA_ARGS__); send_syslog_f(__VA_ARGS__); } while (0)
+#else
+  #define SENSOR_DBGLN(msg) do {} while (0)
+  #define SENSOR_DBGF(...)  do {} while (0)
+#endif
 

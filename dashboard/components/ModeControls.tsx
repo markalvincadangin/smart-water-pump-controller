@@ -29,7 +29,7 @@ const NORMAL_MODES: {
     label:  "AUTO",
     sub:    "Follows water level",
     Icon:   Cpu,
-    active: "bg-accent-cyan/15 border-accent-cyan/50 text-accent-cyan shadow-[0_0_20px_rgba(0,229,255,0.2)]",
+    active: "bg-accent-cyan/15 border-accent-cyan/50 text-accent-cyan shadow-[0_0_20px_rgb(var(--c-brand-500)/0.2)]",
     hover:  "hover:bg-accent-cyan/8 hover:border-accent-cyan/30",
   },
   {
@@ -37,7 +37,7 @@ const NORMAL_MODES: {
     label:  "MANUAL",
     sub:    "Runs with full safety",
     Icon:   Hand,
-    active: "bg-accent-green/15 border-accent-green/50 text-accent-green shadow-[0_0_20px_rgba(0,200,83,0.2)]",
+    active: "bg-accent-green/15 border-accent-green/50 text-accent-green shadow-[0_0_20px_rgb(var(--c-status-ok)/0.2)]",
     hover:  "hover:bg-accent-green/8 hover:border-accent-green/30",
   },
   {
@@ -45,7 +45,7 @@ const NORMAL_MODES: {
     label:  "COUNTDOWN",
     sub:    "Timed run",
     Icon:   Timer,
-    active: "bg-accent-amber/10 border-accent-amber/40 text-accent-amber shadow-[0_0_20px_rgba(255,193,7,0.15)]",
+    active: "bg-accent-amber/10 border-accent-amber/40 text-accent-amber shadow-[0_0_20px_rgb(var(--c-status-warn)/0.15)]",
     hover:  "hover:bg-accent-amber/5 hover:border-accent-amber/25",
   },
 ];
@@ -76,7 +76,7 @@ export default function ModeControls({
         )}
       </div>
 
-      {/* vNext: Policy modes only (AUTO, MANUAL, COUNTDOWN) */}
+      {/* Policy modes only (AUTO, MANUAL, COUNTDOWN) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {NORMAL_MODES.map(({ id, label, sub, Icon, active, hover }) => {
           const isActive = currentMode === id;
@@ -98,8 +98,8 @@ export default function ModeControls({
                 size={16}
                 className={clsx(
                   "transition-all",
-                  isActive && id === "AUTO"   && "drop-shadow-[0_0_6px_rgba(0,229,255,0.8)]",
-                  isActive && id === "MANUAL" && "drop-shadow-[0_0_6px_rgba(0,200,83,0.8)]"
+                  isActive && id === "AUTO"   && "drop-shadow-[0_0_6px_rgb(var(--c-brand-500)/0.8)]",
+                  isActive && id === "MANUAL" && "drop-shadow-[0_0_6px_rgb(var(--c-status-ok)/0.8)]"
                 )}
               />
               <div className="text-center min-w-0">

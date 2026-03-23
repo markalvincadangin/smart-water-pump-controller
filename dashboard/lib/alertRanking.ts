@@ -1,7 +1,7 @@
 /**
  * Ranked alerts per FIRMWARE_DASHBOARD_DESIGN_v2 §11.3.
  * Order: controller offline, dry-run, overflow, auto-maintenance, maintenance,
- * level sensor error, flow sensor error, sleeping.
+ * level/flow bypass, level sensor error, flow sensor error, sleeping.
  */
 
 import type { PumpStatus } from "./types";
@@ -29,9 +29,10 @@ const RANK = {
   blocked_start: 4,
   auto_maintenance: 5,
   maintenance: 6,
-  level_sensor: 7,
-  flow_sensor: 8,
-  sleeping: 9,
+  maintenance_flow: 7,
+  level_sensor: 8,
+  flow_sensor: 9,
+  sleeping: 10,
 } as const;
 
 /**
@@ -71,7 +72,7 @@ export function getRankedAlerts(
   const st = status;
   if (!st) return alerts;
 
-  // vNext: Blocked start warning (operator intent ON, but safety gates prevent starting)
+  // Blocked start warning (operator intent ON, but safety gates prevent starting)
   const manualIntentOn = st.manual_desired === true;
   const blockedByLink = st.level_fresh === false || st.remote_sensor_stable === false;
   const notBypassed = !st.bypass_level_sensor;
@@ -145,6 +146,18 @@ export function getRankedAlerts(
       title: "Maintenance active",
       description: "Level sensor bypassed. Flow guard only. Supervise pump.",
       recovery: "Turn off bypass in Device settings when done.",
+    });
+  }
+
+  if (st.bypass_flow_sensor) {
+    alerts.push({
+      id: "maintenance_flow",
+      rank: RANK.maintenance_flow,
+      severity: "amber",
+      tier: "warning",
+      title: "Flow safety bypass active",
+      description: "Flow-based dry-run/flow-stuck checks are bypassed. Supervise pump operation closely.",
+      recovery: "Turn off flow bypass in Device settings after maintenance.",
     });
   }
 

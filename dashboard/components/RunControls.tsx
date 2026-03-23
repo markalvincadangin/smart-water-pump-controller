@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { Timer, Power, PowerOff, Square, Plus, AlertOctagon, RotateCcw } from "lucide-react";
 
-/** vNext: runMode includes MANUAL_ON/MANUAL_OFF and STOPPED (E-STOP latch) */
+/** runMode includes MANUAL_ON/MANUAL_OFF and STOPPED (E-STOP latch) */
 type RunMode = "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL_ON" | "MANUAL_OFF" | "COUNTDOWN" | "STOPPED";
 type ControlMode = "AUTO" | "COUNTDOWN" | "MANUAL";
 
@@ -94,7 +94,7 @@ export default function RunControls({
   const controllerOffline = !esp32Online;
   const canAct = isAdmin && !isLockedOut && !controllerOffline;
 
-  // vNext: Is pump currently active in MANUAL mode?
+  // Is pump currently active in MANUAL mode?
   const isManualOn = controlMode === "MANUAL" && manualDesired === true && runMode === "MANUAL_ON";
   const isManualOff = controlMode === "MANUAL" && manualDesired === false && (runMode === "MANUAL_OFF" || runMode === "OFF");
   const isInManualMode = controlMode === "MANUAL";
@@ -217,7 +217,7 @@ export default function RunControls({
                   className={clsx(
                     "px-3 py-3 rounded-xl border font-mono text-sm min-h-[56px] flex items-center justify-center gap-2 transition-all duration-200 touch-manipulation active:scale-[0.98]",
                     isManualOn
-                      ? "bg-accent-green/20 border-accent-green/50 text-accent-green shadow-[0_0_20px_rgba(0,200,83,0.2)] cursor-default"
+                      ? "bg-accent-green/20 border-accent-green/50 text-accent-green shadow-[0_0_20px_rgb(var(--c-status-ok)/0.2)] cursor-default"
                       : canAct
                         ? "border-accent-green/30 text-accent-green hover:bg-accent-green/10"
                         : "border-surface-4 text-text-muted opacity-50 cursor-not-allowed"
@@ -417,7 +417,7 @@ export default function RunControls({
                 {busy === "countdown" ? "Starting…" : `Start ${customDurationInput || countdownMin} min Timer`}
               </button>
               <p className="text-[9px] font-mono text-text-muted text-center">
-                Semi-auto — pump stops when timer expires, tank is full, or safety triggers
+                Semi-auto — pump stops when timer expires or safety triggers; mode stays COUNTDOWN
               </p>
             </div>
           )}

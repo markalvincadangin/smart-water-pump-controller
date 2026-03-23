@@ -45,7 +45,7 @@ export default function LoginPage() {
           </div>
           <div>
             <p className="text-xs font-mono text-text-muted uppercase tracking-widest text-center mb-1">
-              Smart Water Pump System
+              SmartFlow
             </p>
             <h1 className="font-display text-xl sm:text-2xl font-bold text-text-primary text-center">
               Control Dashboard

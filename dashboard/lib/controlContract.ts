@@ -3,7 +3,7 @@
 
 import type { PumpControl } from "./types";
 
-/** Valid control mode strings accepted by firmware (vNext). */
+/** Valid control mode strings accepted by firmware. */
 export const VALID_CONTROL_MODES: readonly PumpControl["mode"][] = [
   "AUTO",
   "COUNTDOWN",

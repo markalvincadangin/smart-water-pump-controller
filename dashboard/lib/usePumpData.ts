@@ -7,6 +7,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
 import type { PumpStatus, PumpControl, PumpSnapshot, HistoryEntry, HistoryEvent } from "./types";
 import { writeAuditEvent } from "@/lib/audit";
+import { formatPhtTime } from "@/lib/time";
 
 const STATUS_PATH = "/pump_system/status";
 const CONTROL_PATH = "/pump_system/control";
@@ -51,8 +52,6 @@ export function usePumpData() {
   // authReady = Firebase auth has been checked AND we have a signed-in user
   const authReady = authChecked && !!authUser;
 
-  // Locale for timestamps — prefer browser setting when available
-  const [timeLocale, setTimeLocale] = useState<string>("en-PH");
 
   // ── Wait for signed-in user (Google Auth via login page) ───────────────────
   useEffect(() => {
@@ -61,15 +60,6 @@ export function usePumpData() {
       setAuthUser(user ? { uid: user.uid, email: user.email ?? null } : null);
     });
     return () => unsub();
-  }, []);
-
-  // Determine locale for chart timestamps (client-side only)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const locale = window.navigator?.language || window.navigator?.languages?.[0];
-    if (locale && typeof locale === "string") {
-      setTimeLocale(locale);
-    }
   }, []);
 
   // ── Real-time listeners ──────────────────────────────────────────────────
@@ -91,8 +81,7 @@ export function usePumpData() {
           setLastUpdateAtMs(Date.now());
 
           // Append to rolling history
-          const now = new Date();
-          const timeLabel = now.toLocaleTimeString(timeLocale, { hour12: false });
+          const timeLabel = formatPhtTime(Date.now());
 
           // Append to rolling history (level + flow)
           setHistory((prev) => {
@@ -190,7 +179,7 @@ export function usePumpData() {
       unsubStatus();
       unsubControl();
     };
-  }, [authReady, timeLocale]);
+  }, [authReady]);
 
   // ── Control writers ──────────────────────────────────────────────────────
 
@@ -214,7 +203,7 @@ export function usePumpData() {
 
   const setManualDesired = useCallback(async (on: boolean) => {
     try {
-      // vNext: MANUAL is intent-based and persistent
+      // MANUAL is intent-based and persistent
       await set(ref(db, `${CONTROL_PATH}/mode`), "MANUAL");
       await set(ref(db, `${CONTROL_PATH}/manual_desired`), on);
       if (authUser?.uid) {
@@ -361,14 +350,17 @@ export function usePumpData() {
 
   const stopCountdown = useCallback(async () => {
     try {
-      // vNext: stopping countdown returns to AUTO (non-latching)
-      await set(ref(db, `${CONTROL_PATH}/mode`), "AUTO");
+      // Option B: stop countdown timer without leaving COUNTDOWN mode
+      await set(ref(db, `${CONTROL_PATH}/countdown_stop`), true);
+      window.setTimeout(() => {
+        void set(ref(db, `${CONTROL_PATH}/countdown_stop`), false);
+      }, 5000);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.countdown_stop",
           uid: authUser.uid,
           email: authUser.email ?? null,
-          detail: "Countdown stopped (returned to AUTO)",
+          detail: "Countdown stopped (mode remains COUNTDOWN)",
         });
       }
     } catch (err) {
@@ -390,6 +382,24 @@ export function usePumpData() {
       }
     } catch (err) {
       console.error("[RTDB] setBypassLevelSensor failed:", err);
+      throw err;
+    }
+  }, [authUser?.email, authUser?.uid]);
+
+  const setBypassFlowSensor = useCallback(async (value: boolean) => {
+    try {
+      await set(ref(db, `${CONTROL_PATH}/bypass_flow_sensor`), value);
+      if (authUser?.uid) {
+        await writeAuditEvent({
+          action: "control.bypass_flow_sensor",
+          uid: authUser.uid,
+          email: authUser.email ?? null,
+          meta: { bypass_flow_sensor: value },
+          detail: value ? "Flow sensor bypass enabled (maintenance mode)" : "Flow sensor bypass disabled",
+        });
+      }
+    } catch (err) {
+      console.error("[RTDB] setBypassFlowSensor failed:", err);
       throw err;
     }
   }, [authUser?.email, authUser?.uid]);
@@ -425,5 +435,6 @@ export function usePumpData() {
     triggerEmergencyStop,
     resetEmergencyStop,
     setBypassLevelSensor,
+    setBypassFlowSensor,
   };
 }

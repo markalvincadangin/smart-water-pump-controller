@@ -15,6 +15,7 @@ export type AuditAction =
   | "control.run_countdown_add_time"
   | "control.countdown_stop"
   | "control.bypass_level_sensor"
+  | "control.bypass_flow_sensor"
   | "config.device.save"
   | "config.notifications.save";
 

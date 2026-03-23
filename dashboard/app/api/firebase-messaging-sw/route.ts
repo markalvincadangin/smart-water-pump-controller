@@ -22,7 +22,7 @@ firebase.initializeApp(${JSON.stringify(config)});
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title || 'Smart Water Pump';
+  const title = payload.notification?.title || 'SmartFlow';
   const opts = {
     body: payload.notification?.body || '',
     icon: '/icons/icon-192.png',

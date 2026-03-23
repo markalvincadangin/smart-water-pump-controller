@@ -37,10 +37,10 @@
 #define RELAY_PIN        4
 
 // RS-485 (Tank Link) — production pinout (see hardware/wiring_notes.md)
-// ESP32 UART2: TX2=GPIO17, RX2=GPIO16. Half-duplex DE/RE tied to one GPIO.
+// ESP32 UART2: TX2=GPIO17, RX2=GPIO25. Half-duplex DE/RE tied to one GPIO.
 #define RS485_UART_BAUD     115200
 #define RS485_TX_PIN        17
-#define RS485_RX_PIN        16
+#define RS485_RX_PIN        25
 #define RS485_DE_RE_PIN      5   // LOW=RX, HIGH=TX
 
 // ---- Tank calibration ----
@@ -146,6 +146,10 @@
 // Minimum off-time between pump starts (motor protection)
 #define MIN_PUMP_OFF_TIME_MS         30000
 
+#ifndef APP_HOSTNAME
+  #define APP_HOSTNAME "smartflow-controller"
+#endif
+
 // ---- Firebase objects ----
 extern FirebaseData   fbdo;
 extern FirebaseAuth   auth;
@@ -172,6 +176,8 @@ extern int  cfgIdleSensorIntervalMs;
 extern int  cfgIdleFirebaseIntervalMs;
 /** When true, ignore level sensor for start/stop; flow guard is still active. */
 extern bool cfgBypassLevelSensor;
+/** When true, ignore flow sensor for dry-run and flow-stuck checks. */
+extern bool cfgBypassFlowSensor;
 
 extern float flowRateLpm;
 extern int   waterLevelPct;
@@ -252,6 +258,7 @@ extern unsigned long firebaseLastErrorLogMs;
 extern String        lastPersistedMode;
 extern bool          lastPersistedDryRun;
 extern bool          lastPersistedBypass;
+extern bool          lastPersistedBypassFlow;
 extern int           lastPersistedLevel;
 extern unsigned long lastLevelWriteMs;
 extern unsigned long lastUptimeWriteMs;

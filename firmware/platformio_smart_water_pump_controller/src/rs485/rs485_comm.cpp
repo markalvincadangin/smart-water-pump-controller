@@ -173,11 +173,19 @@ static bool pollRemoteSensorNodeInternal() {
     rs485SetTx(true);
     Serial2.print("REQ\n");
     Serial2.flush();
+    delay(2); // Wait for hardware shift register to empty
     rs485SetTx(false);
 
     char payload[RS485_RX_LINE_MAX];
-    if (!rs485ReadFrame(payload, sizeof(payload), RS485_FRAME_TIMEOUT_MS)) continue;
-    if (!parseSensorFrameStrict(payload, lvl, flow, err, seq)) continue;
+    if (!rs485ReadFrame(payload, sizeof(payload), RS485_FRAME_TIMEOUT_MS)) {
+      Serial.println("[RS485-ERR] ReadFrame Timeout/Fail");
+      continue;
+    }
+    if (!parseSensorFrameStrict(payload, lvl, flow, err, seq)) {
+      Serial.print("[RS485-ERR] Parse strict failed. Payload: ");
+      Serial.println(payload);
+      continue;
+    }
     gotFrame = true;
   }
 

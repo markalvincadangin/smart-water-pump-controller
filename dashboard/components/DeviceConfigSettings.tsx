@@ -19,11 +19,15 @@ interface DeviceConfigSettingsProps {
   onRequestReboot?: () => Promise<void>;
   /** Current bypass state from controller status (maintenance mode). */
   bypassLevelSensor?: boolean;
+  /** Current flow bypass state from controller status (maintenance mode). */
+  bypassFlowSensor?: boolean;
   /** Set level sensor bypass via Firebase control (admin only). */
   onSetBypassLevelSensor?: (value: boolean) => Promise<void>;
+  /** Set flow sensor bypass via Firebase control (admin only). */
+  onSetBypassFlowSensor?: (value: boolean) => Promise<void>;
 }
 
-export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUid = null, actorEmail = null, esp32Online = false, onRequestReboot, bypassLevelSensor = false, onSetBypassLevelSensor }: DeviceConfigSettingsProps) {
+export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUid = null, actorEmail = null, esp32Online = false, onRequestReboot, bypassLevelSensor = false, bypassFlowSensor = false, onSetBypassLevelSensor, onSetBypassFlowSensor }: DeviceConfigSettingsProps) {
   const { config, loading, saveConfig, seedDefaultsIfEmpty } = useDeviceConfig();
   const [form, setForm] = useState<DeviceConfig>({ ...DEFAULT_DEVICE_CONFIG });
   const [saving, setSaving] = useState(false);
@@ -455,34 +459,68 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
           )}
           <p className="text-[10px] font-mono text-text-muted">Settings sync to your controller when it&apos;s online. When offline, it uses the last saved values—no restart needed.</p>
 
-          {/* Maintenance: Level sensor bypass (admin only) */}
-          {isAdmin && onSetBypassLevelSensor != null && (
+          {/* Maintenance: sensor bypass controls (admin only) */}
+          {isAdmin && (onSetBypassLevelSensor != null || onSetBypassFlowSensor != null) && (
             <div className="mt-4 pt-4 border-t border-surface-3">
               <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">Maintenance</p>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={!!bypassLevelSensor}
-                  disabled={bypassBusy}
-                  onChange={async (e) => {
-                    const v = e.target.checked;
-                    setBypassBusy(true);
-                    try {
-                      await onSetBypassLevelSensor(v);
-                      toast({ kind: "success", title: v ? "Level bypass on" : "Level bypass off", detail: "Controller will apply when online." });
-                    } catch {
-                      toast({ kind: "error", title: "Failed to set bypass" });
-                    } finally {
-                      setBypassBusy(false);
-                    }
-                  }}
-                  className="rounded border-surface-4"
-                />
-                <span className="text-sm font-mono text-text-primary">Bypass level sensor</span>
-              </label>
-              <p className="text-[10px] font-mono text-text-muted mt-1">
-                When on: pump start/stop ignores tank level (flow guard and dry-run protection still active). Use for maintenance or when the sensor is faulty. Supervise the pump.
-              </p>
+              <div className="space-y-3">
+                {onSetBypassLevelSensor != null && (
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!bypassLevelSensor}
+                        disabled={bypassBusy}
+                        onChange={async (e) => {
+                          const v = e.target.checked;
+                          setBypassBusy(true);
+                          try {
+                            await onSetBypassLevelSensor(v);
+                            toast({ kind: "success", title: v ? "Level bypass on" : "Level bypass off", detail: "Controller will apply when online." });
+                          } catch {
+                            toast({ kind: "error", title: "Failed to set level bypass" });
+                          } finally {
+                            setBypassBusy(false);
+                          }
+                        }}
+                        className="rounded border-surface-4"
+                      />
+                      <span className="text-sm font-mono text-text-primary">Bypass level sensor</span>
+                    </label>
+                    <p className="text-[10px] font-mono text-text-muted mt-1">
+                      When on: pump start/stop ignores tank level (flow guard and dry-run protection still active). Use for maintenance or when the sensor is faulty. Supervise the pump.
+                    </p>
+                  </div>
+                )}
+                {onSetBypassFlowSensor != null && (
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!bypassFlowSensor}
+                        disabled={bypassBusy}
+                        onChange={async (e) => {
+                          const v = e.target.checked;
+                          setBypassBusy(true);
+                          try {
+                            await onSetBypassFlowSensor(v);
+                            toast({ kind: "success", title: v ? "Flow bypass on" : "Flow bypass off", detail: "Controller will apply when online." });
+                          } catch {
+                            toast({ kind: "error", title: "Failed to set flow bypass" });
+                          } finally {
+                            setBypassBusy(false);
+                          }
+                        }}
+                        className="rounded border-surface-4"
+                      />
+                      <span className="text-sm font-mono text-text-primary">Bypass flow sensor</span>
+                    </label>
+                    <p className="text-[10px] font-mono text-text-muted mt-1">
+                      When on: flow-based dry-run and flow-stuck checks are bypassed. Use only when sensors are unreliable but you have physically confirmed pump operation and water flow.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

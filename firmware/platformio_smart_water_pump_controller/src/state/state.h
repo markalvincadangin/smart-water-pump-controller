@@ -27,6 +27,7 @@ extern int  cfgLevelSensorFailureThreshold;
 extern int  cfgIdleSensorIntervalMs;
 extern int  cfgIdleFirebaseIntervalMs;
 extern bool cfgBypassLevelSensor;
+extern bool cfgBypassFlowSensor;   // bypass dry-run + flow-stuck checks
 
 // Live telemetry
 extern float flowRateLpm;
@@ -139,6 +140,7 @@ extern unsigned long firebaseLastErrorLogMs;
 extern String        lastPersistedMode;
 extern bool          lastPersistedDryRun;
 extern bool          lastPersistedBypass;
+extern bool          lastPersistedBypassFlow;
 extern int           lastPersistedLevel;
 extern unsigned long lastLevelWriteMs;
 extern unsigned long lastUptimeWriteMs;
