@@ -25,8 +25,8 @@ messaging.onBackgroundMessage((payload) => {
   const title = payload.notification?.title || 'SmartFlow';
   const opts = {
     body: payload.notification?.body || '',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-72.png',
+    icon: '/logos/combinationmark.svg',
+    badge: '/logos/brandmark.svg',
     tag: payload.data?.tag || 'pump-alert'
   };
   self.registration.showNotification(title, opts);

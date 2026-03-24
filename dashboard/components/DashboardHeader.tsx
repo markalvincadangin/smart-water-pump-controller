@@ -1,12 +1,10 @@
 "use client";
 
 import clsx from "clsx";
+import Image from "next/image";
 import OverflowMenu from "@/components/OverflowMenu";
 import AppIcon from "@/components/AppIcon";
 import { ThemeToggle } from "@/components/ThemeToggle";
-
-const TANK_LABEL =
-  process.env.NEXT_PUBLIC_TANK_LABEL ?? "SmartFlow · 660L Tank";
 
 interface DashboardHeaderProps {
   userEmail: string;
@@ -32,25 +30,47 @@ export default function DashboardHeader({
   onSignOut,
 }: DashboardHeaderProps) {
   return (
-    <header className="px-4 sm:px-6 pt-3 sm:pt-6 pb-3 sm:pb-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between gap-3">
+    <header className="sticky top-0 z-30 min-h-[56px] border-b border-border-faint bg-canvas/90 px-4 py-3 backdrop-blur-md supports-[backdrop-filter]:bg-canvas/80 sm:px-6 md:min-h-[48px] md:py-3">
+      <div className="mx-auto flex h-full max-w-6xl items-center">
+        <div className="flex w-full items-center justify-between gap-3">
           {/* Left: Title and label */}
           <div className="min-w-0 flex-1">
-            <p className="text-[9px] sm:text-xs font-mono text-text-muted uppercase tracking-[0.15em] sm:tracking-[0.25em] mb-0.5">
-              {TANK_LABEL}
-            </p>
             <h1 className="font-display text-lg sm:text-2xl md:text-3xl font-bold text-text-primary truncate leading-tight">
-              SmartFlow <span className="text-gradient-cyan">Dashboard</span>
+              <span className="sr-only">SmartFlow Dashboard</span>
+              <div className="flex items-center">
+                {/* Desktop / tablet: wordmark (full) */}
+                <div className="hidden sm:flex items-center">
+                  <Image
+                    src="/logos/wordmark.svg"
+                    alt="SmartFlow"
+                    width={240}
+                    height={48}
+                    className="app-icon h-[32px] w-auto"
+                    unoptimized
+                    priority
+                  />
+                </div>
+                {/* Mobile: combination mark (compact) */}
+                <div className="sm:hidden flex items-center">
+                  <Image
+                    src="/logos/combinationmark.svg"
+                    alt="SmartFlow"
+                    width={44}
+                    height={44}
+                    className="app-icon h-[28px] w-auto"
+                    unoptimized
+                  />
+                </div>
+              </div>
             </h1>
           </div>
 
           {/* Right: Status badge + actions */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Pump status badge */}
             <div
               className={clsx(
-                "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border transition-all duration-500",
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 transition-colors duration-150 ease-out sm:gap-2 sm:px-3.5 sm:py-2",
                 running && !isError
                   ? "bg-accent-green/10 border-accent-green/30 shadow-[0_0_20px_rgb(var(--c-status-ok)/0.15)]"
                   : isError
@@ -72,7 +92,7 @@ export default function DashboardHeader({
                     : "text-text-secondary"
                 )}
               >
-                {isError ? "ERR" : running ? "RUN" : "IDLE"}
+                {isError ? "Error" : running ? "Running" : "Idle"}
               </span>
             </div>
 
@@ -99,8 +119,8 @@ export default function DashboardHeader({
                 onClick={onRequestReboot}
                 title={esp32Online ? "Restart controller" : "Controller must be online"}
                 disabled={!esp32Online}
-                className="hidden md:flex min-h-[36px] min-w-[36px] items-center justify-center p-1.5 rounded-lg border border-surface-3 text-text-secondary
-                         hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
+                className="hidden md:flex min-h-[36px] min-w-[36px] items-center justify-center p-1.5 rounded-lg border border-transparent text-text-secondary
+                         hover:border-[rgb(var(--c-border-subtle))] hover:text-accent-cyan transition-colors touch-manipulation
                          focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 disabled:opacity-50"
               >
                 <AppIcon name="rotate-cw" size={16} className="text-current" />
@@ -109,8 +129,8 @@ export default function DashboardHeader({
             <button
               onClick={onOpenDeviceConfig}
               title="Device settings"
-              className="hidden md:flex min-h-[36px] min-w-[36px] items-center justify-center p-1.5 rounded-lg border border-surface-3 text-text-secondary
-                       hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
+              className="hidden md:flex min-h-[36px] min-w-[36px] items-center justify-center p-1.5 rounded-lg border border-transparent text-text-secondary
+                       hover:border-[rgb(var(--c-border-subtle))] hover:text-accent-cyan transition-colors touch-manipulation
                        focus:outline-none focus:ring-2 focus:ring-accent-cyan/50"
             >
               <AppIcon name="settings" size={16} className="text-current" />
@@ -118,16 +138,16 @@ export default function DashboardHeader({
             <button
               onClick={onOpenNotifications}
               title="Alert preferences"
-              className="hidden md:flex min-h-[36px] min-w-[36px] items-center justify-center p-1.5 rounded-lg border border-surface-3 text-text-secondary
-                       hover:border-accent-cyan/40 hover:text-accent-cyan transition-colors touch-manipulation
+              className="hidden md:flex min-h-[36px] min-w-[36px] items-center justify-center p-1.5 rounded-lg border border-transparent text-text-secondary
+                       hover:border-[rgb(var(--c-border-subtle))] hover:text-accent-cyan transition-colors touch-manipulation
                        focus:outline-none focus:ring-2 focus:ring-accent-cyan/50"
             >
               <AppIcon name="bell" size={16} className="text-current" />
             </button>
             <button
               onClick={onSignOut}
-              className="hidden md:flex px-2.5 py-1.5 rounded-lg border border-surface-3 text-text-secondary
-                       text-xs font-mono hover:border-accent-red/40 hover:text-accent-red
+              className="hidden md:flex px-2.5 py-1.5 rounded-lg border border-transparent text-text-secondary
+                       text-xs font-mono hover:border-[rgb(var(--c-border-subtle))] hover:text-accent-red
                        transition-colors shrink-0 touch-manipulation
                        focus:outline-none focus:ring-2 focus:ring-accent-red/50"
             >

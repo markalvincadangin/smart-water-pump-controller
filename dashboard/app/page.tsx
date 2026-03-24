@@ -218,8 +218,8 @@ export default function DashboardPage() {
                     <div
                       key={alert.id}
                       className={alert.severity === "red"
-                        ? "flex flex-col gap-1 sm:gap-2 p-3 rounded-xl bg-accent-red/10 border border-accent-red/30 text-accent-red text-xs sm:text-sm font-mono"
-                        : "flex flex-col gap-1 p-3 rounded-xl bg-accent-amber/10 border border-accent-amber/30 text-accent-amber text-xs sm:text-sm font-mono"
+                        ? "flex flex-col gap-1 sm:gap-2 p-3 rounded-lg border border-accent-red/25 border-l-[3px] border-l-accent-red bg-[rgb(var(--c-status-error)/0.12)] text-accent-red text-xs sm:text-sm font-mono"
+                        : "flex flex-col gap-1 p-3 rounded-lg border border-accent-amber/25 border-l-[3px] border-l-accent-amber bg-[rgb(var(--c-status-warn)/0.12)] text-accent-amber text-xs sm:text-sm font-mono"
                       }
                     >
                       <div className="flex items-center justify-between gap-2 flex-wrap">

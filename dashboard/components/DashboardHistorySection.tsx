@@ -17,7 +17,7 @@ interface DashboardHistorySectionProps {
 
 export default function DashboardHistorySection({ connected, updateLabel, history, pumpStartLevel, pumpStopLevel, events }: DashboardHistorySectionProps) {
   return (
-    <div className="card p-4 sm:p-5 card-glow-cyan min-w-0 overflow-hidden">
+    <div className="card p-4 sm:p-5 min-w-0 overflow-hidden">
       <CollapsibleSection
         title="Level & Flow"
         subtitle={`${history.length} readings · ${updateLabel}`}

@@ -89,7 +89,7 @@ export default function ToastHost() {
           <div
             key={t.id}
             className={clsx(
-              "card rounded-xl border shadow-lg backdrop-blur",
+              "card rounded-lg border border-l-[3px] shadow-lg backdrop-blur",
               border,
               bg
             )}

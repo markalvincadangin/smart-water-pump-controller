@@ -17,10 +17,10 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico", type: "image/x-icon" },
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/logos/combinationmark.svg", sizes: "192x192", type: "image/svg+xml" },
     ],
     apple: [
-      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/logos/combinationmark.svg", sizes: "180x180", type: "image/svg+xml" },
     ],
   },
 };
@@ -30,7 +30,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#0A0E14",
+  themeColor: "#070B10",
 };
 
 export default function RootLayout({
@@ -39,9 +39,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className="bg-surface text-text-primary font-body antialiased overflow-x-hidden">
-        <ThemeProvider attribute="data-theme" defaultTheme="dark" enableSystem={false}>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
+      <body className="bg-canvas text-text-primary font-body antialiased overflow-x-hidden">
+        <ThemeProvider attribute="data-theme">
           <a
             href="#main"
             className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[9999]

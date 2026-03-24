@@ -104,7 +104,10 @@ export default function HistoryChart({ data, pumpStartLevel, pumpStopLevel, even
   }
 
   return (
-    <div ref={containerRef} className="min-h-[180px] h-[clamp(180px,40vh,320px)] w-full min-w-0">
+    <div
+      ref={containerRef}
+      className="h-[clamp(120px,32vh,320px)] min-h-[120px] w-full min-w-0 lg:h-[clamp(180px,40vh,320px)] lg:min-h-[180px]"
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 40, left: -20, bottom: 0 }}>
           <defs>
