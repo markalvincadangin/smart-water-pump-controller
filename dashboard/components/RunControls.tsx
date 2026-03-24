@@ -102,15 +102,14 @@ export default function RunControls({
   const isIdle = runMode === "OFF" || runMode === "AUTO_STANDBY" || runMode === "MANUAL_OFF";
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* Header with run mode badge */}
-      <div className="flex items-center justify-between min-w-0 gap-2">
-        <h3 className="font-display font-semibold text-text-primary text-sm uppercase tracking-widest min-w-0">
-          Controls
-        </h3>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <h3 className="section-label min-w-0 text-text-primary">Controls</h3>
         <span
+          role="status"
           className={clsx(
-            "badge border font-mono text-[10px] min-w-0 max-w-[60%] truncate",
+            "badge min-w-0 max-w-[60%] truncate border font-mono text-xs",
             runMode === "STOPPED" ? "bg-accent-red/15 text-accent-red border-accent-red/30"
               : runMode === "COUNTDOWN" ? "bg-accent-amber/10 text-accent-amber border-accent-amber/20"
                 : runMode === "MANUAL_ON" ? "bg-accent-green/10 text-accent-green border-accent-green/20"
@@ -146,10 +145,10 @@ export default function RunControls({
               setBusy("stop");
               try { onResetStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
             }}
-            className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-accent-amber/40 bg-accent-amber/10 text-accent-amber font-mono text-xs sm:text-sm font-semibold hover:bg-accent-amber/20 disabled:opacity-50"
+            className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-lg border border-accent-amber/40 bg-accent-amber/10 px-4 py-2.5 font-mono text-xs font-semibold text-accent-amber hover:bg-accent-amber/20 disabled:opacity-[0.38] sm:text-sm"
             title="Reset emergency stop latch"
           >
-            <RotateCcw size={14} />
+            <RotateCcw size={14} aria-hidden />
             Reset Stop
           </button>
         </div>
@@ -215,7 +214,7 @@ export default function RunControls({
                     try { onSetManualDesired(true); } finally { window.setTimeout(() => setBusy(null), 8000); }
                   }}
                   className={clsx(
-                    "px-3 py-3 rounded-xl border font-mono text-sm min-h-[56px] flex items-center justify-center gap-2 transition-all duration-200 touch-manipulation active:scale-[0.98]",
+                    "flex min-h-[56px] items-center justify-center gap-2 rounded-lg border px-3 py-3 font-mono text-sm transition-colors duration-150 ease-out touch-manipulation",
                     isManualOn
                       ? "bg-accent-green/20 border-accent-green/50 text-accent-green shadow-[0_0_20px_rgb(var(--c-status-ok)/0.2)] cursor-default"
                       : canAct
@@ -237,7 +236,7 @@ export default function RunControls({
                     try { onSetManualDesired(false); } finally { window.setTimeout(() => setBusy(null), 8000); }
                   }}
                   className={clsx(
-                    "px-3 py-3 rounded-xl border font-mono text-sm min-h-[56px] flex items-center justify-center gap-2 transition-all duration-200 touch-manipulation active:scale-[0.98]",
+                    "flex min-h-[56px] items-center justify-center gap-2 rounded-lg border px-3 py-3 font-mono text-sm transition-colors duration-150 ease-out touch-manipulation",
                     isManualOff
                       ? "bg-surface-3 border-surface-4 text-text-secondary cursor-default"
                       : canAct
@@ -259,12 +258,34 @@ export default function RunControls({
           {/* ── COUNTDOWN active: timer display + stop + add time ──── */}
           {runMode === "COUNTDOWN" && (
             <div className="space-y-3">
-              {/* Timer display */}
-              <div className="flex items-center justify-center gap-3 p-3 rounded-xl bg-accent-amber/10 border border-accent-amber/30">
-                <Timer size={20} className="text-accent-amber" />
-                <span className="text-2xl font-display font-bold text-accent-amber tabular-nums">
-                  {formatMmSs(effectiveRemaining)}
-                </span>
+              {/* §7.7 — SVG circular countdown progress ring */}
+              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-accent-amber/30 bg-accent-amber/10 p-4">
+                <div className="relative flex items-center justify-center" style={{ width: 96, height: 96 }}>
+                  <svg width="96" height="96" viewBox="0 0 96 96" className="absolute inset-0 -rotate-90" aria-hidden>
+                    {/* Background track */}
+                    <circle
+                      cx="48" cy="48" r="44"
+                      fill="none"
+                      stroke="rgb(var(--c-border-subtle))"
+                      strokeWidth="4"
+                    />
+                    {/* Progress fill — depletes as time passes */}
+                    <circle
+                      cx="48" cy="48" r="44"
+                      fill="none"
+                      stroke="rgb(var(--c-brand-500))"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      strokeDasharray={2 * Math.PI * 44}
+                      strokeDashoffset={2 * Math.PI * 44 * (1 - Math.min(1, effectiveRemaining / (120 * 60)))}
+                      className="transition-[stroke-dashoffset] duration-1000 ease-linear"
+                    />
+                  </svg>
+                  {/* §7.7 — Center text: MM:SS in Sub-metric size (24px), Data font */}
+                  <span className="relative font-mono text-sub-metric font-medium tabular-nums text-accent-amber leading-none">
+                    {formatMmSs(effectiveRemaining)}
+                  </span>
+                </div>
               </div>
 
               {/* Stop */}
@@ -275,7 +296,7 @@ export default function RunControls({
                   setBusy("stop");
                   try { onStopCountdown(); } finally { window.setTimeout(() => setBusy(null), 8000); }
                 }}
-                className="w-full px-4 py-3 rounded-xl bg-accent-red/20 border border-accent-red/40 text-accent-red font-mono text-sm font-semibold hover:bg-accent-red/30 min-h-[56px] flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation active:scale-[0.98]"
+                className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-lg border border-accent-red/40 bg-accent-red/20 px-4 py-3 font-mono text-sm font-semibold text-accent-red transition-colors duration-150 ease-out hover:bg-accent-red/30 disabled:opacity-[0.38] touch-manipulation"
                 title="Stop the pump now"
               >
                 <Square size={16} />
@@ -422,44 +443,35 @@ export default function RunControls({
             </div>
           )}
 
-          {/* Stop for AUTO mode when running */}
-          {controlMode === "AUTO" && runMode === "AUTO" && (
-            <button
-              type="button"
-              disabled={busy !== null || controllerOffline}
-              onClick={() => {
-                setBusy("stop");
-                try { onEmergencyStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
-              }}
-              className="w-full px-4 py-3 rounded-xl bg-accent-red/20 border border-accent-red/40 text-accent-red font-mono text-sm font-semibold hover:bg-accent-red/30 min-h-[56px] flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation active:scale-[0.98]"
-              title="Emergency stop"
-            >
-              <AlertOctagon size={16} />
-              Emergency Stop
-            </button>
-          )}
-
-          {/* E-Stop button visible when running (any mode) */}
-          {(runMode === "AUTO" || runMode === "COUNTDOWN" || runMode === "MANUAL_ON") && (
-            <button
-              type="button"
-              disabled={busy !== null || controllerOffline}
-              onClick={() => {
-                setBusy("stop");
-                try { onEmergencyStop(); } finally { window.setTimeout(() => setBusy(null), 8000); }
-              }}
-              className="w-full px-4 py-3 rounded-xl bg-accent-red border border-accent-red/80 text-white font-mono text-sm font-semibold hover:bg-accent-red/90 min-h-[56px] flex items-center justify-center gap-2 disabled:opacity-50 touch-manipulation active:scale-[0.98]"
-              title="Emergency stop"
-            >
-              <AlertOctagon size={16} />
-              Emergency Stop
-            </button>
-          )}
-
-          {!isAdmin && (
-            <p className="text-[9px] font-mono text-text-muted">Admin access required for pump controls.</p>
-          )}
         </>
+      )}
+
+      {/* Part 7.5 — Emergency stop always reachable (not shown when latch UI is active) */}
+      {!emergencyStopLatched && (
+        <div className="mt-6 border-t border-border-faint pt-6">
+          <button
+            type="button"
+            disabled={busy !== null || controllerOffline}
+            onClick={() => {
+              setBusy("stop");
+              try {
+                onEmergencyStop();
+              } finally {
+                window.setTimeout(() => setBusy(null), 8000);
+              }
+            }}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border-[1.5px] border-accent-red bg-transparent px-4 py-2 font-mono text-sm font-semibold text-accent-red transition-colors duration-150 ease-out hover:bg-[rgb(var(--c-status-error)/0.12)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[rgb(var(--c-border-focus)/0.45)] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(var(--c-bg-surface))] disabled:opacity-[0.38]"
+            title="Emergency stop — confirm in dialog if shown"
+            aria-live="assertive"
+          >
+            <AlertOctagon size={16} aria-hidden />
+            Emergency stop
+          </button>
+        </div>
+      )}
+
+      {!isAdmin && (
+        <p className="font-mono text-xs text-text-muted">Admin access required for pump controls.</p>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-// components/ModeControls.tsx
+// components/ModeControls.tsx — Part 7.3 mode selector (radiogroup, segmented)
 "use client";
 
 import clsx from "clsx";
@@ -13,41 +13,19 @@ interface ModeControlsProps {
   pendingAcknowledge?: boolean;
   onSetMode: (mode: PumpControl["mode"]) => void;
   onAcknowledge: () => void;
+  /** When true, segments stay visible at 38% opacity and do not accept input (Part 7.3) */
+  controlsLocked?: boolean;
 }
 
-/** v4.0: Normal operation modes (AUTO, MANUAL) */
 const NORMAL_MODES: {
-  id:      PumpControl["mode"];
-  label:   string;
-  sub:     string;
-  Icon:    React.ElementType;
-  active:  string;
-  hover:   string;
+  id: PumpControl["mode"];
+  label: string;
+  sub: string;
+  Icon: React.ElementType;
 }[] = [
-  {
-    id:     "AUTO",
-    label:  "AUTO",
-    sub:    "Follows water level",
-    Icon:   Cpu,
-    active: "bg-accent-cyan/15 border-accent-cyan/50 text-accent-cyan shadow-[0_0_20px_rgb(var(--c-brand-500)/0.2)]",
-    hover:  "hover:bg-accent-cyan/8 hover:border-accent-cyan/30",
-  },
-  {
-    id:     "MANUAL",
-    label:  "MANUAL",
-    sub:    "Runs with full safety",
-    Icon:   Hand,
-    active: "bg-accent-green/15 border-accent-green/50 text-accent-green shadow-[0_0_20px_rgb(var(--c-status-ok)/0.2)]",
-    hover:  "hover:bg-accent-green/8 hover:border-accent-green/30",
-  },
-  {
-    id:     "COUNTDOWN",
-    label:  "COUNTDOWN",
-    sub:    "Timed run",
-    Icon:   Timer,
-    active: "bg-accent-amber/10 border-accent-amber/40 text-accent-amber shadow-[0_0_20px_rgb(var(--c-status-warn)/0.15)]",
-    hover:  "hover:bg-accent-amber/5 hover:border-accent-amber/25",
-  },
+  { id: "AUTO", label: "AUTO", sub: "Level-based", Icon: Cpu },
+  { id: "MANUAL", label: "MANUAL", sub: "Override", Icon: Hand },
+  { id: "COUNTDOWN", label: "TIMER", sub: "Timed run", Icon: Timer },
 ];
 
 export default function ModeControls({
@@ -58,80 +36,91 @@ export default function ModeControls({
   pendingAcknowledge = false,
   onSetMode,
   onAcknowledge,
+  controlsLocked = false,
 }: ModeControlsProps) {
+  const segmentDisabled = pendingMode !== null || controlsLocked || isError;
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-display font-semibold text-text-primary text-sm uppercase tracking-widest">
-          Mode
-        </h3>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="section-label text-text-primary">Mode</h3>
         {pendingMode ? (
-          <span className="badge text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20">
-            Sending…
+          <span
+            className="badge border border-accent-amber/30 bg-accent-amber/10 text-accent-amber"
+            role="status"
+          >
+            <span className="font-mono text-xs font-medium">Sending…</span>
           </span>
         ) : (
-          <span className="badge text-[10px] bg-surface-3 text-text-muted border border-surface-4">
-            Synced
+          <span className="badge border border-surface-4 bg-surface-2 text-text-muted">
+            <span className="font-mono text-xs font-medium">Synced</span>
           </span>
         )}
       </div>
 
-      {/* Policy modes only (AUTO, MANUAL, COUNTDOWN) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {NORMAL_MODES.map(({ id, label, sub, Icon, active, hover }) => {
+      <div
+        role="radiogroup"
+        aria-label="Pump control mode"
+        className={clsx(
+          "flex w-full gap-0.5 rounded-lg bg-surface-2 p-[3px]",
+          (isError || controlsLocked) && "opacity-[0.38]"
+        )}
+      >
+        {NORMAL_MODES.map(({ id, label, sub, Icon }) => {
           const isActive = currentMode === id;
           const isPending = pendingMode === id;
           return (
             <button
               key={id}
+              type="button"
+              role="radio"
+              aria-checked={isActive}
+              aria-disabled={segmentDisabled}
+              disabled={segmentDisabled}
               onClick={() => onSetMode(id)}
               title={`${label}: ${sub}`}
-              disabled={pendingMode !== null}
               className={clsx(
-                "flex flex-col items-center justify-center gap-1 p-2 sm:p-3.5 min-h-[56px] sm:min-h-[64px] rounded-xl border transition-all duration-200 touch-manipulation active:scale-[0.98]",
-                "cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-surface-1",
-                id === "COUNTDOWN" && "col-span-2 sm:col-span-1",
-                isActive ? active : clsx("border-surface-3 text-text-secondary", hover)
+                "mode-segment flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded px-1 py-2",
+                "touch-manipulation select-none transition-colors duration-150 ease-out",
+                "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[rgb(var(--c-border-focus)/0.45)] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(var(--c-bg-surface))]",
+                isActive
+                  ? "bg-[rgb(var(--c-brand-500))] text-white shadow-sm"
+                  : "bg-transparent text-text-secondary hover:bg-surface-1/60"
               )}
             >
-              <Icon
-                size={16}
+              <Icon size={14} className={clsx(isActive ? "text-white" : "text-text-muted")} />
+              <span className="font-mono text-[11px] font-semibold leading-none sm:text-xs">{label}</span>
+              <span
                 className={clsx(
-                  "transition-all",
-                  isActive && id === "AUTO"   && "drop-shadow-[0_0_6px_rgb(var(--c-brand-500)/0.8)]",
-                  isActive && id === "MANUAL" && "drop-shadow-[0_0_6px_rgb(var(--c-status-ok)/0.8)]"
+                  "hidden text-[10px] leading-tight sm:block",
+                  isActive ? "text-white/85" : "text-text-muted",
+                  isPending && "text-accent-amber"
                 )}
-              />
-              <div className="text-center min-w-0">
-                <div className="text-[10px] sm:text-xs font-mono font-semibold leading-none">{label}</div>
-                <div className={clsx("text-[9px] sm:text-[10px] text-text-muted mt-0.5 leading-tight", isPending && "text-accent-amber")}>
-                  {isPending ? "Sending…" : sub}
-                </div>
-              </div>
+              >
+                {isPending ? "Sending…" : sub}
+              </span>
             </button>
           );
         })}
       </div>
 
-      {/* Dry-Run error acknowledge */}
       {isError && (
-        <div className="p-3 rounded-xl bg-accent-red/10 border border-accent-red/30">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+        <div
+          role="alert"
+          className="rounded-lg border border-accent-red/25 border-l-[3px] border-l-accent-red bg-accent-red/10 p-4"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-accent-red font-mono text-[10px] sm:text-xs font-semibold uppercase tracking-wide">
-                Pump stopped — no water flow
-              </p>
-              <p className="text-text-secondary text-[10px] sm:text-xs mt-0.5">
+              <p className="font-body text-sm font-semibold text-accent-red">Pump stopped — no water flow</p>
+              <p className="mt-1 max-w-[28ch] font-body text-body text-text-secondary">
                 No flow for {dryRunTimeoutSec}s. Check pump and water source.
               </p>
             </div>
             <button
+              type="button"
               onClick={onAcknowledge}
               disabled={pendingAcknowledge}
-              className="shrink-0 px-4 py-2.5 min-h-[44px] rounded-lg bg-accent-red/20 border border-accent-red/50
-                         text-accent-red text-xs font-mono font-semibold
-                         hover:bg-accent-red/30 transition-colors touch-manipulation disabled:opacity-50
-                         focus:outline-none focus:ring-2 focus:ring-accent-red/50 focus:ring-offset-2 focus:ring-offset-surface-1"
+              className="min-h-[44px] shrink-0 rounded-lg border border-accent-red/50 bg-accent-red/20 px-4 py-2.5 font-mono text-xs font-semibold text-accent-red transition-colors duration-150 ease-out hover:bg-accent-red/30 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[rgb(var(--c-border-focus)/0.45)] disabled:cursor-not-allowed disabled:opacity-[0.38]"
             >
               {pendingAcknowledge ? "Sending…" : "Acknowledge"}
             </button>

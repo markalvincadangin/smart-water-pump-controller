@@ -125,6 +125,7 @@ dashboard/
 │   ├── DeviceConfigSettings.tsx    # Gear icon — calibration & thresholds
 │   ├── NotificationSettings.tsx    # Bell icon — email + push alert preferences
 │   ├── InfoTooltip.tsx     # Reusable help tooltip (hover/tap)
+│   ├── AppIcon.tsx         # Typed map to public SVG chrome icons (heroicons)
 │   └── InstallPrompt.tsx   # PWA install banner
 ├── lib/
 │   ├── firebase.ts         # Firebase init + Google Auth
@@ -137,7 +138,9 @@ dashboard/
 │   ├── alertRanking.ts     # Alert priority ranking
 │   ├── faultCodes.ts       # Fault code descriptions
 │   └── useNotificationConfig.ts
-├── public/icons/           # PWA icons (72, 192, 512px)
+├── public/logos/           # Brand SVGs (manifest + metadata: brandmark, wordmark, combinationmark)
+├── public/icons/heroicons/ # App chrome SVGs (via AppIcon.tsx)
+├── public/favicon.ico      # Browser tab icon
 ├── .env.local.example      # Environment variable template
 └── README.md
 ```

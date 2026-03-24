@@ -1,27 +1,33 @@
-// components/StatCard.tsx
+// components/StatCard.tsx — Part 2 (data = Geist Mono), Part 3 spacing (24px card padding)
 "use client";
 
 import clsx from "clsx";
 import type { LucideIcon } from "lucide-react";
 
 interface StatCardProps {
-  label:     string;
-  value:     string;
-  unit?:     string;
-  Icon:      LucideIcon;
-  color:     "cyan" | "green" | "amber" | "red";
-  sub?:      string;
-  animate?:  boolean;
-  /** Optional proximity bar (0–1) for threshold-style stats like flow vs dry-run threshold. */
+  label: string;
+  value: string;
+  unit?: string;
+  Icon: LucideIcon;
+  color: "cyan" | "green" | "amber" | "red";
+  sub?: string;
+  animate?: boolean;
   proximity?: number;
   proximityLabel?: string;
 }
 
 const colorMap = {
-  cyan:  { icon: "text-accent-cyan",  glow: "card-glow-cyan",  bg: "bg-accent-cyan/10"  },
-  green: { icon: "text-accent-green", glow: "card-glow-green", bg: "bg-accent-green/10" },
-  amber: { icon: "text-accent-amber", glow: "",                bg: "bg-accent-amber/10" },
-  red:   { icon: "text-accent-red",   glow: "card-glow-red",   bg: "bg-accent-red/10"   },
+  cyan: { icon: "text-accent-cyan", bg: "bg-[rgb(var(--c-brand-500)/0.1)]" },
+  green: { icon: "text-accent-green", bg: "bg-[rgb(var(--c-status-ok)/0.1)]" },
+  amber: { icon: "text-accent-amber", bg: "bg-[rgb(var(--c-status-warn)/0.1)]" },
+  red: { icon: "text-accent-red", bg: "bg-[rgb(var(--c-status-error)/0.1)]" },
+};
+
+const valueTone: Record<StatCardProps["color"], string> = {
+  cyan: "text-accent-cyan",
+  green: "text-accent-green",
+  amber: "text-accent-amber",
+  red: "text-accent-red",
 };
 
 export default function StatCard({
@@ -49,57 +55,35 @@ export default function StatCard({
           : "bg-accent-green";
 
   return (
-    <div className={clsx("card p-3 sm:p-4 flex flex-col gap-2 sm:gap-3 min-w-0", c.glow)}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-text-secondary uppercase tracking-widest">
-          {label}
-        </span>
-        <div className={clsx("p-1.5 rounded-lg", c.bg)}>
-          <Icon
-            size={14}
-            className={clsx(c.icon, animate && "animate-pulse-slow")}
-          />
+    <div className="card flex min-w-0 flex-col gap-3 p-6">
+      <div className="flex items-start justify-between gap-2">
+        <span className="section-label text-text-secondary">{label}</span>
+        <div className={clsx("rounded-md p-1.5", c.bg)}>
+          <Icon size={14} className={clsx(c.icon, animate && "animate-pulse-slow")} />
         </div>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <div className="flex items-end gap-1">
-          <span
-            className={clsx(
-              "text-2xl sm:text-3xl font-display font-bold tabular-nums leading-none",
-              color === "cyan" && "text-gradient-cyan",
-              color === "green" && "text-gradient-green",
-              color === "amber" && "text-accent-amber",
-              color === "red" && "text-accent-red"
-            )}
-          >
+      <div className="flex flex-col gap-2">
+        <div className="flex min-h-[2.5rem] items-end gap-1 tabular-nums">
+          <span className={clsx("font-mono text-metric font-semibold leading-none tracking-tight", valueTone[color])}>
             {value}
           </span>
-          {unit && (
-            <span className="text-xs sm:text-sm text-text-secondary mb-0.5 font-mono">
-              {unit}
-            </span>
-          )}
+          {unit && <span className="mb-0.5 font-mono text-xs text-text-unit">{unit}</span>}
         </div>
 
         {hasProximity && (
           <div className="flex items-center gap-2">
-            <div className="flex-1 h-2 rounded-full bg-surface-3/80 border border-surface-4 overflow-hidden">
+            <div className="h-2 flex-1 overflow-hidden rounded-full border border-border-subtle bg-surface-2">
               <div
-                className={clsx(
-                  "h-full rounded-full transition-all duration-200",
-                  proximityBarColor
-                )}
+                className={clsx("h-full rounded-full transition-[width] duration-150 ease-out", proximityBarColor)}
                 style={{ width: `${proximityWidthPct}%` }}
               />
             </div>
-            <span className="text-[10px] font-mono text-text-muted">{proximityLabel}</span>
+            <span className="font-mono text-xs text-text-unit">{proximityLabel}</span>
           </div>
         )}
 
-        {sub && (
-          <span className="text-xs text-text-muted font-mono">{sub}</span>
-        )}
+        {sub && <p className="font-mono text-xs leading-snug text-text-secondary">{sub}</p>}
       </div>
     </div>
   );

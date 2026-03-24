@@ -1,35 +1,36 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Moon, Sun } from "lucide-react"
-import { useTheme } from "next-themes"
+import * as React from "react";
+import { Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 
+/** Part 11.2 — tooltips; toggles resolved light/dark (works with system default). */
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
-    setMounted(true)
-  }, [])
+    setMounted(true);
+  }, []);
 
   if (!mounted) {
-    return (
-      <div className="w-9 h-9 rounded-lg border border-surface-3 bg-surface-2" />
-    )
+    return <div className="h-9 w-9 rounded-lg border border-surface-3 bg-surface-2" />;
   }
+
+  const isDark = resolvedTheme === "dark";
+  const next = isDark ? "light" : "dark";
+  const title = isDark ? "Switch to light mode" : "Switch to dark mode";
 
   return (
     <button
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      className="relative inline-flex items-center justify-center rounded-lg w-9 h-9 transition-colors
-                 border border-surface-3 text-text-secondary bg-surface-2
-                 hover:border-accent-cyan/40 hover:text-accent-cyan
-                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan/50"
-      aria-label="Toggle theme"
+      type="button"
+      title={title}
+      onClick={() => setTheme(next)}
+      className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-surface-3 bg-surface-2 text-text-secondary transition-colors duration-200 ease-out hover:border-accent-cyan/40 hover:text-accent-cyan focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[rgb(var(--c-border-focus)/0.45)]"
+      aria-label={title}
     >
-      <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-      <span className="sr-only">Toggle theme</span>
+      <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-transform duration-200 dark:-rotate-90 dark:scale-0" />
+      <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-transform duration-200 dark:rotate-0 dark:scale-100" />
     </button>
-  )
+  );
 }
