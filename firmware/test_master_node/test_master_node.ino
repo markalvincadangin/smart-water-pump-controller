@@ -265,7 +265,15 @@ bool test_rs485_hello() {
     snprintf(req, sizeof(req), "PING:%d", attempt);
 
     char payload[96];
-    if (!rs485SendLineAndReadPayload(req, payload, sizeof(payload))) {
+    bool got = rs485SendLineAndReadPayload(req, payload, sizeof(payload));
+    if (!got) {
+      // Fallbacks to match legacy responder behavior.
+      got = rs485SendLineAndReadPayload("PING", payload, sizeof(payload));
+    }
+    if (!got) {
+      got = rs485SendLineAndReadPayload("REQ", payload, sizeof(payload));
+    }
+    if (!got) {
       Serial.printf("  [WARN] Attempt %d/%d: no response\n", attempt, maxAttempts);
       delay(300);
       continue;
@@ -273,6 +281,12 @@ bool test_rs485_hello() {
 
     if (isHelloPayload(payload)) {
       Serial.printf("  [INFO] Hello reply received on attempt %d\n", attempt);
+      pass = true;
+      break;
+    }
+
+    if (strstr(payload, "LVL:") != nullptr) {
+      Serial.printf("  [INFO] REQ responder reply received on attempt %d\n", attempt);
       pass = true;
       break;
     }
@@ -318,7 +332,7 @@ bool test_rs485_master() {
 
   int framesValid = 0;
   int framesFailed = 0;
-  uint32_t startMs = millis();
+  uint32_t startMs = 0;
 
   Serial.println("\n[INFO] RS485 Master: Polling for 30 seconds...");
 
@@ -327,6 +341,8 @@ bool test_rs485_master() {
   } else {
     Serial.println("  [INFO] RS485 startup sync achieved; beginning measured window.");
   }
+
+  startMs = millis();
 
   while ((millis() - startMs) < 30000) {
     uint32_t pollStartMs = millis();

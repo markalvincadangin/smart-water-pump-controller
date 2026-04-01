@@ -136,6 +136,20 @@ void handleRs485Command(const char* cmd, int& reqFramesSent, int& pingRepliesSen
   rs485SendFramedPayload("ERR:BAD_CMD;NODE_OK:1;");
 }
 
+void serviceRs485ResponderNoCount() {
+  static int reqFramesSent = 0;
+  static int pingRepliesSent = 0;
+  serviceRs485Responder(reqFramesSent, pingRepliesSent);
+}
+
+void delayWithResponder(uint32_t ms) {
+  uint32_t start = millis();
+  while ((millis() - start) < ms) {
+    serviceRs485ResponderNoCount();
+    delay(2);
+  }
+}
+
 void serviceRs485Responder(int& reqFramesSent, int& pingRepliesSent) {
   while (Serial.available() > 0) {
     int c = Serial.read();
@@ -242,6 +256,7 @@ bool test_ultrasonic() {
 
     // Wait for echo rise
     while (digitalRead(PIN_US_ECHO) == LOW && micros() < timeout) {
+      serviceRs485ResponderNoCount();
       delayMicroseconds(1);
     }
     if (micros() >= timeout) {
@@ -252,6 +267,7 @@ bool test_ultrasonic() {
     uint32_t pulseStart = micros();
     // Wait for echo fall
     while (digitalRead(PIN_US_ECHO) == HIGH && micros() < timeout) {
+      serviceRs485ResponderNoCount();
       delayMicroseconds(1);
     }
     uint32_t pulseDuration = micros() - pulseStart;
@@ -268,7 +284,7 @@ bool test_ultrasonic() {
       if (cm > maxDist) maxDist = cm;
     }
 
-    delay(70);
+    delayWithResponder(70);
   }
 
   bool stable = (maxDist - minDist) < 5.0f || validCount < 2;
@@ -286,7 +302,7 @@ bool test_flow_sensor() {
   attachInterrupt(digitalPinToInterrupt(PIN_FLOW_INPUT), onFlowPulse, RISING);
 
   Serial.println("  Flow test: Counting pulses for 10 seconds...");
-  delay(10000);
+  delayWithResponder(10000);
 
   detachInterrupt(digitalPinToInterrupt(PIN_FLOW_INPUT));
 
@@ -380,15 +396,20 @@ void setup() {
   Serial.begin(115200);
   delay(1500);
 
+  // Start RS485 responder early so master tests can communicate even while
+  // this setup sequence is still running.
+  ensureRs485ResponderStarted();
+  delayWithResponder(300);
+
   Serial.println("\n=== SmartFlow NodeMCU Hardware Test Suite ===");
   Serial.println("Build: " __DATE__ " " __TIME__);
   Serial.println("");
 
   // Run all tests
   runTest("TC-S-01: Hardware Sanity", test_hw_sanity);
+  runTest("TC-S-04: RS-485 Echo Server", test_rs485_echo_server);
   runTest("TC-S-02: Ultrasonic Sensor", test_ultrasonic);
   runTest("TC-S-03: Flow Sensor", test_flow_sensor);
-  runTest("TC-S-04: RS-485 Echo Server", test_rs485_echo_server);
   runTest("TC-S-05: CRC Self-Test", test_crc_self_test);
 
   Serial.println("");
@@ -404,10 +425,7 @@ void setup() {
 void loop() {
   // Keep serving RS-485 commands after one-time setup tests so one-laptop
   // workflow (flash node first, master later) still works.
-  if (!g_rs485ResponderStarted) {
-    ensureRs485ResponderStarted();
-    Serial1.println("[TEST] Persistent RS485 responder active (REQ/PING).\n");
-  }
+  if (!g_rs485ResponderStarted) ensureRs485ResponderStarted();
 
   int reqFramesSent = 0;
   int pingRepliesSent = 0;
