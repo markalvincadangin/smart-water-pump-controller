@@ -1,5 +1,6 @@
 // -----------------------------------------------------------------------------
 // Sensors (NodeMCU / ESP8266): ultrasonic level + YF-G1 flow
+// Phase 2: H-02 (level discard observability), H-03 (flow discard log var), H-04 (flow error hysteresis)
 // -----------------------------------------------------------------------------
 
 #include "sensor_node_shared.h"
@@ -59,6 +60,7 @@ static uint8_t usSampleCount = 0;
 
 static void usResetWindow() {
   usSampleCount = 0;
+  snLevelDiscardCount = 0;  // REFACTOR [H-02]: reset per-window discard counter
   usWindowActive = true;
 }
 
@@ -139,17 +141,34 @@ static void usServiceOnce(uint32_t nowMs, uint32_t nowUs) {
         if (usSampleCount >= US_SAMPLES) {
           float med = usMedianValid();
           if (med < 0.0f) {
+            // All samples timed out — ultrasonic sensor failure
             snLevelError = true;
           } else {
             snLastDistanceCm = med;
             int lvl = cmToPercent(med);
+
+            // REFACTOR [H-02]: plausibility filter with counter, rate-limited log, error promotion
             if (snLastLevelUpdateMs > 0 && abs(lvl - snLastGoodLevelPct) > LEVEL_MAX_DELTA_PCT) {
-              // ignore
+              // Reading rejected by plausibility filter — preserve last known good
+              snLevelDiscardCount++;
+              static uint32_t lastLvlDiscardWarnMs = 0;
+              if (millis() - lastLvlDiscardWarnMs >= 60000UL) {
+                lastLvlDiscardWarnMs = millis();
+                LOG_SN(LOG_WARN, "SENSOR", "Level discard: new=%d%% last=%d%% delta>%d. count=%u",
+                       lvl, snLastGoodLevelPct, LEVEL_MAX_DELTA_PCT, (unsigned)snLevelDiscardCount);
+              }
+              // Promote to sensor error if every sample this window was rejected
+              if (snLevelDiscardCount >= US_SAMPLES) {
+                snLevelError = true;
+                LOG_SN(LOG_WARN, "SENSOR",
+                       "All %d level samples discarded. snLevelError=true.", US_SAMPLES);
+              }
             } else {
-              snWaterLevelPct = lvl;
-              snLastGoodLevelPct = lvl;
+              // Reading accepted
+              snWaterLevelPct     = lvl;
+              snLastGoodLevelPct  = lvl;
               snLastLevelUpdateMs = nowMs;
-              snLevelError = false;
+              snLevelError        = false;
             }
           }
           usWindowActive = false;
@@ -186,7 +205,7 @@ void serviceSensorsNonBlocking() {
     noInterrupts();
     uint32_t pulses = flowPulseCount;
     flowPulseCount = 0;
-    uint32_t disc = flowPulseDiscardCount;
+    uint32_t disc = flowPulseDiscardCount;  // REFACTOR [H-03]: local copy used for all logging
     flowPulseDiscardCount = 0;
     interrupts();
 
@@ -198,24 +217,42 @@ void serviceSensorsNonBlocking() {
     if (snFlowRateLpm > FLOW_MAX_SANE_LPM) snFlowRateLpm = FLOW_MAX_SANE_LPM;
     snLastFlowUpdateMs = now;
 
-    snFlowError = (disc > 50);
-  }
+    // REFACTOR [H-04]: two-stage hysteresis — assert after 3s dwell, clear after 5s clear dwell.
+    // Replaces the old non-hysteretic: snFlowError = (disc > 50)
+    if (disc > 50) {
+      flowErrAssertCount++;
+      flowErrClearCount = 0;
+      if (flowErrAssertCount >= 3 && !snFlowError) {
+        snFlowError = true;
+        // REFACTOR [H-03]: 'disc' is the local variable, not the zeroed global
+        LOG_SN(LOG_WARN, "FLOW", "Flow error asserted: disc=%lu for %d consecutive windows.",
+               (unsigned long)disc, (int)flowErrAssertCount);
+      }
+    } else if (disc <= 20) {
+      flowErrClearCount++;
+      flowErrAssertCount = 0;
+      if (flowErrClearCount >= 5 && snFlowError) {
+        snFlowError = false;
+        LOG_SN(LOG_INFO, "FLOW", "Flow error cleared: disc=%lu for %d consecutive clean windows.",
+               (unsigned long)disc, (int)flowErrClearCount);
+      }
+    } else {
+      // Hysteresis band [21..50]: hold current state, reset both dwelling counters
+      flowErrAssertCount = 0;
+      flowErrClearCount  = 0;
+    }
+  }  // end flow 1s window
 
   usServiceOnce(now, nowUs);
   snErrCode = (snLevelError ? 1 : 0) | (snFlowError ? 2 : 0);
 
-#if SENSOR_DEBUG_ENABLED
+  // Phase 1 LOG_SN replaces legacy SENSOR_DBGF block — no #if guard needed
+  // Shows snLevelDiscardCount to confirm H-02 counter is live (replaces zeroed global H-03)
   static uint32_t lastDbgMs = 0;
   if ((uint32_t)(now - lastDbgMs) >= SENSOR_DEBUG_INTERVAL_MS) {
     lastDbgMs = now;
-    SENSOR_DBGF("[SN] lvl=%d%% dist=%.1fcm flow=%.2fLPM err=%d seq=%u pulses_discarded=%lu\n",
-                snWaterLevelPct,
-                snLastDistanceCm,
-                snFlowRateLpm,
-                snErrCode,
-                (unsigned)snSeq,
-                (unsigned long)flowPulseDiscardCount);
+    LOG_SN(LOG_DEBUG, "SENSOR", "lvl=%d%% dist=%.1fcm flow=%.2fLPM err=%d seq=%u ldsc=%u",
+           snWaterLevelPct, snLastDistanceCm, snFlowRateLpm,
+           snErrCode, (unsigned)snSeq, (unsigned)snLevelDiscardCount);
   }
-#endif
 }
-

@@ -26,9 +26,10 @@ static void sendFrame() {
 
   // Build payload in canonical order for strict parsing + CRC
   // CRC is computed over payload up to and including the trailing ';' after SEQ.
-  char payload[96];
-  int n = snprintf(payload, sizeof(payload), "LVL:%d;DIST:%.1f;FLOW:%.2f;ERR:%d;SEQ:%u;",
-                   lvl, dist, flow, err, (unsigned)seq);
+  uint8_t ldsc = (snLevelDiscardCount > 255) ? 255 : (uint8_t)snLevelDiscardCount;
+  char payload[104];
+  int n = snprintf(payload, sizeof(payload), "LVL:%d;DIST:%.1f;FLOW:%.2f;ERR:%d;LDSC:%u;SEQ:%u;",
+                   lvl, dist, flow, err, (unsigned)ldsc, (unsigned)seq);
   if (n <= 0 || (size_t)n >= sizeof(payload)) return;
   uint16_t crc = crc16_modbus((const uint8_t*)payload, (size_t)n);
 
@@ -43,8 +44,7 @@ static void sendFrame() {
   rs485SetTx(false);
 
 #if SENSOR_DEBUG_ENABLED
-  SENSOR_DBGF("[SN] TX frame seq=%u err=%d lvl=%d dist=%.1f flow=%.2f\n",
-              (unsigned)seq, err, lvl, dist, flow);
+  SENSOR_DBGF("[SN][DBG] TX frame seq=%u err=%d lvl=%d dist=%.1f flow=%.2f ldsc=%u\n", (unsigned)seq, err, lvl, dist, flow, (unsigned)ldsc);
 #endif
 }
 
@@ -54,20 +54,27 @@ void rs485_slave_init() {
 }
 
 void rs485_slave_poll() {
+  // REFACTOR [M-03]: reset partial frame if inter-byte stall exceeds 20ms.
+  static uint32_t lastByteMs = 0;
+  if (rxPos > 0 && (millis() - lastByteMs) > 20) {
+    rxPos = 0;
+  }
+
   while (Serial.available() > 0) {
     int c = Serial.read();
     if (c < 0) return;
+    lastByteMs = millis();
     if (c == '\r') continue;
 
     if (c == '\n') {
       rxLine[rxPos] = '\0';
       rxPos = 0;
 
-      if (strstr(rxLine, "REQ") != nullptr) {
+      if (strcmp(rxLine, "REQ") == 0) {
         sendFrame();
       } else {
 #if SENSOR_DEBUG_ENABLED
-        SENSOR_DBGF("[SN] RX unknown cmd: '%s'\n", rxLine);
+        SENSOR_DBGF("[SN][INFO] RX unknown cmd: '%s'\n", rxLine);
 #endif
       }
       return;

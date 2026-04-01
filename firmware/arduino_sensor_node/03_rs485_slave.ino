@@ -1,11 +1,11 @@
 // -----------------------------------------------------------------------------
 // RS-485 slave (NodeMCU / ESP8266)
-// - Listens for "REQ"
+// - Listens for "REQ\n" on SN_SERIAL_RS485 (UART0 GPIO1/3)
 // - Replies with a framed payload:
-//   STX + "LVL:<pct>;FLOW:<lpm>;ERR:<code>;SEQ:<n>;CRC:<hex>" + ETX
+//   STX "LVL:<pct>;DIST:<cm>;FLOW:<lpm>;ERR:<code>;LDSC:<n>;SEQ:<n>;CRC:<hex4>" ETX
 //
-// The NodeMCU uses Serial (GPIO1/3) shared with USB flashing.
-// Disconnect the MAX485 from TX/RX during flashing, then reconnect.
+// Phase 2 [M-03]: partial frame stall recovery via 20ms inter-byte timeout.
+// Phase 2 [2.5]:  LDSC field added (level discard count since last frame).
 // -----------------------------------------------------------------------------
 
 #include "sensor_node_shared.h"
@@ -35,9 +35,12 @@ static void sendFrame() {
   uint8_t seq = snSeq;
   snSeq = (uint8_t)(snSeq + 1);
 
-  char payload[96];
-  int n = snprintf(payload, sizeof(payload), "LVL:%d;DIST:%.1f;FLOW:%.2f;ERR:%d;SEQ:%u;",
-                   snWaterLevelPct, snLastDistanceCm, snFlowRateLpm, snErrCode, (unsigned)seq);
+  char payload[104];  // enlarged for LDSC field
+  uint8_t ldsc = (snLevelDiscardCount > 255) ? 255 : (uint8_t)snLevelDiscardCount;  // Phase 2 [2.5]
+  int n = snprintf(payload, sizeof(payload),
+                   "LVL:%d;DIST:%.1f;FLOW:%.2f;ERR:%d;LDSC:%u;SEQ:%u;",
+                   snWaterLevelPct, snLastDistanceCm, snFlowRateLpm,
+                   snErrCode, (unsigned)ldsc, (unsigned)seq);
   if (n <= 0 || (size_t)n >= sizeof(payload)) return;
   uint16_t crc = crc16_modbus((const uint8_t*)payload, (size_t)n);
 
@@ -46,27 +49,33 @@ static void sendFrame() {
   if (m <= 0 || (size_t)m >= sizeof(frame)) return;
 
   rs485SetTx(true);
-  Serial.write((const uint8_t*)frame, (size_t)m);
-  Serial.flush();
-  delay(2); // Wait for hardware shift register to fully empty
+  SN_SERIAL_RS485.write((const uint8_t*)frame, (size_t)m);
+  SN_SERIAL_RS485.flush();
+  delay(2);  // Wait for hardware shift register to fully empty
   rs485SetTx(false);
 
-#if SENSOR_DEBUG_ENABLED
-  SENSOR_DBGF("[SN] TX frame seq=%u err=%d lvl=%d dist=%.1f flow=%.2f\n",
-              (unsigned)seq, snErrCode, snWaterLevelPct, snLastDistanceCm, snFlowRateLpm);
-#endif
+  LOG_SN(LOG_DEBUG, "RS485", "TX seq=%u err=%d lvl=%d dist=%.1f flow=%.2f ldsc=%u",
+         (unsigned)seq, snErrCode, snWaterLevelPct, snLastDistanceCm, snFlowRateLpm, (unsigned)ldsc);
 }
 
 void initRs485Slave() {
-  Serial.setTimeout(10);
-  // Serial already begun in setup()
+  SN_SERIAL_RS485.setTimeout(10);
+  // SN_SERIAL_RS485 already begun in setup()
   rs485SetTx(false);
 }
 
 void serviceRs485Slave() {
-  while (Serial.available() > 0) {
-    int c = Serial.read();
+  // REFACTOR [M-03]: inter-byte timeout — reset partial frame after 20ms stall
+  static uint32_t lastByteMs = 0;
+  if (rxPos > 0 && (millis() - lastByteMs) > 20) {
+    LOG_SN(LOG_DEBUG, "RS485", "Partial frame stall (rxPos=%d). Receiver reset.", (int)rxPos);
+    rxPos = 0;
+  }
+
+  while (SN_SERIAL_RS485.available() > 0) {
+    int c = SN_SERIAL_RS485.read();
     if (c < 0) return;
+    lastByteMs = millis();  // M-03: update on every received byte
     if (c == '\r') continue;
 
     if (c == '\n') {
@@ -76,9 +85,7 @@ void serviceRs485Slave() {
       if (strstr(rxLine, "REQ") != nullptr) {
         sendFrame();
       } else {
-#if SENSOR_DEBUG_ENABLED
-        SENSOR_DBGF("[SN] RX unknown cmd: '%s'\n", rxLine);
-#endif
+        LOG_SN(LOG_DEBUG, "RS485", "Unknown cmd: '%s'", rxLine);
       }
       return;
     }
@@ -86,7 +93,7 @@ void serviceRs485Slave() {
     if ((size_t)(rxPos + 1) < sizeof(rxLine)) {
       rxLine[rxPos++] = (char)c;
     } else {
-      // overflow, reset
+      // Buffer overflow — reset
       rxPos = 0;
     }
   }

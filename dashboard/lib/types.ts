@@ -1,137 +1,255 @@
-// lib/types.ts
-// Firebase RTDB data structures — must match the ESP32 firmware exactly.
+// dashboard/lib/types.ts
+// REFACTOR [D1]: Complete typed interfaces for all Firebase paths
+// Source of truth: SmartFlow System Refactor Plan v2.0 §4.2
 
-/** /pump_system/status — ESP32 → Cloud (pushed every 3s) */
+export type RunMode =
+  | 'AUTO_STANDBY'
+  | 'AUTO'
+  | 'AUTO_COOLDOWN'
+  | 'MANUAL_ON'
+  | 'MANUAL_OFF'
+  | 'MANUAL_COOLDOWN'
+  | 'COUNTDOWN'
+  | 'STOPPED';
+
+export type FaultCode =
+  | 'DRY_RUN'
+  | 'OVERFLOW'
+  | 'E_STOP'
+  | 'COMM_LOSS'
+  | 'STALE_LEVEL'
+  | 'LEVEL_SENSOR'
+  | 'FLOW_SENSOR'
+  | 'SAFE_MODE'
+  | '';
+
+export type LogLevel = 0 | 1 | 2 | 3 | 4;
+
+export type ControlMode = 'AUTO' | 'MANUAL' | 'COUNTDOWN';
+
+/**
+ * /pump_system/status — written by ESP32 every 3 seconds
+ */
 export interface PumpStatus {
-  water_level_percent: number;   // 0 – 100
+  // Core state
+  water_level_percent?: number;          // omitted when -1 (not yet valid)
   is_running: boolean;
-  flow_rate_lpm: number;   // Litres per minute
-  is_error: boolean;  // true = dry-run lockout active
-  /** v3.0: level (ultrasonic) sensor failure. Older firmware may send is_sensor_error instead. */
-  is_level_sensor_error?: boolean;
-  /** v3.0: flow sensor stuck-high failure. */
-  is_flow_sensor_error?: boolean;
-  /** @deprecated Use is_level_sensor_error / is_flow_sensor_error. Kept for backward compat with older firmware. */
-  is_sensor_error?: boolean;
-  is_overflow_error: boolean;  // Phase 1: max runtime exceeded
-  is_sleeping?: boolean;  // Phase 3: scheduled sleep active
-  wifi_rssi: number;   // Phase 2: WiFi signal strength (dBm)
-  last_boot_reason: string;  // Phase 2: e.g. 'Power-on', 'Task watchdog'
-  uptime_minutes?: number; // Phase 5: Uptime counter (prevents 49-day rollover)
-  // Phase 7 manual + v3.0 COUNTDOWN (replaces timed run)
-  /** run_mode values emitted by firmware */
-  run_mode?: "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL_ON" | "MANUAL_OFF" | "COUNTDOWN" | "STOPPED";
-  countdown_remaining_sec?: number;
-  last_fault_code?: string;
-  last_fault_message?: string;
-  /** v3.0: maintenance bypass active — level sensor ignored */
-  bypass_level_sensor?: boolean;
-  /** v3.0: maintenance bypass active — flow dry-run/flow-stuck checks ignored. */
-  bypass_flow_sensor?: boolean;
-  /** v3.0: true when bypass was auto-enabled by firmware (sensor failure); distinct from manual bypass */
-  auto_bypass_active?: boolean;
-  /** @deprecated Use bypass_level_sensor only. Kept for backward compat with older firmware. */
-  is_maintenance_active?: boolean;
-  /** v3.0: flow-based level estimate when sensor failed/bypass */
-  estimated_level_pct?: number;
-  level_estimate_active?: boolean;
-  flow_volume_added_l?: number;
+  flow_rate_lpm: number;
+  run_mode: RunMode;
+  pump_cooldown_remaining_sec: number;   // 0 when not in cooldown
+
+  // Error flags
+  is_error: boolean;                     // DRY_RUN lockout active
+  is_level_sensor_error?: boolean;      // Firmware canonical key (compat)
+  is_sensor_error: boolean;             // Ultrasonic sensor failure
+  is_flow_sensor_error: boolean;
+  is_overflow_error: boolean;
+  last_fault_code: FaultCode | string;
+  last_fault_message: string;
+
+  // Operational state
+  is_idle_mode: boolean;                 // slow-poll mode active
+  is_sleeping: boolean;                  // scheduled sleep active
+  emergency_stop_latched: boolean;
+  manual_desired: boolean;
+  bypass_level_sensor: boolean;
+  bypass_flow_sensor: boolean;
+  manual_runtime_warning: boolean;       // non-latching, info only
+
+  // Sensor health
+  remote_sensor_stable: boolean;         // 3 consecutive valid frames
+  level_fresh: boolean;                  // age < staleness threshold
+  level_sensor_health_pct: number;       // 0–100
+  level_estimate_active: boolean;
   level_last_valid_age_sec?: number;
-  level_sensor_health_pct?: number;
-  total_pump_cycles?: number;
-  total_pump_run_min?: number;
-  free_heap_bytes?: number;
-  min_free_heap_bytes?: number;
+  estimated_level_pct?: number;
+  remote_level_discard_count: number;
+
+  // Timers
+  countdown_remaining_sec: number;
+
+  // Flow stats
+  flow_volume_added_l: number;
+
+  // Connectivity
+  wifi_rssi: number;
+
+  // System
+  uptime_minutes: number;
+  last_boot_reason: string;
+  debug_log_level: LogLevel;
+  total_pump_cycles: number;
+  total_pump_run_min: number;
+
+  // Diagnostics
+  ultrasonic_cycles_ok: number;
+  ultrasonic_cycles_timeout: number;
+  ultrasonic_last_good_cm: number;
+  free_heap_bytes: number;
+  min_free_heap_bytes?: number;         // Firmware canonical key (compat)
+  min_free_heap_observed_bytes: number;
   max_alloc_heap_bytes?: number;
-  min_free_heap_observed_bytes?: number;
-  firebase_consecutive_failures?: number;
-  firebase_last_error?: string;
-  ultrasonic_last_good_cm?: number;
-  ultrasonic_cycles_ok?: number;
-  ultrasonic_cycles_timeout?: number;
-  flow_discard_max_sane?: number;
-  flow_stuck_high_events?: number;
-
-  // UI truth signals (added by firmware)
-  manual_desired?: boolean;
-  emergency_stop_latched?: boolean;
-  remote_sensor_stable?: boolean;
-  level_fresh?: boolean;
+  firebase_consecutive_failures: number;
+  firebase_last_error: string;
 }
 
-/** /pump_system/control — Cloud → ESP32 */
+/**
+ * /pump_system/control — read by ESP32 every 3 seconds, written by dashboard
+ */
 export interface PumpControl {
-  /** Policy modes only */
-  mode: "AUTO" | "COUNTDOWN" | "MANUAL";
-  clear_error: boolean;
-  reboot_request_id?: number;
-  /** @deprecated Legacy one-shots (read-only compatibility). Dashboard no longer writes these. */
-  manual_start?: boolean;
-  /** @deprecated Legacy one-shots (read-only compatibility). Dashboard no longer writes these. */
-  manual_stop?: boolean;
-  /** Persistent MANUAL intent */
-  manual_desired?: boolean;
-  /** Emergency stop latch control (one-shot) */
-  emergency_stop?: boolean;
-  /** Reset stop latch (one-shot) */
-  reset_stop?: boolean;
-  /** v3.0 COUNTDOWN: duration in minutes when starting (1–120). */
-  countdown_duration_min?: number;
-  /** Explicit countdown start (one-shot). Preferred over “enter mode starts timer”. */
-  countdown_start?: boolean;
-  /** v3.0 COUNTDOWN: one-shot to add time; firmware reads this when countdown_add_time is true (1–120 min). */
-  countdown_add_min?: number;
-  /** v3.0 COUNTDOWN: one-shot to add time to running countdown (amount in countdown_add_min if set). */
-  countdown_add_time?: boolean;
-  /** v3.0: maintenance — ignore level sensor for start/stop; flow guard still active. */
-  bypass_level_sensor?: boolean;
-  /** v3.0: maintenance — ignore flow sensor dry-run/flow-stuck guard. */
-  bypass_flow_sensor?: boolean;
+  mode: ControlMode;
+  manual_desired: boolean;
+  emergency_stop: boolean;              // one-shot
+  reset_stop: boolean;                  // one-shot
+  clear_error: boolean;                 // one-shot
+  countdown_start: boolean;             // one-shot
+  countdown_duration_min: number;
+  countdown_add_time: boolean;          // one-shot
+  countdown_add_min: number;
+  bypass_level_sensor: boolean;
+  bypass_flow_sensor: boolean;
+  reboot_request_id: number;
 }
 
-/** Combined snapshot used by the dashboard UI */
+/**
+ * /pump_system/config/device — read by ESP32 every 30 seconds, written by dashboard
+ */
+export interface DeviceConfig {
+  tank_empty_cm: number;
+  tank_full_cm: number;
+  pump_start_level: number;             // must be < pump_stop_level
+  pump_stop_level: number;
+  dry_run_threshold_lpm: number;        // default 1.0
+  dry_run_timeout_sec: number;
+  max_pump_runtime_min: number;
+  flow_calibration_factor: number;
+  debug_log_level: LogLevel;
+  sleep_enabled: boolean;
+  sleep_start_hour: number;             // 0–23 PHT
+  sleep_end_hour: number;
+  sleep_emergency_level: number;
+  sensor_failure_threshold: number;
+  idle_sensor_interval_ms: number;
+  idle_firebase_interval_ms: number;
+  auto_bypass_on_sensor_fail: boolean;
+  auto_bypass_delay_sec: number;
+  level_sensor_failure_threshold?: number;
+}
+
+/**
+ * /pump_system/config/notifications_by_user/$uid
+ */
+export interface NotificationPrefs {
+  enabled: boolean;
+  email: string;
+  pushEnabled: boolean;
+  fcmTokens: { [deviceId: string]: string };
+  dryRunAlert: boolean;
+  lowLevelAlert: boolean;
+  lowLevelThreshold: number;
+  pumpStartedAlert: boolean;
+  overflowAlert: boolean;
+}
+
+/**
+ * Convenience: null-safe status with all fields defaulted
+ * Use when a component needs guaranteed non-null values
+ */
+export const DEFAULT_STATUS: PumpStatus = {
+  is_running: false,
+  flow_rate_lpm: 0,
+  run_mode: 'AUTO_STANDBY',
+  pump_cooldown_remaining_sec: 0,
+  is_error: false,
+  is_sensor_error: false,
+  is_flow_sensor_error: false,
+  is_overflow_error: false,
+  last_fault_code: '',
+  last_fault_message: '',
+  is_idle_mode: false,
+  is_sleeping: false,
+  emergency_stop_latched: false,
+  manual_desired: false,
+  bypass_level_sensor: false,
+  bypass_flow_sensor: false,
+  manual_runtime_warning: false,
+  remote_sensor_stable: false,
+  level_fresh: false,
+  level_sensor_health_pct: 0,
+  level_estimate_active: false,
+  remote_level_discard_count: 0,
+  countdown_remaining_sec: 0,
+  flow_volume_added_l: 0,
+  wifi_rssi: 0,
+  uptime_minutes: 0,
+  last_boot_reason: '',
+  debug_log_level: 2,
+  total_pump_cycles: 0,
+  total_pump_run_min: 0,
+  ultrasonic_cycles_ok: 0,
+  ultrasonic_cycles_timeout: 0,
+  ultrasonic_last_good_cm: 0,
+  free_heap_bytes: 0,
+  min_free_heap_bytes: 0,
+  min_free_heap_observed_bytes: 0,
+  firebase_consecutive_failures: 0,
+  firebase_last_error: '',
+};
 export interface PumpSnapshot {
   status: PumpStatus;
   control: PumpControl;
-  updatedAt: number;  // Date.now() of last received update
+  updatedAt: number;
 }
 
-/** One entry in the local history chart */
+/**
+ * Backward-compatibility wrappers for untransformed UI components
+ */
+export type NotificationConfig = NotificationPrefs;
+
 export interface HistoryEntry {
-  time: string;  // HH:MM:SS
+  time: string;
   level: number;
   flow: number;
+  [key: string]: unknown;
 }
 
-/** Lightweight event markers to overlay on the history chart */
-export type HistoryEventType = "mode_change" | "run_start" | "run_stop" | "fault";
-
 export interface HistoryEvent {
-  time: string;            // HH:MM:SS (aligned with HistoryEntry.time)
-  type: HistoryEventType;
+  time: string;
+  type: string;
+  message?: string;
   runMode?: string;
   prevRunMode?: string;
   faultCode?: string;
+  details?: unknown;
 }
 
-/** /pump_system/config/notifications_by_user/{uid} — per-user notification settings (Dashboard ↔ Cloud Function) */
-export interface NotificationConfig {
-  enabled: boolean;
-  email: string;
-  /** Enable push notifications to phone/browser (FCM). Stored per device. */
-  pushEnabled?: boolean;
-  /** FCM tokens: deviceId -> token. Cloud Functions sends push to these. */
-  fcmTokens?: Record<string, string>;
-  dryRunAlert: boolean;
-  lowLevelAlert: boolean;
-  lowLevelThreshold: number;  // 0–50
-  pumpStartedAlert: boolean;
-  overflowAlert: boolean;  // Phase 2: max runtime overflow
-}
+export const DEFAULT_DEVICE_CONFIG: DeviceConfig = {
+  tank_empty_cm: 200,
+  tank_full_cm: 10,
+  pump_start_level: 20,
+  pump_stop_level: 90,
+  dry_run_threshold_lpm: 1.0,
+  dry_run_timeout_sec: 30,
+  max_pump_runtime_min: 120,
+  flow_calibration_factor: 7.5,
+  debug_log_level: 2,
+  sleep_enabled: false,
+  sleep_start_hour: 22,
+  sleep_end_hour: 5,
+  sleep_emergency_level: 10,
+  sensor_failure_threshold: 3,
+  idle_sensor_interval_ms: 10000,
+  idle_firebase_interval_ms: 30000,
+  auto_bypass_on_sensor_fail: false,
+  auto_bypass_delay_sec: 60,
+  level_sensor_failure_threshold: 3,
+};
 
-export const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
-  enabled: false,
-  email: "",
+export const DEFAULT_NOTIFICATION_CONFIG: NotificationPrefs = {
+  enabled: true,
+  email: '',
+  pushEnabled: true,
+  fcmTokens: {},
   dryRunAlert: true,
   lowLevelAlert: true,
   lowLevelThreshold: 20,
@@ -139,47 +257,3 @@ export const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
   overflowAlert: true,
 };
 
-/** /pump_system/config/device — Calibration & thresholds (dashboard/ESP32). Write = same UIDs as control/mode. */
-export interface DeviceConfig {
-  tank_empty_cm: number;
-  tank_full_cm: number;
-  pump_start_level: number;
-  pump_stop_level: number;
-  dry_run_threshold_lpm: number;
-  dry_run_timeout_sec: number;
-  flow_calibration_factor: number;
-  max_pump_runtime_min: number;  // Phase 1: max AUTO runtime before overflow error
-  // Phase 3: Scheduled sleep
-  sleep_enabled: boolean;
-  sleep_start_hour: number;  // 0–23
-  sleep_end_hour: number;   // 0–23
-  sleep_emergency_level: number;  // 0–100, bypass sleep if level ≤ this
-  // Phase 4: Advanced
-  /** Preferred key; firmware accepts level_sensor_failure_threshold or sensor_failure_threshold */
-  level_sensor_failure_threshold?: number;  // 3–20
-  sensor_failure_threshold: number;  // 3–20, compatibility key; use level_sensor_failure_threshold when writing
-  idle_sensor_interval_ms: number;   // 5000–60000, slow-poll when tank ≥90%
-  idle_firebase_interval_ms: number; // 10000–120000
-  auto_bypass_on_sensor_fail?: boolean;
-  auto_bypass_delay_sec?: number;    // 10–300
-}
-
-export const DEFAULT_DEVICE_CONFIG: DeviceConfig = {
-  tank_empty_cm: 122,
-  tank_full_cm: 8,
-  pump_start_level: 30,
-  pump_stop_level: 100,
-  dry_run_threshold_lpm: 0.5,
-  dry_run_timeout_sec: 30,
-  flow_calibration_factor: 7.5,
-  max_pump_runtime_min: 120,
-  sleep_enabled: false,
-  sleep_start_hour: 23,
-  sleep_end_hour: 5,
-  sleep_emergency_level: 5,
-  sensor_failure_threshold: 5,
-  idle_sensor_interval_ms: 10000,
-  idle_firebase_interval_ms: 30000,
-  auto_bypass_on_sensor_fail: false,
-  auto_bypass_delay_sec: 60,
-};

@@ -1,0 +1,1 @@
+defect_id,severity,test_id,module,title,category,status,owner,date_opened,date_closed,affected_firmware,build_hash,evidence_path,repro_steps,root_cause,fix_commit,retest_test_id,notes

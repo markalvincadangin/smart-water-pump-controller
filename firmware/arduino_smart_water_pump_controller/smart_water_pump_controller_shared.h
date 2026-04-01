@@ -12,6 +12,46 @@
 // `smart_pump_controller.ino`.
 // -----------------------------------------------------------------------------
 
+// =============================================================================
+// PHASE 1 — Structured Log System
+// =============================================================================
+// Five severity levels. Build-time floor strips calls below LOG_COMPILE_FLOOR
+// entirely (zero binary + zero runtime overhead). Runtime ceiling (gLogLevel)
+// is read from Firebase config — change verbosity in the field without reflash.
+//
+// Format: [L][MODULE][MS] message
+// Example: [W][RS485][0046002] Frame timeout attempt 2/3. Retrying.
+// =============================================================================
+
+#define LOG_ERROR   0   // Safety trips, hardware failures, crash detection
+#define LOG_WARN    1   // Degraded states, comm loss, approaching limits
+#define LOG_INFO    2   // State transitions, mode changes, boot events
+#define LOG_DEBUG   3   // Per-cycle sensor readings, RS-485 frame details
+#define LOG_VERBOSE 4   // State machine internals, raw ISR counts, timer values
+
+// Compile-time floor: calls below this level are removed by preprocessor.
+// Development: LOG_DEBUG. Release-optimized: LOG_INFO.
+#ifndef LOG_COMPILE_FLOOR
+  #define LOG_COMPILE_FLOOR LOG_DEBUG
+#endif
+
+// Runtime ceiling (gLogLevel): set via Firebase config/device/debug_log_level.
+// Initialized to LOG_INFO so production output is ERROR + WARN + INFO only.
+extern uint8_t gLogLevel;
+
+// Level → single-char code lookup
+static const char LOG_LEVEL_CHAR[] = { 'E', 'W', 'I', 'D', 'V' };
+
+// LOG() macro — compile-time + runtime gated. Thread-safe for single-core loop.
+// REFACTOR [H-01]: replaces all flat Serial.printf/println calls.
+#define LOG(level, module, fmt, ...) \
+  do { \
+    if ((level) <= LOG_COMPILE_FLOOR && (level) <= gLogLevel) { \
+      Serial.printf("[%c][%s][%010lu] " fmt "\n", \
+        LOG_LEVEL_CHAR[(level) <= 4 ? (level) : 4], (module), millis(), ##__VA_ARGS__); \
+    } \
+  } while(0)
+
 // ---- Core libraries ----
 #include <Arduino.h>
 #include <WiFi.h>
@@ -52,7 +92,7 @@
 #define PUMP_STOP_LEVEL  100
 
 // ---- Safety + timing ----
-#define DRY_RUN_THRESHOLD_LPM  0.5f
+#define DRY_RUN_THRESHOLD_LPM  1.0f
 #define DRY_RUN_TIMEOUT_MS     30000
 
 #define FLOW_CALIBRATION_FACTOR  7.5f
@@ -79,7 +119,7 @@
 #define RS485_REQ_INTERVAL_MS      1000
 #define RS485_FRAME_TIMEOUT_MS     250
 #define RS485_MAX_RETRIES          3
-#define RS485_RX_LINE_MAX          96
+#define RS485_RX_LINE_MAX          128  // enlarged for LDSC field (Phase 2)
 #define REMOTE_SENSOR_OFFLINE_MS   5000UL
 #define RS485_TX_TURNAROUND_US     80   // DE/RE settle time; tune for cable/transceiver
 
@@ -189,9 +229,10 @@ extern bool   isDryRunError;
 extern bool   isLevelSensorError;
 extern bool   isFlowSensorError;
 extern bool   isOverflowError;
+extern bool   manualRuntimeWarning;
 
 extern int           levelSensorFailCount;
-extern unsigned long levelLastValidMs;      // millis() of last valid level reading
+extern unsigned long levelLastValidMs;  // dashboard health metric ONLY — NOT a freshness gate; see M-01
 extern float         estimatedLevelPct;     // flow-based estimate (-1 = not set)
 extern float         flowVolumeAddedL;      // liters added since anchor
 extern unsigned long lastFlowEstimateMs;    // timestamp for dt in flow estimate
@@ -209,6 +250,9 @@ extern unsigned long levelSensorFailStartMs;
 extern unsigned long flowStuckStartMs;
 extern bool          flowStuckTimerActive;
 extern unsigned long pumpOffStartMs;
+extern bool          offTimerActive;
+extern unsigned long offTimerEndMs;
+extern int           pumpCooldownRemainingSec;
 
 // Remote sensor node telemetry over RS-485 (tank link)
 extern unsigned long remoteSensorLastRxMs;
@@ -218,6 +262,7 @@ extern bool          remoteSensorOnline;        // derived from lastRx age
 extern bool          remoteSensorStable;
 extern uint32_t      remoteSensorOkStreak;
 extern uint32_t      remoteSensorFailStreak;
+extern uint32_t      remoteSensorLevelDiscardCount;  // REFACTOR [3.3]: LDSC field from Phase 2 NodeMCU frame
 
 extern unsigned long levelLastUpdateMs;
 
@@ -246,6 +291,7 @@ extern String        bootReasonStr;
 extern unsigned long wifiBackoffMs;
 extern bool          wifiWasConnected;
 extern bool          firebaseInitialized;
+extern bool          crashCounterCleared;
 
 extern int           wifiRssi;
 extern unsigned long lastSuccessfulFirebaseMs;
@@ -278,11 +324,15 @@ extern unsigned long lastWifiRetryMs;
 extern unsigned long lastHeapDiagMs;
 extern uint32_t      minFreeHeapObserved;
 
+// Phase 1: rate-limit timestamps for repeated WARN conditions
+extern unsigned long lastRs485WarnMs;
+extern unsigned long lastFbWarnMs;
+
 // -----------------------------------------------------------------------------
 // Runtime mode + operator intent
 // -----------------------------------------------------------------------------
 // runMode is derived from mode + state; it is not written by the dashboard.
-extern String        runMode;                // "OFF" | "AUTO" | "AUTO_STANDBY" | "MANUAL_ON" | "MANUAL_OFF" | "COUNTDOWN" | "STOPPED"
+extern String        runMode;                // "AUTO" | "AUTO_STANDBY" | "AUTO_COOLDOWN" | "MANUAL_ON" | "MANUAL_OFF" | "MANUAL_COOLDOWN" | "COUNTDOWN" | "STOPPED"
 extern String        runPrevPumpMode;        // reserved for compatibility/debugging
 extern unsigned long runStartMs;             // millis() when the current run was requested
 extern bool          isManualRun;            // true when operating under MANUAL policy (legacy flag kept for compatibility)

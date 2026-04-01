@@ -1,0 +1,7 @@
+artifact_id,test_id,defect_id,artifact_type,path,captured_at,captured_by,hash,notes
+ART-0001,,,baseline_snapshot,docs/audit/qa/2026-04-01/day-0/baseline_snapshot.md,2026-04-01T00:18:56Z,Copilot,,Wave A baseline metadata
+ART-0002,FW-RS-007,,code_review,firmware/platformio_smart_water_pump_controller/src/rs485/rs485_comm.cpp,2026-04-01T00:18:56Z,Copilot,,flush/turnaround evidence
+ART-0003,FW-RS-008,,code_review,firmware/platformio_smart_water_pump_controller/src/config/config.h,2026-04-01T00:18:56Z,Copilot,,ESP32 turnaround constant
+ART-0004,FW-RS-008,,code_review,firmware/platformio_sensor_node/src/config/config.h,2026-04-01T00:18:56Z,Copilot,,NodeMCU turnaround constant
+ART-0005,,,execution_report,docs/audit/qa/2026-04-01/day-0/WAVE_A_EXECUTION_REPORT.md,2026-04-01T00:18:56Z,Copilot,,Wave A execution summary
+ART-0006,FW-LOG-005,,build_output,docs/audit/qa/2026-04-01/day-0/WAVE_A_EXECUTION_REPORT.md,2026-04-01T00:20:50Z,Copilot,,Clean debug-usb compile warning evidence

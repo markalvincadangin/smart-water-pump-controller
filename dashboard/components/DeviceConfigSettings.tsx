@@ -2,13 +2,15 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Settings, X, RotateCw } from "lucide-react";
+import { Settings, X, RotateCw, AlertTriangle, ShieldAlert, Cpu, Droplets, Info } from "lucide-react";
 import { useDeviceConfig } from "@/lib/useDeviceConfig";
+import { validateDeviceConfig } from "@/lib/validation";
 import InfoTooltip from "./InfoTooltip";
 import type { DeviceConfig } from "@/lib/types";
 import { DEFAULT_DEVICE_CONFIG } from "@/lib/types";
 import { toast } from "@/lib/toast";
 import { writeAuditEvent } from "@/lib/audit";
+import clsx from "clsx";
 
 interface DeviceConfigSettingsProps {
   onClose: () => void;
@@ -27,37 +29,50 @@ interface DeviceConfigSettingsProps {
   onSetBypassFlowSensor?: (value: boolean) => Promise<void>;
 }
 
-export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUid = null, actorEmail = null, esp32Online = false, onRequestReboot, bypassLevelSensor = false, bypassFlowSensor = false, onSetBypassLevelSensor, onSetBypassFlowSensor }: DeviceConfigSettingsProps) {
+/**
+ * REFACTOR [D5.1]: DeviceConfigSettings
+ * Modernized with SF design tokens, high-fidelity inputs, and clear safety semantics.
+ */
+export default function DeviceConfigSettings({ 
+  onClose, 
+  isAdmin = false, 
+  actorUid = null, 
+  actorEmail = null, 
+  esp32Online = false, 
+  onRequestReboot, 
+  bypassLevelSensor = false, 
+  bypassFlowSensor = false, 
+  onSetBypassLevelSensor, 
+  onSetBypassFlowSensor 
+}: DeviceConfigSettingsProps) {
   const { config, loading, saveConfig, seedDefaultsIfEmpty } = useDeviceConfig();
   const [form, setForm] = useState<DeviceConfig>({ ...DEFAULT_DEVICE_CONFIG });
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [rebootBusy, setRebootBusy] = useState(false);
   const [bypassBusy, setBypassBusy] = useState(false);
 
-  const sectionTitleClass =
-    "text-sm font-display font-semibold text-text-primary";
-  const sectionSubtitleClass =
-    "text-[11px] font-mono text-text-muted mt-0.5";
-  const fieldLabelClass =
-    "flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-mono text-text-secondary mb-1";
-  const helperTextClass =
-    "text-[10px] font-mono text-text-muted mt-1";
+  // SF Styles
+  const sectionTitleClass = "text-xs font-bold uppercase tracking-widest text-sf-blue-mid mb-4 flex items-center gap-2";
+  const fieldGroupClass = "space-y-4 p-4 rounded-xl bg-sf-gray-50/50 border border-sf-gray-100";
+  const fieldLabelClass = "flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider text-sf-gray-600 mb-1.5";
+  const inputClass = "w-full bg-white border border-sf-gray-200 rounded-chip px-3 py-2 text-sm font-mono focus:outline-sf-blue transition-all disabled:opacity-50";
+  const helperTextClass = "text-[10px] text-sf-gray-400 mt-1.5 leading-relaxed font-mono";
 
   useEffect(() => {
     if (config) setForm(config);
   }, [config]);
 
-  // B8: Dirty when form differs from saved config (deep compare)
+  // B8: Dirty detection logic (including new FW fields)
   const isDirty = useMemo(() => {
     if (!config) return false;
     const a = form;
     const b = config;
     const levelThreshA = a.level_sensor_failure_threshold ?? a.sensor_failure_threshold;
     const levelThreshB = b.level_sensor_failure_threshold ?? b.sensor_failure_threshold;
+    
     return (
       a.tank_empty_cm !== b.tank_empty_cm ||
       a.tank_full_cm !== b.tank_full_cm ||
@@ -93,57 +108,28 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
     onClose();
   }
 
-  function validate(): string | null {
-    if (form.tank_full_cm >= form.tank_empty_cm) return "Full (cm) must be less than Empty (cm).";
-    if (form.pump_start_level >= form.pump_stop_level) return "Start % must be less than Stop %.";
-    if (form.tank_empty_cm < 5 || form.tank_empty_cm > 200) return "Empty: enter 5–200 cm.";
-    if (form.tank_full_cm < 1 || form.tank_full_cm >= form.tank_empty_cm) return "Full: enter 1 to (Empty − 1) cm.";
-    if (form.pump_start_level < 0 || form.pump_start_level > 100) return "Pump start: 0–100%.";
-    if (form.pump_stop_level < 0 || form.pump_stop_level > 100) return "Pump stop: 0–100%.";
-    if (form.dry_run_threshold_lpm < 0.1 || form.dry_run_threshold_lpm > 10) return "No-flow threshold: 0.1–10 L/min.";
-    if (form.dry_run_timeout_sec < 10 || form.dry_run_timeout_sec > 300) return "Shutdown delay: 10–300 sec.";
-    if (form.flow_calibration_factor < 0.1 || form.flow_calibration_factor > 20) return "Flow factor: 0.1–20.";
-    if (form.max_pump_runtime_min < 30 || form.max_pump_runtime_min > 480) return "Max runtime: 30–480 minutes.";
-    if (form.sleep_start_hour < 0 || form.sleep_start_hour > 23) return "Sleep start: 0–23.";
-    if (form.sleep_end_hour < 0 || form.sleep_end_hour > 23) return "Sleep end: 0–23.";
-    if (form.sleep_emergency_level < 0 || form.sleep_emergency_level > 100) return "Emergency level: 0–100%.";
-    const levelThreshold = form.level_sensor_failure_threshold ?? form.sensor_failure_threshold;
-    if (levelThreshold < 3 || levelThreshold > 20) return "Level sensor error threshold: 3–20.";
-    if (form.idle_sensor_interval_ms < 5000 || form.idle_sensor_interval_ms > 60000) return "Level check: 5000–60000 ms.";
-    if (form.idle_firebase_interval_ms < 10000 || form.idle_firebase_interval_ms > 120000) return "Sync interval: 10000–120000 ms.";
-    if (form.auto_bypass_on_sensor_fail && (form.auto_bypass_delay_sec == null || form.auto_bypass_delay_sec < 10 || form.auto_bypass_delay_sec > 300)) return "Auto bypass delay: 10–300 sec when enabled.";
-    return null;
-  }
-
   async function handleSave() {
     setSaveError(null);
-    const err = validate();
-    if (err) {
-      setSaveError(err);
+    const { isValid, error } = validateDeviceConfig(form);
+    if (!isValid) {
+      setSaveError(error);
       return;
     }
     setSaving(true);
     try {
       await saveConfig(form);
-      setSaveSuccess(true);
-      toast({ kind: "success", title: "Device settings saved", detail: "Changes will sync when the controller is online." });
+      toast({ kind: "success", title: "Config synched", detail: "Controller will update on next sync." });
       if (actorUid) {
         await writeAuditEvent({
           action: "config.device.save",
           uid: actorUid,
           email: actorEmail,
-          detail: "Device config updated",
+          detail: "Config updated via dashboard UI",
         });
       }
       setTimeout(() => onClose(), 800);
-    } catch (e: unknown) {
-      let msg = "Failed to save. Check your connection.";
-      if (e && typeof e === "object" && "code" in e) {
-        const code = (e as { code?: string }).code;
-        if (code === "PERMISSION_DENIED") msg = "Only authorized dashboard users can change device config. Check database rules.";
-        else if (code === "UNAVAILABLE") msg = "Database unavailable.";
-      } else if (e instanceof Error) msg = e.message;
-      setSaveError(msg);
+      } catch (e: unknown) {
+         setSaveError(e instanceof Error ? e.message : "Failed to save config.");
     } finally {
       setSaving(false);
     }
@@ -155,431 +141,401 @@ export default function DeviceConfigSettings({ onClose, isAdmin = false, actorUi
     try {
       await seedDefaultsIfEmpty();
       if (config) setForm(config);
-      else setForm({ ...DEFAULT_DEVICE_CONFIG });
-    } catch (e: unknown) {
-      setSaveError(e instanceof Error ? e.message : "Failed to seed defaults.");
+      } catch (e: unknown) {
+         setSaveError(e instanceof Error ? e.message : "Failed to seed defaults.");
     } finally {
       setSeeding(false);
     }
   }
 
+   async function handleRequestRebootClick() {
+      if (!onRequestReboot || rebootBusy) return;
+      setRebootBusy(true);
+      try {
+         await onRequestReboot();
+      } finally {
+         setRebootBusy(false);
+      }
+   }
+
+   async function handleSetBypassLevelSensor(checked: boolean) {
+      if (!onSetBypassLevelSensor || bypassBusy) return;
+      setBypassBusy(true);
+      try {
+         await onSetBypassLevelSensor(checked);
+      } finally {
+         setBypassBusy(false);
+      }
+   }
+
+   async function handleSetBypassFlowSensor(checked: boolean) {
+      if (!onSetBypassFlowSensor || bypassBusy) return;
+      setBypassBusy(true);
+      try {
+         await onSetBypassFlowSensor(checked);
+      } finally {
+         setBypassBusy(false);
+      }
+   }
+
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div className="card p-8 max-w-md w-full mx-4">
-          <div className="animate-pulse text-text-muted text-sm font-mono">Loading…</div>
-        </div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-sf-gray-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="w-10 h-10 border-2 border-sf-blue/30 border-t-sf-blue rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 overscroll-contain pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]" onClick={(e) => e.target === e.currentTarget && handleCloseAttempt()}>
-      <div className="card card-glow-cyan max-w-md w-full max-h-[95dvh] sm:max-h-[90vh] min-w-0 rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden relative">
-        {/* Header - fixed */}
-        <div className="flex items-center justify-between p-4 sm:p-6 pb-0 shrink-0">
+    <div 
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-sf-gray-900/40 backdrop-blur-md p-0 sm:p-4 animate-fade-in"
+      onClick={(e) => e.target === e.currentTarget && handleCloseAttempt()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+    >
+      <div className="card w-full max-w-md max-h-[90dvh] flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl animate-slide-up overflow-hidden">
+        
+        {/* Header (Fixed) */}
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-sf-gray-100 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-accent-cyan/10">
-              <Settings size={20} className="text-accent-cyan" />
-            </div>
-            <div>
-              <h2 className="font-display font-semibold text-text-primary">Device settings</h2>
-              <p className="text-xs font-mono text-text-muted">Tank size, pump levels, and safety</p>
-            </div>
+             <div className="h-10 w-10 flex items-center justify-center rounded-chip bg-sf-blue-light text-sf-blue">
+                <Settings size={22} className={saving ? "animate-spin-slow" : ""} />
+             </div>
+             <div>
+                <h2 id="settings-title" className="text-base font-bold text-sf-gray-900">Device Settings</h2>
+                <div 
+                  className={clsx(
+                    "text-[10px] font-mono",
+                    esp32Online ? "text-sf-teal" : "text-sf-amber"
+                  )}
+                >
+                  {esp32Online ? "ONLINE \u2014 Sync Active" : "OFFLINE \u2014 Sync Pending"}
+                </div>
+             </div>
           </div>
-          <button onClick={handleCloseAttempt} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors" aria-label="Close">
+          <button onClick={handleCloseAttempt} className="p-2 text-sf-gray-400 hover:text-sf-gray-900 transition-colors">
             <X size={20} />
           </button>
         </div>
 
-        {/* B8: Unsaved-changes confirm dialog */}
-        {showDiscardConfirm && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 rounded-t-2xl sm:rounded-2xl p-4">
-            <div className="card p-4 sm:p-5 max-w-sm w-full space-y-3">
-              <p className="text-sm font-mono text-text-primary">You have unsaved changes. Discard and close?</p>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setShowDiscardConfirm(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm hover:bg-surface-3">
-                  Keep editing
-                </button>
-                <button type="button" onClick={handleDiscard} className="flex-1 px-4 py-2.5 rounded-xl bg-accent-amber/20 border border-accent-amber/40 text-accent-amber font-mono text-sm font-semibold hover:bg-accent-amber/30">
-                  Discard
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-6 py-4">
+        {/* Scrollable Form Content */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8 scrollbar-hide">
+          
+          {/* Admin Mode Toggle */}
           {isAdmin && (
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <div className="inline-flex rounded-xl border border-surface-4 bg-surface-2 p-1">
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(false)}
-                  className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${!showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+             <div className="flex p-1 bg-sf-gray-50 rounded-chip border border-sf-gray-100 gap-1">
+                <button 
+                   onClick={() => setShowAdvanced(false)}
+                   className={clsx(
+                     "flex-1 py-1.5 text-[10px] font-bold tracking-widest rounded-chip transition-all",
+                     !showAdvanced ? "bg-white text-sf-blue shadow-sm" : "text-sf-gray-400"
+                   )}
                 >
-                  Basic
+                   BASIC
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(true)}
-                  className={`px-3 py-2 rounded-lg text-xs font-mono transition-colors ${showAdvanced ? "bg-surface-3 text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+                <button 
+                   onClick={() => setShowAdvanced(true)}
+                   className={clsx(
+                     "flex-1 py-1.5 text-[10px] font-bold tracking-widest rounded-chip transition-all",
+                     showAdvanced ? "bg-white text-sf-blue shadow-sm" : "text-sf-gray-400"
+                   )}
                 >
-                  Advanced
+                   ADVANCED
                 </button>
-              </div>
-            </div>
+             </div>
           )}
 
-          <div className="space-y-4">
-          {/* Tank Calibration */}
-          <div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-              <div>
-                <p className={sectionTitleClass}>Tank size</p>
-                <p className={sectionSubtitleClass}>Calibrate empty/full distances for accurate level.</p>
-              </div>
-              <InfoTooltip content="Measure with a tape measure. Enter the distance from the sensor to the water when empty and when full. This sets how we show the water level." />
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
-              <div>
-                <label className={fieldLabelClass}>
-                  Empty (cm)
-                  <InfoTooltip content="Distance from sensor to water when the tank is empty. Taller tanks use a larger number." side="right" />
-                </label>
-                <input type="number" min={5} max={200} value={form.tank_empty_cm} onChange={(e) => setForm((f) => ({ ...f, tank_empty_cm: parseInt(e.target.value, 10) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                <p className={helperTextClass}>Typical: 50–150 cm (depends on tank height).</p>
-              </div>
-              <div>
-                <label className={fieldLabelClass}>
-                  Full (cm)
-                  <InfoTooltip content="Distance from sensor to water when the tank is completely full. Must be less than empty." side="right" />
-                </label>
-                <input type="number" min={1} max={199} value={form.tank_full_cm} onChange={(e) => setForm((f) => ({ ...f, tank_full_cm: parseInt(e.target.value, 10) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                <p className={helperTextClass}>Must be less than Empty.</p>
-              </div>
-            </div>
-          </div>
-          {/* Pump Thresholds */}
-          <div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-              <div>
-                <p className={sectionTitleClass}>When to run the pump</p>
-                <p className={sectionSubtitleClass}>AUTO mode turns ON at Start and OFF at Stop.</p>
-              </div>
-              <InfoTooltip content="In automatic mode, the pump turns on when water drops to Start % and off when it reaches Stop %. Example: Start 30%, Stop 100% fills the tank completely." />
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-              <div>
-                <label className={fieldLabelClass}>
-                  Start at (%)
-                  <InfoTooltip content="Pump turns on when water reaches this level or below. Lower means waiting longer before refilling." side="right" />
-                </label>
-                <input type="number" min={0} max={100} value={form.pump_start_level} onChange={(e) => setForm((f) => ({ ...f, pump_start_level: parseInt(e.target.value, 10) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-              </div>
-              <div>
-                <label className={fieldLabelClass}>
-                  Stop at (%)
-                  <InfoTooltip content="Pump turns off when water reaches this level. Usually 100% for a full tank." side="right" />
-                </label>
-                <input type="number" min={0} max={100} value={form.pump_stop_level} onChange={(e) => setForm((f) => ({ ...f, pump_stop_level: parseInt(e.target.value, 10) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-              </div>
-              <div>
-                <label className={fieldLabelClass}>
-                  Max runtime (min)
-                  <InfoTooltip content="Safety limit: pump stops if it runs longer than this without filling. Helps prevent overflow if something goes wrong." side="right" />
-                </label>
-                <input type="number" min={30} max={480} value={form.max_pump_runtime_min} onChange={(e) => setForm((f) => ({ ...f, max_pump_runtime_min: parseInt(e.target.value, 10) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                <p className={helperTextClass}>Overflow protection.</p>
-              </div>
-            </div>
-          </div>
-          {/* Basic safety */}
-          <div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-              <div>
-                <p className={sectionTitleClass}>Pump protection</p>
-                <p className={sectionSubtitleClass}>Dry-run protection based on low flow.</p>
-              </div>
-              <InfoTooltip content="Settings to protect the pump from running without water." />
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
-              <div>
-                <label className={fieldLabelClass}>
-                  No-flow threshold (L/min)
-                  <InfoTooltip content="If water flow stays below this while the pump is on, it will shut off. Protects the pump from running dry." side="right" />
-                </label>
-                <input type="number" step={0.1} min={0.1} max={10} value={form.dry_run_threshold_lpm} onChange={(e) => setForm((f) => ({ ...f, dry_run_threshold_lpm: parseFloat(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-              </div>
-              <div>
-                <label className={fieldLabelClass}>
-                  Shutdown delay (sec)
-                  <InfoTooltip content="How long low flow must continue before the pump shuts off. 30 seconds is typical. Shorter = faster protection." side="right" />
-                </label>
-                <input type="number" min={10} max={300} value={form.dry_run_timeout_sec} onChange={(e) => setForm((f) => ({ ...f, dry_run_timeout_sec: parseInt(e.target.value, 10) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-              </div>
-            </div>
-          </div>
+          {/* SECTION: TANK CALIBRATION */}
+          <section className="space-y-4">
+             <div className={sectionTitleClass}><Droplets size={14} /> Tank Calibration</div>
+             <div className={fieldGroupClass}>
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                      <label className={fieldLabelClass}>
+                         Empty (cm)
+                         <InfoTooltip content="Distance from sensor to water when tank is empty" />
+                      </label>
+                      <input 
+                         type="number" 
+                         value={form.tank_empty_cm} 
+                         onChange={(e) => setForm(f => ({...f, tank_empty_cm: parseInt(e.target.value) || 0}))} 
+                         className={inputClass}
+                      />
+                   </div>
+                   <div>
+                      <label className={fieldLabelClass}>
+                         Full (cm)
+                         <InfoTooltip content="Distance from sensor to water when tank is full" />
+                      </label>
+                      <input 
+                         type="number" 
+                         value={form.tank_full_cm} 
+                         onChange={(e) => setForm(f => ({...f, tank_full_cm: parseInt(e.target.value) || 0}))} 
+                         className={inputClass}
+                      />
+                   </div>
+                </div>
+                <p className={helperTextClass}>These values define the 0% and 100% water level visualization.</p>
+             </div>
+          </section>
 
-          {/* Advanced-only sections */}
+          {/* SECTION: AUTOMATION LIMITS */}
+          <section className="space-y-4">
+             <div className={sectionTitleClass}><Cpu size={14} /> Pump Thresholds</div>
+             <div className={fieldGroupClass}>
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                      <label className={fieldLabelClass}>Start AT (%)</label>
+                      <input 
+                         type="number" 
+                         value={form.pump_start_level} 
+                         onChange={(e) => setForm(f => ({...f, pump_start_level: parseInt(e.target.value) || 0}))} 
+                         className={inputClass}
+                      />
+                   </div>
+                   <div>
+                      <label className={fieldLabelClass}>Stop AT (%)</label>
+                      <input 
+                         type="number" 
+                         value={form.pump_stop_level} 
+                         onChange={(e) => setForm(f => ({...f, pump_stop_level: parseInt(e.target.value) || 0}))} 
+                         className={inputClass}
+                      />
+                   </div>
+                </div>
+                <div>
+                   <label className={fieldLabelClass}>Max Runtime (MIN)</label>
+                   <input 
+                      type="number" 
+                      value={form.max_pump_runtime_min} 
+                      onChange={(e) => setForm(f => ({...f, max_pump_runtime_min: parseInt(e.target.value) || 0}))} 
+                      className={inputClass}
+                   />
+                   <p className={helperTextClass}>Safety cutoff to prevent continuous pumping if dry-run check fails.</p>
+                </div>
+             </div>
+          </section>
+
+          {/* SECTION: ADVANCED (Admin Only) */}
           {showAdvanced && isAdmin && (
-            <>
-              <div className="border-t border-surface-3 pt-4">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-                  <div>
-                    <p className={sectionTitleClass}>Calibration & diagnostics</p>
-                    <p className={sectionSubtitleClass}>Admin-only. Adjust only if you know what you’re doing.</p>
-                  </div>
-                  <InfoTooltip content="Advanced calibration values. Change only if you know what you’re doing." />
-                </div>
-                <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                  <div>
-                    <label className={fieldLabelClass}>
-                      Flow meter adjustment
-                      <InfoTooltip content="Matches the flow meter to your setup. Check the sensor manual for the value (often 7.5 or 4.8). Test with a bucket to verify." side="right" />
-                    </label>
-                    <input type="number" step={0.1} min={0.1} max={20} value={form.flow_calibration_factor} onChange={(e) => setForm((f) => ({ ...f, flow_calibration_factor: parseFloat(e.target.value) || 0 }))}
-                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                    <p className={helperTextClass}>Check sensor manual; verify with bucket test.</p>
-                  </div>
-                  <div>
-                    <label className={fieldLabelClass}>
-                      Level sensor error threshold
-                      <InfoTooltip content="After this many failed ultrasonic readings in a row, we show a level sensor error. Default is 5." side="right" />
-                    </label>
-                    <input type="number" min={3} max={20} value={form.level_sensor_failure_threshold ?? form.sensor_failure_threshold} onChange={(e) => setForm((f) => ({ ...f, level_sensor_failure_threshold: parseInt(e.target.value, 10) || 5 }))}
-                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                    <p className={helperTextClass}>Consecutive failed readings before error.</p>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={form.auto_bypass_on_sensor_fail ?? false} onChange={(e) => setForm((f) => ({ ...f, auto_bypass_on_sensor_fail: e.target.checked }))}
-                      className="w-4 h-4 rounded border-surface-4 text-accent-amber focus:ring-accent-amber/50" />
-                    <span className="text-sm font-mono text-text-primary">Auto bypass on level sensor fail</span>
-                  </label>
-                  <p className={helperTextClass}>When on: after level sensor fails for the delay below, controller enables bypass automatically (flow-only mode).</p>
-                  {form.auto_bypass_on_sensor_fail && (
-                    <div>
-                      <label className={fieldLabelClass}>Delay (sec)</label>
-                      <input type="number" min={10} max={300} value={form.auto_bypass_delay_sec ?? 60} onChange={(e) => setForm((f) => ({ ...f, auto_bypass_delay_sec: parseInt(e.target.value, 10) || 60 }))}
-                        className="w-full max-w-[120px] px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                      <p className={helperTextClass}>10–300. Time of continuous failure before auto-bypass engages.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+             <div className="space-y-8 pt-4 animate-fade-in">
+                
+                {/* Safety Monitoring */}
+                <section className="space-y-4">
+                   <div className={sectionTitleClass}><ShieldAlert size={14} /> Safety Guard</div>
+                   <div className={fieldGroupClass}>
+                      <div className="grid grid-cols-2 gap-4">
+                         <div>
+                            <label className={fieldLabelClass}>No-Flow (L/MIN)</label>
+                            <input 
+                               type="number" 
+                               step="0.1"
+                               value={form.dry_run_threshold_lpm} 
+                               onChange={(e) => setForm(f => ({...f, dry_run_threshold_lpm: parseFloat(e.target.value) || 0}))} 
+                               className={inputClass}
+                            />
+                         </div>
+                         <div>
+                            <label className={fieldLabelClass}>Cutoff (SEC)</label>
+                            <input 
+                               type="number" 
+                               value={form.dry_run_timeout_sec} 
+                               onChange={(e) => setForm(f => ({...f, dry_run_timeout_sec: parseInt(e.target.value) || 0}))} 
+                               className={inputClass}
+                            />
+                         </div>
+                      </div>
+                      <div className="pt-2">
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                           <input 
+                              type="checkbox" 
+                              checked={form.auto_bypass_on_sensor_fail ?? false} 
+                              onChange={(e) => setForm(f => ({...f, auto_bypass_on_sensor_fail: e.target.checked}))}
+                              className="w-4 h-4 rounded border-sf-gray-300 text-sf-blue focus:ring-sf-blue"
+                           />
+                           <span className="text-xs font-bold text-sf-gray-700 group-hover:text-sf-blue transition-colors">
+                             Auto-bypass on sensor fail
+                           </span>
+                        </label>
+                        {form.auto_bypass_on_sensor_fail && (
+                           <div className="mt-4 pl-7 animate-slide-up">
+                              <label className={fieldLabelClass}>Bypass Delay (SEC)</label>
+                              <input 
+                                 type="number" 
+                                 value={form.auto_bypass_delay_sec ?? 60} 
+                                 onChange={(e) => setForm(f => ({...f, auto_bypass_delay_sec: parseInt(e.target.value) || 60}))} 
+                                 className={inputClass}
+                              />
+                           </div>
+                        )}
+                      </div>
+                   </div>
+                </section>
 
-              <div className="border-t border-surface-3 pt-4">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-                  <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Quiet hours</p>
-                  <InfoTooltip content="Pause automatic pumping during set hours. Manual control and emergency fill still work. Useful to avoid pump noise at night." />
-                </div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-                  <input type="checkbox" id="sleep_enabled" checked={form.sleep_enabled}
-                    onChange={(e) => setForm((f) => ({ ...f, sleep_enabled: e.target.checked }))}
-                    className="w-4 h-4 rounded border-surface-4 text-accent-cyan focus:ring-accent-cyan/50" />
-                  <label htmlFor="sleep_enabled" className="text-sm font-mono text-text-secondary">Enable quiet hours</label>
-                </div>
-                <p className="text-[9px] font-mono text-text-muted mb-2">During quiet hours: auto mode is paused. Manual control and low-water override still work.</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-                  <div>
-                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                      Start (hour)
-                      <InfoTooltip content="When quiet hours begin. Example: 23 = 11 PM." side="right" />
-                    </label>
-                    <select value={form.sleep_start_hour} onChange={(e) => setForm((f) => ({ ...f, sleep_start_hour: parseInt(e.target.value, 10) }))}
-                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm">
-                      {Array.from({ length: 24 }, (_, i) => (
-                        <option key={i} value={i}>{i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                      End (hour)
-                      <InfoTooltip content="When quiet hours end. Example: 5 = 5 AM." side="right" />
-                    </label>
-                    <select value={form.sleep_end_hour} onChange={(e) => setForm((f) => ({ ...f, sleep_end_hour: parseInt(e.target.value, 10) }))}
-                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm">
-                      {Array.from({ length: 24 }, (_, i) => (
-                        <option key={i} value={i}>{i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                      Low-water override (%)
-                      <InfoTooltip content="If water drops to this level during quiet hours, the pump runs anyway. Prevents running out overnight." side="right" />
-                    </label>
-                    <input type="number" min={0} max={100} value={form.sleep_emergency_level}
-                      onChange={(e) => setForm((f) => ({ ...f, sleep_emergency_level: parseInt(e.target.value, 10) || 0 }))}
-                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                    <p className="text-[9px] font-mono text-text-muted mt-0.5">Pump runs regardless of quiet hours when this low</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-surface-3 pt-4">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-                  <p className="text-xs font-mono text-text-muted uppercase tracking-widest">Power saving</p>
-                  <InfoTooltip content="When the tank is full and the pump has been off for 5+ minutes, we check the water level less often to save power." />
-                </div>
-                <p className="text-[9px] font-mono text-text-muted mb-2">Used when tank is 90%+ full and pump is off for 5+ min.</p>
-                <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                  <div>
-                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                      Level check (ms)
-                      <InfoTooltip content="How often we measure the water level when idle. 10000 = 10 seconds. Higher = less power, slower updates." side="right" />
-                    </label>
-                    <input type="number" min={5000} max={60000} step={1000} value={form.idle_sensor_interval_ms}
-                      onChange={(e) => setForm((f) => ({ ...f, idle_sensor_interval_ms: parseInt(e.target.value, 10) || 10000 }))}
-                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                  </div>
-                  <div>
-                    <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-text-muted uppercase tracking-widest mb-1">
-                      Sync interval (ms)
-                      <InfoTooltip content="How often we update the dashboard when idle. 30000 = 30 seconds. Higher = less data usage." side="right" />
-                    </label>
-                    <input type="number" min={10000} max={120000} step={1000} value={form.idle_firebase_interval_ms}
-                      onChange={(e) => setForm((f) => ({ ...f, idle_firebase_interval_ms: parseInt(e.target.value, 10) || 30000 }))}
-                      className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-surface-4 text-text-primary font-mono text-sm" />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-          <p className="text-[10px] font-mono text-text-muted">Settings sync to your controller when it&apos;s online. When offline, it uses the last saved values—no restart needed.</p>
-
-          {/* Maintenance: sensor bypass controls (admin only) */}
-          {isAdmin && (onSetBypassLevelSensor != null || onSetBypassFlowSensor != null) && (
-            <div className="mt-4 pt-4 border-t border-surface-3">
-              <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">Maintenance</p>
-              <div className="space-y-3">
-                {onSetBypassLevelSensor != null && (
-                  <div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!bypassLevelSensor}
-                        disabled={bypassBusy}
-                        onChange={async (e) => {
-                          const v = e.target.checked;
-                          setBypassBusy(true);
-                          try {
-                            await onSetBypassLevelSensor(v);
-                            toast({ kind: "success", title: v ? "Level bypass on" : "Level bypass off", detail: "Controller will apply when online." });
-                          } catch {
-                            toast({ kind: "error", title: "Failed to set level bypass" });
-                          } finally {
-                            setBypassBusy(false);
-                          }
-                        }}
-                        className="rounded border-surface-4"
-                      />
-                      <span className="text-sm font-mono text-text-primary">Bypass level sensor</span>
-                    </label>
-                    <p className="text-[10px] font-mono text-text-muted mt-1">
-                      When on: pump start/stop ignores tank level (flow guard and dry-run protection still active). Use for maintenance or when the sensor is faulty. Supervise the pump.
-                    </p>
-                  </div>
+                {/* Maintenance Bypass (Active Overrides) */}
+                {(onSetBypassLevelSensor || onSetBypassFlowSensor) && (
+                   <section className="space-y-4">
+                      <div className={sectionTitleClass}><AlertTriangle size={14} /> Maintenance Overrides</div>
+                      <div className="space-y-3">
+                         {onSetBypassLevelSensor && (
+                            <div className="p-4 rounded-xl bg-sf-amber-light/30 border border-sf-amber/10">
+                               <label className="flex items-center gap-3 cursor-pointer">
+                                  <input 
+                                     type="checkbox" 
+                                     checked={!!bypassLevelSensor} 
+                                     onChange={(e) => handleSetBypassLevelSensor(e.target.checked)}
+                                     disabled={bypassBusy}
+                                     className="w-4 h-4 rounded border-sf-amber/30 text-sf-amber focus:ring-sf-amber"
+                                  />
+                                  <span className="text-xs font-bold text-sf-amber-dark">Bypass Level Sensor</span>
+                               </label>
+                               <p className={helperTextClass}>Enables pump operation regardless of tank level telemetry.</p>
+                            </div>
+                         )}
+                         {onSetBypassFlowSensor && (
+                            <div className="p-4 rounded-xl bg-sf-red-light/30 border border-sf-red/10">
+                               <label className="flex items-center gap-3 cursor-pointer">
+                                  <input 
+                                     type="checkbox" 
+                                     checked={!!bypassFlowSensor} 
+                                     onChange={(e) => handleSetBypassFlowSensor(e.target.checked)}
+                                     disabled={bypassBusy}
+                                     className="w-4 h-4 rounded border-sf-red/30 text-sf-red focus:ring-sf-red"
+                                  />
+                                  <span className="text-xs font-bold text-sf-red-dark">Bypass Flow Guard</span>
+                               </label>
+                               <p className={helperTextClass}>Disables dry-run protection. <span className="font-bold underline">EXTREME CAUTION REQUIRED.</span></p>
+                            </div>
+                         )}
+                      </div>
+                   </section>
                 )}
-                {onSetBypassFlowSensor != null && (
-                  <div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!bypassFlowSensor}
-                        disabled={bypassBusy}
-                        onChange={async (e) => {
-                          const v = e.target.checked;
-                          setBypassBusy(true);
-                          try {
-                            await onSetBypassFlowSensor(v);
-                            toast({ kind: "success", title: v ? "Flow bypass on" : "Flow bypass off", detail: "Controller will apply when online." });
-                          } catch {
-                            toast({ kind: "error", title: "Failed to set flow bypass" });
-                          } finally {
-                            setBypassBusy(false);
-                          }
-                        }}
-                        className="rounded border-surface-4"
-                      />
-                      <span className="text-sm font-mono text-text-primary">Bypass flow sensor</span>
-                    </label>
-                    <p className="text-[10px] font-mono text-text-muted mt-1">
-                      When on: flow-based dry-run and flow-stuck checks are bypassed. Use only when sensors are unreliable but you have physically confirmed pump operation and water flow.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
-          {/* System: Restart controller (admin only, when ESP32 online) */}
-          {isAdmin && onRequestReboot && (
-            <div className="mt-4 pt-4 border-t border-surface-3">
-              <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-2">System</p>
-              <button
-                type="button"
-                onClick={async () => {
-                  setRebootBusy(true);
-                  try {
-                    await onRequestReboot();
-                    toast({ kind: "success", title: "Restart sent", detail: "The controller will reboot and reappear online in a few seconds." });
-                  } catch {
-                    toast({ kind: "error", title: "Restart failed" });
-                  } finally {
-                    setRebootBusy(false);
-                  }
-                }}
-                disabled={!esp32Online || rebootBusy}
-                className="w-full px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm hover:bg-surface-3 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <RotateCw size={14} className={rebootBusy ? "animate-spin" : ""} />
-                {rebootBusy ? "Sending…" : "Restart controller"}
-              </button>
-              {!esp32Online && (
-                <p className="text-[10px] font-mono text-text-muted mt-1">Controller must be online to restart.</p>
-              )}
-            </div>
+                {/* Quiet Hours */}
+                <section className="space-y-4">
+                   <div className={sectionTitleClass}><ShieldAlert size={14} /> Quiet Hours</div>
+                   <div className={fieldGroupClass}>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                         <input 
+                            type="checkbox" 
+                            checked={form.sleep_enabled} 
+                            onChange={(e) => setForm(f => ({...f, sleep_enabled: e.target.checked}))}
+                            className="w-4 h-4 rounded border-sf-gray-300 text-sf-blue focus:ring-sf-blue"
+                         />
+                         <span className="text-xs font-bold text-sf-gray-700 font-mono">Enable Silent Period</span>
+                      </label>
+                      {form.sleep_enabled && (
+                        <div className="grid grid-cols-2 gap-4 pt-2 animate-slide-up">
+                           <div>
+                              <label className={fieldLabelClass}>Start HOUR</label>
+                              <select 
+                                 value={form.sleep_start_hour}
+                                 onChange={(e) => setForm(f => ({...f, sleep_start_hour: parseInt(e.target.value)}))}
+                                 className={inputClass}
+                              >
+                                 {Array.from({length: 24}).map((_, i) => (
+                                   <option key={i} value={i}>{i.toString().padStart(2, '0')}:00</option>
+                                 ))}
+                              </select>
+                           </div>
+                           <div>
+                              <label className={fieldLabelClass}>End HOUR</label>
+                              <select 
+                                 value={form.sleep_end_hour}
+                                 onChange={(e) => setForm(f => ({...f, sleep_end_hour: parseInt(e.target.value)}))}
+                                 className={inputClass}
+                              >
+                                 {Array.from({length: 24}).map((_, i) => (
+                                   <option key={i} value={i}>{i.toString().padStart(2, '0')}:00</option>
+                                 ))}
+                              </select>
+                           </div>
+                        </div>
+                      )}
+                   </div>
+                </section>
+
+                {/* System Diagnostics */}
+                <section className="space-y-4">
+                   <div className={sectionTitleClass}><Info size={14} /> Controller System</div>
+                   <div className="space-y-4">
+                      {onRequestReboot && (
+                         <button 
+                            onClick={handleRequestRebootClick}
+                            disabled={rebootBusy || !esp32Online}
+                            className="w-full flex items-center justify-center gap-2 py-3 border border-sf-gray-200 rounded-chip text-sf-gray-600 font-bold hover:bg-sf-gray-50 disabled:opacity-50 transition-colors"
+                         >
+                            <RotateCw size={16} className={rebootBusy ? "animate-spin" : ""} />
+                            {rebootBusy ? "Restarting..." : "Restart Device"}
+                         </button>
+                      )}
+                      
+                      <button 
+                         onClick={handleSeedDefaults}
+                         disabled={seeding}
+                         className="w-full py-3 text-[10px] font-bold text-sf-gray-400 uppercase tracking-widest hover:text-sf-blue transition-colors"
+                      >
+                         {seeding ? "Syncing..." : "Seed Default Constants"}
+                      </button>
+                   </div>
+                </section>
+             </div>
           )}
-          </div>
 
           {saveError && (
-            <p className="mt-4 p-3 rounded-lg bg-accent-red/10 border border-accent-red/30 text-accent-red text-xs font-mono">{saveError}</p>
+             <div className="p-4 rounded-xl bg-sf-red-light/30 border border-sf-red/20 text-sf-red text-xs font-mono animate-fade-in">
+                {saveError}
+             </div>
           )}
         </div>
 
-        {/* B8: Sticky footer — when dirty, highlight Save/Discard */}
-        <div className="shrink-0 flex flex-col gap-2 p-4 sm:p-6 pt-4 border-t border-surface-3 bg-surface-1">
-          {isDirty && (
-            <p className="text-xs font-mono text-accent-amber">You have unsaved changes.</p>
-          )}
-          <button onClick={handleSeedDefaults} disabled={seeding} className="w-full px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm hover:bg-surface-3 disabled:opacity-50">
-            {seeding ? "Setting up…" : "Reset to defaults (if empty)"}
-          </button>
-          <div className="flex gap-3">
-            <button
-              onClick={isDirty ? () => { if (config) setForm(config); setSaveError(null); } : handleCloseAttempt}
-              disabled={saving}
-              className="flex-1 px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm hover:bg-surface-3 disabled:opacity-50"
-            >
-              {isDirty ? "Discard" : "Cancel"}
-            </button>
-            <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl bg-accent-cyan/20 border border-accent-cyan/40 text-accent-cyan font-mono text-sm font-semibold hover:bg-accent-cyan/30 disabled:opacity-50">
-              {saving ? "Saving…" : saveSuccess ? "Saved" : "Save"}
-            </button>
-          </div>
+        {/* Action Footer (Sticky) */}
+        <div className="p-6 border-t border-sf-gray-100 bg-white shrink-0 space-y-4 shadow-top">
+           {isDirty && (
+              <div className="flex items-center gap-2 text-sf-amber animate-pulse">
+                <Info size={14} />
+                <span className="text-[10px] font-bold uppercase tracking-wider font-mono">Unsaved Changes Detected</span>
+              </div>
+           )}
+           <div className="flex gap-4">
+              <button 
+                onClick={handleCloseAttempt}
+                className="flex-1 btn-ghost py-3 font-bold"
+                disabled={saving}
+              >
+                {isDirty ? "Discard" : "Cancel"}
+              </button>
+              <button 
+                onClick={handleSave}
+                disabled={saving || !isDirty}
+                className={clsx(
+                  "flex-1 py-3 rounded-chip font-bold transition-all shadow-lg",
+                  isDirty ? "btn-primary hover:shadow-sf-blue/20" : "bg-sf-gray-100 text-sf-gray-400 cursor-not-allowed"
+                )}
+              >
+                {saving ? "Saving..." : "Save Settings"}
+              </button>
+           </div>
         </div>
+
+        {/* Discard Confirmation Modal */}
+        {showDiscardConfirm && (
+           <div className="absolute inset-0 z-[200] flex items-center justify-center bg-sf-gray-900/60 backdrop-blur-sm p-6 animate-fade-in">
+              <div className="card p-6 w-full max-w-xs space-y-6 shadow-2xl">
+                 <div className="space-y-2">
+                    <h4 className="font-bold text-sf-gray-900">Unsaved Changes</h4>
+                    <p className="text-xs text-sf-gray-500 leading-relaxed font-mono">
+                      Your modifications have not been applied. Discard and return to dashboard?
+                    </p>
+                 </div>
+                 <div className="flex flex-col gap-2">
+                    <button onClick={handleDiscard} className="btn-danger py-2.5 text-xs">Discard Changes</button>
+                    <button onClick={() => setShowDiscardConfirm(false)} className="btn-ghost py-2.5 text-xs">Keep Editing</button>
+                 </div>
+              </div>
+           </div>
+        )}
       </div>
     </div>
   );

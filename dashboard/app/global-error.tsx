@@ -9,7 +9,7 @@ export default function GlobalError({
 }) {
   return (
     <html lang="en">
-      <body className="bg-surface text-text-primary font-body antialiased overflow-x-hidden">
+      <body className="bg-surface text-text-primary font-sans antialiased overflow-x-hidden">
         <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
           <div className="card card-glow-red max-w-md w-full p-6 sm:p-8">
             <p className="text-xs font-mono text-accent-red uppercase tracking-widest mb-2">Something went wrong</p>

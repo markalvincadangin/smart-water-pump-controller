@@ -1,14 +1,20 @@
 // =============================================================================
-// Smart Water Pump Controller - Firmware (Arduino multi-tab)
+// SmartFlow — ESP32 Master Firmware (Arduino multi-tab)
 //
-// This file intentionally contains ONLY the entry points: `setup()` and `loop()`.
-// All includes, globals, and helper functions live in the prefixed tabs:
-//   `01_config.ino`, `02_rs485_comm.ino`, `03_safety_pump.ino`,
-//   `04_persistence.ino`, `05_connectivity_cloud.ino`
+// Entry points: setup() and loop().
+// All includes, globals, and helpers live in the prefixed tabs:
+//   01_config.ino, 02_rs485_comm.ino, 03_safety_pump.ino,
+//   04_persistence.ino, 05_connectivity_cloud.ino
 // =============================================================================
 
 #include <smart_water_pump_controller_shared.h>
 
+// REFACTOR [C-01]: explicit setup() declaration was missing. Fixed.
+void setup() {
+  Serial.begin(115200);
+  while (!Serial && millis() < 3000) delay(10);  // Short wait for USB Serial attach
+
+  // Print boot banner before LOG() is available (gLogLevel not yet loaded)
   Serial.println("\n====================================");
   Serial.println("         SmartFlow (ESP32)");
   Serial.println("====================================");
@@ -16,7 +22,7 @@
 
   // Boot reason logging
   bootReasonStr = getBootReasonString();
-  Serial.printf("[BOOT] Reset reason: %s\n", bootReasonStr.c_str());
+  LOG(LOG_INFO, "BOOT", "Reset reason: %s", bootReasonStr.c_str());
 
   // String heap-fragmentation mitigation (reserve once at boot)
   pumpMode.reserve(12);
@@ -35,18 +41,18 @@
   // Safety: ensure pump is OFF on boot
   setPump(false);
   digitalWrite(RS485_DE_RE_PIN, LOW);  // RX mode by default
-  Serial.println("[INIT] GPIO configured. Pump OFF.");
+  LOG(LOG_INFO, "BOOT", "GPIO configured. Relay pin %d. Pump OFF.", RELAY_PIN);
 
   // --- RS-485 UART2 init (tank sensor node) ---
   Serial2.begin(RS485_UART_BAUD, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
-  Serial.println("[INIT] RS-485 UART2 initialized (115200 8N1).");
+  LOG(LOG_INFO, "BOOT", "RS-485 UART2 init: baud=%d TX=%d RX=%d DE/RE=%d", RS485_UART_BAUD, RS485_TX_PIN, RS485_RX_PIN, RS485_DE_RE_PIN);
 
   // Crash loop detection
   checkCrashLoop();
   if (inSafeMode) {
     // Safe mode: skip everything except Serial output
-    Serial.println("[SAFE MODE] Skipping WiFi, Firebase, and sensor init.");
-    Serial.println("[SAFE MODE] Will auto-clear after 1 hour or full power cycle.");
+    LOG(LOG_ERROR, "BOOT", "SAFE MODE active. Skipping WiFi, Firebase, sensor init.");
+    LOG(LOG_WARN,  "BOOT", "Pump OFF. Auto-clear after 1 hour or full power cycle.");
     return;  // Exit setup() — loop() handles safe mode
   }
 
@@ -58,7 +64,7 @@
 
   // Startup stabilization delay
   if (STARTUP_STABILIZE_MS > 0) {
-    Serial.printf("[INIT] Stabilization delay (%lums)...\n", (unsigned long)STARTUP_STABILIZE_MS);
+    LOG(LOG_DEBUG, "BOOT", "Stabilization delay (%lums)...", (unsigned long)STARTUP_STABILIZE_MS);
     unsigned long t0 = millis();
     while ((millis() - t0) < (unsigned long)STARTUP_STABILIZE_MS) {
       delay(1);
@@ -74,21 +80,21 @@
     struct tm timeinfo;
     if (getLocalTime(&timeinfo, 5000)) {
       ntpSynced = true;
-      Serial.printf("[NTP] Time synced: %04d-%02d-%02d %02d:%02d (PHT)\n",
+      LOG(LOG_INFO, "BOOT", "NTP synced: %04d-%02d-%02d %02d:%02d PHT",
                     timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                     timeinfo.tm_hour, timeinfo.tm_min);
     } else {
-      Serial.println("[NTP] Sync failed. Sleep mode disabled until next WiFi connect.");
+      LOG(LOG_WARN, "BOOT", "NTP sync failed. Sleep mode disabled until next WiFi connect.");
     }
   } else {
-    Serial.println("[NTP] No WiFi. Sleep mode disabled.");
+    LOG(LOG_WARN, "BOOT", "No WiFi at boot. NTP and sleep mode disabled.");
   }
 
   // --- Firebase ---
   if (WiFi.status() == WL_CONNECTED) {
     initFirebase();
   } else {
-    Serial.println("[FIREBASE] Skipped — no WiFi. Will init when WiFi connects.");
+    LOG(LOG_WARN, "FIREBASE", "Init skipped — no WiFi. Will init when WiFi connects.");
   }
 
   // Hardware watchdog
@@ -106,7 +112,7 @@
   esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
 #endif
   esp_task_wdt_add(NULL);
-  Serial.printf("[INIT] Watchdog: %ds timeout, task registered.\n", WDT_TIMEOUT_SEC);
+  LOG(LOG_INFO, "BOOT", "Watchdog: %ds timeout, task registered.", WDT_TIMEOUT_SEC);
 
   // --- Initialize Timing ---
   unsigned long nowInit = millis();
@@ -120,7 +126,8 @@
   lastHeapDiagMs      = nowInit;
   minFreeHeapObserved = ESP.getFreeHeap();
 
-  Serial.println("[INIT] Boot complete. Entering main loop.\n");
+  LOG(LOG_INFO, "BOOT", "Boot complete. mode=%s runMode=%s dryRun=%s",
+      pumpMode.c_str(), runMode.c_str(), isDryRunError ? "ERR" : "OK");
 }
 
 // =============================================================================
@@ -154,7 +161,7 @@ void loop() {
             prefs.end();
           }
           safeModeEpochSec = (uint32_t)nowEpoch;
-          Serial.println("[SAFE MODE] Epoch latched for wall-clock auto-clear.");
+          LOG(LOG_INFO, "BOOT", "Safe mode: wall-clock epoch latched for auto-clear.");
         }
       }
     }
@@ -174,7 +181,7 @@ void loop() {
     }
 
     if (shouldClear) {
-      Serial.println("[SAFE MODE] Timeout reached. Clearing latch and restarting...");
+      LOG(LOG_WARN, "BOOT", "Safe mode timeout reached. Clearing latch and restarting...");
       if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
         prefs.putULong("safe_mode_ms", 0);
         prefs.putUInt("safe_mode_epoch_sec", 0);
@@ -188,10 +195,20 @@ void loop() {
     if (now - lastSafeModeLog >= 30000) {
       lastSafeModeLog = now;
       unsigned long remaining = (SAFE_MODE_TIMEOUT_MS - min(SAFE_MODE_TIMEOUT_MS, (now - safeModeEnteredMs))) / 60000UL;
-      Serial.printf("[SAFE MODE] Pump OFF. %lu min until auto-clear.\n", remaining);
+      LOG(LOG_WARN, "BOOT", "SAFE MODE: pump OFF, %lu min until auto-clear.", remaining);
     }
     delay(100);
     return;
+  }
+
+  // REFACTOR [H-06]: 180s fallback clear for crash-loop (if Firebase fails)
+  if (!crashCounterCleared && now > 180000UL) {
+    if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
+      prefs.putInt("boot_count", 0);
+      prefs.end();
+    }
+    crashCounterCleared = true;
+    LOG(LOG_INFO, "BOOT", "Crash loop counter cleared by 180s fallback (no Firebase).");
   }
 
   // WiFi recovery (exponential backoff with jitter)
@@ -199,11 +216,11 @@ void loop() {
     if (wifiWasConnected) {
       wifiWasConnected = false;
       wifiBackoffMs = WIFI_BACKOFF_INITIAL_MS;
-      Serial.println("[WIFI] Connection lost.");
+      LOG(LOG_WARN, "WIFI", "Connection lost.");
     }
     if (now - lastWifiRetryMs >= wifiBackoffMs) {
       lastWifiRetryMs = now;
-      Serial.printf("[WIFI] Reconnecting (backoff: %lums)...\n", wifiBackoffMs);
+      LOG(LOG_INFO, "WIFI", "Reconnecting (backoff: %lums)...", wifiBackoffMs);
       WiFi.disconnect(false);
       WiFi.mode(WIFI_STA);
       WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -218,14 +235,14 @@ void loop() {
       wifiWasConnected = true;
       wifiBackoffMs = WIFI_BACKOFF_INITIAL_MS;
       wifiRssi = WiFi.RSSI();
-      Serial.printf("[WIFI] Reconnected! IP: %s | RSSI: %d dBm\n",
+      LOG(LOG_INFO, "WIFI", "Reconnected! IP: %s RSSI: %d dBm",
                     WiFi.localIP().toString().c_str(), wifiRssi);
 
       if (!firebaseInitialized) {
-        Serial.println("[FIREBASE] Late init — WiFi was unavailable at boot.");
+        LOG(LOG_INFO, "FIREBASE", "Late init — WiFi was unavailable at boot.");
         initFirebase();
       } else {
-        Serial.println("[FIREBASE] Refreshing auth token after WiFi recovery.");
+        LOG(LOG_INFO, "FIREBASE", "Refreshing auth token after WiFi recovery.");
         Firebase.refreshToken(&config);
         firebaseConsecutiveFailCount = 0;
         firebaseCooldownUntilMs = millis() + 10000UL;
@@ -235,10 +252,9 @@ void loop() {
       struct tm timeinfo;
       if (getLocalTime(&timeinfo, 5000)) {
         ntpSynced = true;
-        Serial.printf("[NTP] Re-synced: %02d:%02d (PHT)\n",
-                      timeinfo.tm_hour, timeinfo.tm_min);
+        LOG(LOG_INFO, "WIFI", "NTP re-synced: %02d:%02d PHT", timeinfo.tm_hour, timeinfo.tm_min);
       } else {
-        Serial.println("[NTP] Re-sync failed. Will retry on next reconnect.");
+        LOG(LOG_WARN, "WIFI", "NTP re-sync failed. Will retry on next reconnect.");
       }
     }
     lastWifiRetryMs = 0;
@@ -248,7 +264,7 @@ void loop() {
   if (WiFi.status() == WL_CONNECTED && now - lastRssiLogMs >= 60000) {
     lastRssiLogMs = now;
     wifiRssi = WiFi.RSSI();
-    Serial.printf("[WIFI] RSSI: %d dBm\n", wifiRssi);
+    LOG(LOG_DEBUG, "WIFI", "RSSI: %d dBm", wifiRssi);
   }
 
   // --- Long-runtime diagnostics (heap; every 10 minutes) ---
@@ -258,8 +274,7 @@ void loop() {
     if (minFreeHeapObserved == 0 || freeHeap < minFreeHeapObserved) {
       minFreeHeapObserved = freeHeap;
     }
-    Serial.printf("[HEAP] free=%lu bytes | min_observed=%lu bytes\n",
-                  (unsigned long)freeHeap, (unsigned long)minFreeHeapObserved);
+    LOG(LOG_DEBUG, "HEAP", "free=%lu min_obs=%lu bytes", (unsigned long)freeHeap, (unsigned long)minFreeHeapObserved);
   }
 
   // Sleep/idle state + dynamic intervals
@@ -267,14 +282,14 @@ void loop() {
   struct tm timeinfo;
   if (getLocalTime(&timeinfo, 100)) {
     currentHour = timeinfo.tm_hour;
-    if (!ntpSynced) { ntpSynced = true; Serial.println("[NTP] Time synced (post-reconnect)."); }
+    if (!ntpSynced) { ntpSynced = true; LOG(LOG_INFO, "BOOT", "NTP synced post-reconnect."); }
   }
   bool emergencyOverride = (waterLevelPct <= cfgSleepEmergencyLevel);
   if (emergencyOverride && cfgSleepEnabled && ntpSynced) {
     static unsigned long lastEmergLog = 0;
     if (now - lastEmergLog >= 60000) {
       lastEmergLog = now;
-      Serial.printf("[SLEEP] Emergency override: level at %d%% (<= %d%%)\n",
+      LOG(LOG_WARN, "SLEEP", "Emergency override: level %d%% <= threshold %d%%",
                     waterLevelPct, cfgSleepEmergencyLevel);
     }
   }
@@ -288,11 +303,11 @@ void loop() {
       if (idleStartMs == 0) idleStartMs = now;
       else if (now - idleStartMs >= IDLE_STABLE_TIME_MS) {
         isIdleMode = true;
-        Serial.println("[IDLE] Tank ≥90%, pump OFF for 5 min — entering slow-poll mode.");
+        LOG(LOG_INFO, "IDLE", "Tank >=90%%, pump OFF 5min — entering slow-poll mode.");
       }
     }
   } else {
-    if (isIdleMode) Serial.println("[IDLE] Exiting slow-poll — resuming normal intervals.");
+    if (isIdleMode) LOG(LOG_INFO, "IDLE", "Exiting slow-poll — resuming normal intervals.");
     isIdleMode = false;
     idleStartMs = 0;
   }
@@ -306,10 +321,10 @@ void loop() {
   // Sleep transition logging
   if (isSleeping && !wasSleeping && now - lastSleepLogMs >= 10000) {
     lastSleepLogMs = now;
-    Serial.println("[SLEEP] Entering scheduled sleep — 30s poll interval.");
+    LOG(LOG_INFO, "SLEEP", "Entering scheduled sleep — 30s poll interval.");
   } else if (!isSleeping && wasSleeping) {
     lastSleepLogMs = now;
-    Serial.println("[SLEEP] Waking up — resuming normal operation.");
+    LOG(LOG_INFO, "SLEEP", "Waking up — resuming normal operation.");
   }
 
   // Sensors
@@ -330,7 +345,8 @@ void loop() {
     // 3. Flow-based estimate (only meaningful while pump runs)
     updateFlowBasedEstimate();
 
-    Serial.printf("[SENSOR] Level:%d%% | Flow:%.2f LPM | Node:%s | ERR:%d | LevelErr:%s | FlowErr:%s | OverflowErr:%s | Sleep:%s\n",
+    // REFACTOR [H-01]: moved to LOG_DEBUG — suppressed in production LOG_INFO mode
+    LOG(LOG_DEBUG, "SENSOR", "lvl=%d%% flow=%.2fLPM node=%s err=%d lvlErr=%s flwErr=%s ovfErr=%s slp=%s",
                   waterLevelPct, flowRateLpm,
                   remoteSensorOnline ? "ONLINE" : "OFFLINE",
                   remoteSensorLastErrCode,
@@ -361,7 +377,7 @@ void loop() {
       if (now - firebaseLastErrorLogMs >= 60000) {
         firebaseLastErrorLogMs = now;
         unsigned long remaining = (firebaseCooldownUntilMs - now) / 1000UL;
-        Serial.printf("[FIREBASE] Cooling down (%lus left). LastErr: %s\n",
+        LOG(LOG_WARN, "FIREBASE", "Cooling down (%lus left). LastErr: %s",
                       remaining, firebaseLastError.c_str());
       }
     } else if (firebaseCooldownUntilMs != 0 && now >= firebaseCooldownUntilMs) {
@@ -380,7 +396,7 @@ void loop() {
       if (WiFi.status() != WL_CONNECTED) {
         // Connection-lost case: do not refresh token; just wait for WiFi recovery.
       } else if (firebaseCooldownUntilMs == 0) {
-        Serial.println("[FIREBASE] Not ready. Skipping sync.");
+        LOG(LOG_DEBUG, "FIREBASE", "Not ready. Skipping sync.");
       }
     }
   }
@@ -392,7 +408,7 @@ void loop() {
   if (now - lastSensorTelemetryLogMs >= 60000) {
     lastSensorTelemetryLogMs = now;
     if (ultrasonicCycleOkCountWin || ultrasonicCycleTimeoutCountWin || flowDiscardMaxSaneCountWin || flowStuckHighEventCountWin) {
-      Serial.printf("[TELEM] Ultrasonic ok/timeout (60s): %lu/%lu | Flow discards (60s): %lu | Flow stuck events (60s): %lu | last_us_cm=%.1f\n",
+      LOG(LOG_DEBUG, "TELEM", "US ok/timeout 60s: %lu/%lu | flow_disc: %lu | flow_stuck: %lu | last_cm=%.1f",
                     (unsigned long)ultrasonicCycleOkCountWin,
                     (unsigned long)ultrasonicCycleTimeoutCountWin,
                     (unsigned long)flowDiscardMaxSaneCountWin,

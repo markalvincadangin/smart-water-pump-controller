@@ -44,18 +44,17 @@ static uint32_t usNextMeasMs = 0;
 static bool usWindowActive = false;
 static float usSamples[US_SAMPLES];
 static uint8_t usSampleCount = 0;
-static uint8_t usValidCount = 0;
 
 static void usResetWindow() {
   usSampleCount = 0;
-  usValidCount = 0;
+  // REFACTOR [H-02]: reset per-window discard counter.
+  snLevelDiscardCount = 0;
   usWindowActive = true;
 }
 
 static void usPushSample(float cm) {
   if (usSampleCount >= US_SAMPLES) return;
   usSamples[usSampleCount++] = cm;
-  if (cm >= 0.0f) usValidCount++;
 }
 
 static float usMedianValid() {
@@ -141,9 +140,18 @@ static void usServiceOnce(uint32_t nowMs, uint32_t nowUs) {
           } else {
             snLastDistanceCm = med;
             int lvl = cmToPercent(med);
-            // Plausibility filter (reject sudden jumps)
+            // REFACTOR [H-02]: plausibility filter with discard observability.
             if (snLastLevelUpdateMs > 0 && abs(lvl - snLastGoodLevelPct) > LEVEL_MAX_DELTA_PCT) {
-              // ignore update; keep last good
+              snLevelDiscardCount++;
+              static uint32_t lastLvlDiscardWarnMs = 0;
+              if (millis() - lastLvlDiscardWarnMs >= 60000UL) {
+                lastLvlDiscardWarnMs = millis();
+                SENSOR_DBGF("[SN][WARN] Level discard: new=%d last=%d count=%u\n", lvl, snLastGoodLevelPct, (unsigned)snLevelDiscardCount);
+              }
+              if (snLevelDiscardCount >= US_SAMPLES) {
+                snLevelError = true;
+                SENSOR_DBGF("[SN][WARN] All level samples discarded in window.\n");
+              }
             } else {
               snWaterLevelPct = lvl;
               snLastGoodLevelPct = lvl;
@@ -189,6 +197,9 @@ void sensors_init() {
   snLastGoodLevelPct = 0;
   snLevelError = false;
   snFlowError = false;
+  snLevelDiscardCount = 0;
+  flowErrAssertCount = 0;
+  flowErrClearCount = 0;
 }
 
 void sensors_update_nonblocking() {
@@ -203,6 +214,8 @@ void sensors_update_nonblocking() {
     noInterrupts();
     uint32_t pulses = flowPulseCount;
     flowPulseCount = 0;
+    uint32_t disc = flowPulseDiscardCount;
+    flowPulseDiscardCount = 0;
     interrupts();
 
     // dt-aware conversion: Hz = pulses / dt(s), then L/min = Hz / FLOW_HZ_PER_LPM
@@ -217,13 +230,29 @@ void sensors_update_nonblocking() {
     // - If we see excessive discarded pulses, treat as noisy/floating input.
     // - If no pulses for a long time AND input reads floating-like (rapid discards) -> error.
     // Since node doesn't know pump state, we do NOT treat "no pulses" alone as an error.
-    bool noisy = false;
-    noInterrupts();
-    uint32_t disc = flowPulseDiscardCount;
-    flowPulseDiscardCount = 0;
-    interrupts();
-    if (disc > 50) noisy = true; // heuristic threshold per 1s window
-    snFlowError = noisy;
+    // REFACTOR [H-04]: two-stage hysteresis for flow error state.
+    if (disc > 50) {
+      flowErrAssertCount++;
+      flowErrClearCount = 0;
+      if (flowErrAssertCount >= 3 && !snFlowError) {
+        snFlowError = true;
+        SENSOR_DBGF("[SN][ERR] Flow error asserted (disc=%lu).\n", (unsigned long)disc);
+      }
+    } else if (disc <= 20) {
+      flowErrClearCount++;
+      flowErrAssertCount = 0;
+      if (flowErrClearCount >= 5 && snFlowError) {
+        snFlowError = false;
+        SENSOR_DBGF("[SN][INFO] Flow error cleared (disc=%lu).\n", (unsigned long)disc);
+      }
+    } else {
+      flowErrAssertCount = 0;
+      flowErrClearCount = 0;
+    }
+
+#if SENSOR_DEBUG_ENABLED
+    SENSOR_DBGF("[SN][INFO] flow=%.2fLPM disc=%lu\n", snFlowRateLpm, (unsigned long)disc);
+#endif
   }
 
   // Ultrasonic service (non-blocking). Uses cached level.
@@ -237,13 +266,12 @@ void sensors_update_nonblocking() {
   static uint32_t lastDbgMs = 0;
   if ((uint32_t)(now - lastDbgMs) >= SENSOR_DEBUG_INTERVAL_MS) {
     lastDbgMs = now;
-    SENSOR_DBGF("[SN] lvl=%d%% dist=%.1fcm flow=%.2fLPM err=%d seq=%u pulses_discarded=%lu\n",
-                snWaterLevelPct,
+    SENSOR_DBGF("[SN][DBG] lvl=%d%% dist=%.1fcm flow=%.2fLPM err=%d seq=%u ldsc=%u\n", snWaterLevelPct,
                 snLastDistanceCm,
                 snFlowRateLpm,
                 snErrCode,
                 (unsigned)snSeq,
-                (unsigned long)flowPulseDiscardCount);
+                (unsigned)snLevelDiscardCount);
   }
 #endif
 }
