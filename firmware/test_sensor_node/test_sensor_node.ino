@@ -50,6 +50,7 @@ int testsFailed = 0;
 bool g_rs485ResponderStarted = false;
 char g_rs485CmdBuf[48];
 size_t g_rs485CmdPos = 0;
+uint8_t g_rs485Seq = 0;
 
 // REFACTOR [QA-TEST-FIX]: ISR counters must use static storage and a named ISR callback.
 volatile uint32_t g_flowPulseCount = 0;
@@ -107,7 +108,10 @@ void handleRs485Command(const char* cmd, int& reqFramesSent, int& pingRepliesSen
   uint32_t pingSeq = 0;
 
   if (strcmp(cmd, "REQ") == 0) {
-    rs485SendFramedPayload("LVL:50;DIST:61.0;FLOW:5.00;ERR:0;LDSC:0;SEQ:0;");
+    char payload[96];
+    snprintf(payload, sizeof(payload), "LVL:50;DIST:61.0;FLOW:5.00;ERR:0;LDSC:0;SEQ:%u;NODE_OK:1;", (unsigned)g_rs485Seq);
+    g_rs485Seq++;
+    rs485SendFramedPayload(payload);
     reqFramesSent++;
     Serial1.println("[TEST] Echo: sent REQ frame");
     return;
