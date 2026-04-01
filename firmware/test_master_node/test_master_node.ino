@@ -1,6 +1,7 @@
 // =============================================================================
 // SmartFlow ESP32 Master Node Hardware Test Suite
 // =============================================================================
+// TC-M-00: RS-485 Hello Handshake (PING -> HELLO_FROM_NODE)
 // TC-M-01: GPIO and Relay (with safety warning)
 // TC-M-02: RS-485 Master (30s poll, ≥90% valid frames)
 // TC-M-03: WiFi Connection (within 20s, ≥2/3 pings)
@@ -48,6 +49,8 @@
 #define RS485_POLL_INTERVAL_MS 1000
 #define RS485_FRAME_TIMEOUT_MS 250
 #define RS485_MAX_RETRIES 3
+#define RS485_CONTINUOUS_DIAG_INTERVAL_MS 3000
+#define RS485_STARTUP_SYNC_TIMEOUT_MS 12000
 #define WIFI_CONNECT_TIMEOUT_MS 20000
 #define FIREBASE_TIMEOUT_MS 10000
 
@@ -192,9 +195,92 @@ bool parseFloatField(const char* str, const char* key, float& value) {
   return true;
 }
 
+bool validateFrameCrc(const char* frame, char* payloadOut, size_t payloadOutLen) {
+  const char* crcPos = strstr(frame, "CRC:");
+  if (!crcPos || strlen(crcPos) < 8) return false;
+
+  size_t payloadLen = crcPos - frame - 1; // Exclude STX at frame[0]
+  if (payloadLen >= payloadOutLen) return false;
+
+  memcpy(payloadOut, frame + 1, payloadLen);
+  payloadOut[payloadLen] = '\0';
+
+  uint32_t rxCrc = (uint32_t)strtoul(crcPos + 4, nullptr, 16);
+  uint16_t calcCrc = crc16_modbus((const uint8_t*)payloadOut, payloadLen);
+  return ((uint32_t)calcCrc == (rxCrc & 0xFFFFu));
+}
+
+static bool rs485SendLineAndReadPayload(const char* reqLine, char* payloadOut, size_t payloadOutLen) {
+  digitalWrite(RS485_DE_RE_PIN, HIGH);  // TX mode
+  delay(1);
+  Serial2.print(reqLine);
+  Serial2.write('\n');
+  Serial2.flush();
+  delay(1);
+  digitalWrite(RS485_DE_RE_PIN, LOW);   // RX mode
+
+  char frame[128];
+  if (!rs485ReadFrame(frame, sizeof(frame), RS485_FRAME_TIMEOUT_MS)) {
+    return false;
+  }
+
+  return validateFrameCrc(frame, payloadOut, payloadOutLen);
+}
+
+static bool isHelloPayload(const char* payload) {
+  return (strcmp(payload, "MSG:HELLO_FROM_NODE;") == 0) || (strstr(payload, "HELLO;SEQ:") == payload);
+}
+
+static bool rs485WaitForAnyValidResponse(uint32_t timeoutMs) {
+  uint32_t start = millis();
+  while ((millis() - start) < timeoutMs) {
+    char payload[128];
+    if (rs485SendLineAndReadPayload("PING", payload, sizeof(payload)) && isHelloPayload(payload)) {
+      return true;
+    }
+    if (rs485SendLineAndReadPayload("REQ", payload, sizeof(payload)) && strstr(payload, "LVL:") != nullptr) {
+      return true;
+    }
+    delay(150);
+  }
+  return false;
+}
+
 // ============================================================================
 // Test Cases
 // ============================================================================
+
+// TC-M-00: RS-485 Hello Handshake (simple wiring/protocol check)
+bool test_rs485_hello() {
+  Serial.println("\n[INFO] RS485 Hello: sending PING, expecting HELLO_FROM_NODE...");
+
+  Serial2.begin(RS485_BAUD, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+  pinMode(RS485_DE_RE_PIN, OUTPUT);
+
+  const int maxAttempts = 20;
+  bool pass = false;
+
+  for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
+    char payload[96];
+    if (!rs485SendLineAndReadPayload("PING", payload, sizeof(payload))) {
+      Serial.printf("  [WARN] Attempt %d/%d: no response\n", attempt, maxAttempts);
+      delay(300);
+      continue;
+    }
+
+    if (isHelloPayload(payload)) {
+      Serial.printf("  [INFO] Hello reply received on attempt %d\n", attempt);
+      pass = true;
+      break;
+    }
+
+    Serial.printf("  [WARN] Attempt %d/%d: unexpected payload='%s'\n", attempt, maxAttempts, payload);
+    delay(300);
+  }
+
+  Serial2.end();
+  return pass;
+}
 
 // TC-M-01: GPIO and Relay Test
 bool test_gpio_relay() {
@@ -233,6 +319,12 @@ bool test_rs485_master() {
 
   Serial.println("\n[INFO] RS485 Master: Polling for 30 seconds...");
 
+  if (!rs485WaitForAnyValidResponse(RS485_STARTUP_SYNC_TIMEOUT_MS)) {
+    Serial.println("  [WARN] RS485 startup sync timeout; counting may include node startup transients.");
+  } else {
+    Serial.println("  [INFO] RS485 startup sync achieved; beginning measured window.");
+  }
+
   while ((millis() - startMs) < 30000) {
     uint32_t pollStartMs = millis();
 
@@ -252,27 +344,8 @@ bool test_rs485_master() {
       continue;
     }
 
-    // Validate CRC
-    const char* crcPos = strstr(frame, "CRC:");
-    if (!crcPos || strlen(crcPos) < 8) {
-      framesFailed++;
-      continue;
-    }
-
     char payload[128];
-    size_t payloadLen = crcPos - frame - 1; // Exclude STX
-    if (payloadLen > sizeof(payload) - 1) {
-      framesFailed++;
-      continue;
-    }
-    memcpy(payload, frame + 1, payloadLen);
-    payload[payloadLen] = '\0';
-
-    uint32_t rxCrc = (uint32_t)strtoul(crcPos + 4, nullptr, 16);
-    uint16_t calcCrc = crc16_modbus((const uint8_t*)payload, payloadLen);
-
-    if ((uint32_t)calcCrc != (rxCrc & 0xFFFFu)) {
-      Serial.printf("  [WARN] CRC mismatch: got %04X expected %04X\n", (unsigned)calcCrc, (unsigned)rxCrc);
+    if (!validateFrameCrc(frame, payload, sizeof(payload))) {
       framesFailed++;
       continue;
     }
@@ -407,24 +480,8 @@ bool test_integration() {
       continue;
     }
 
-    const char* crcPos = strstr(frame, "CRC:");
-    if (!crcPos || strlen(crcPos) < 8) {
-      parseErrors++;
-      continue;
-    }
-
     char payload[128];
-    size_t payloadLen = crcPos - frame - 1;
-    if (payloadLen > sizeof(payload) - 1) {
-      parseErrors++;
-      continue;
-    }
-    memcpy(payload, frame + 1, payloadLen);
-    payload[payloadLen] = '\0';
-
-    uint32_t rxCrc = (uint32_t)strtoul(crcPos + 4, nullptr, 16);
-    uint16_t calcCrc = crc16_modbus((const uint8_t*)payload, payloadLen);
-    if ((uint32_t)calcCrc != (rxCrc & 0xFFFFu)) {
+    if (!validateFrameCrc(frame, payload, sizeof(payload))) {
       parseErrors++;
       continue;
     }
@@ -469,6 +526,9 @@ void setup() {
   Serial.println("Build: " __DATE__ " " __TIME__);
   Serial.println("");
 
+  runTest("TC-M-00: RS-485 Hello Handshake", test_rs485_hello);
+  delay(500);
+
   // TC-M-01 requires user interaction
   runTest("TC-M-01: GPIO and Relay", test_gpio_relay);
   delay(1000);
@@ -493,9 +553,54 @@ void setup() {
   } else {
     Serial.printf("[ FAIL ] %d test(s) failed\n", testsFailed);
   }
+
+  Serial2.begin(RS485_BAUD, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+  pinMode(RS485_DE_RE_PIN, OUTPUT);
+  digitalWrite(RS485_DE_RE_PIN, LOW);
+  Serial.println("[INFO] Entering continuous RS485 diagnostics (every 3s).");
 }
 
 void loop() {
-  // All tests run once in setup()
-  delay(1000);
+  static uint32_t lastDiagMs = 0;
+  static uint32_t diagSeq = 0;
+  static uint32_t okCount = 0;
+  static uint32_t failCount = 0;
+
+  uint32_t now = millis();
+  if ((now - lastDiagMs) < RS485_CONTINUOUS_DIAG_INTERVAL_MS) {
+    delay(10);
+    return;
+  }
+  lastDiagMs = now;
+  diagSeq++;
+
+  char payload[96];
+  bool ok = rs485SendLineAndReadPayload("PING", payload, sizeof(payload));
+
+  if (ok && strcmp(payload, "MSG:HELLO_FROM_NODE;") == 0) {
+    okCount++;
+    Serial.printf("[DIAG][%lu] PASS PING->%s (ok=%lu fail=%lu)\n",
+                  (unsigned long)diagSeq,
+                  payload,
+                  (unsigned long)okCount,
+                  (unsigned long)failCount);
+    return;
+  }
+
+  // Backward-compatible fallback: older node responders may answer only REQ frames.
+  ok = rs485SendLineAndReadPayload("REQ", payload, sizeof(payload));
+  if (ok && strstr(payload, "LVL:") != nullptr) {
+    okCount++;
+    Serial.printf("[DIAG][%lu] PASS REQ frame='%s' (ok=%lu fail=%lu)\n",
+                  (unsigned long)diagSeq,
+                  payload,
+                  (unsigned long)okCount,
+                  (unsigned long)failCount);
+  } else {
+    failCount++;
+    Serial.printf("[DIAG][%lu] FAIL no valid RS485 response (ok=%lu fail=%lu)\n",
+                  (unsigned long)diagSeq,
+                  (unsigned long)okCount,
+                  (unsigned long)failCount);
+  }
 }
