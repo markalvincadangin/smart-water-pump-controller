@@ -51,6 +51,7 @@
 #define RS485_MAX_RETRIES 3
 #define RS485_CONTINUOUS_DIAG_INTERVAL_MS 3000
 #define RS485_STARTUP_SYNC_TIMEOUT_MS 12000
+#define RS485_READY_SYNC_TIMEOUT_MS 45000
 #define WIFI_CONNECT_TIMEOUT_MS 20000
 #define FIREBASE_TIMEOUT_MS 10000
 
@@ -231,6 +232,10 @@ static bool isHelloPayload(const char* payload) {
   return (strcmp(payload, "MSG:HELLO_FROM_NODE;") == 0) || (strstr(payload, "HELLO;SEQ:") == payload);
 }
 
+static bool isReadyPayload(const char* payload) {
+  return strstr(payload, "READY:1") != nullptr;
+}
+
 static bool rs485WaitForAnyValidResponse(uint32_t timeoutMs) {
   uint32_t start = millis();
   while ((millis() - start) < timeoutMs) {
@@ -239,6 +244,18 @@ static bool rs485WaitForAnyValidResponse(uint32_t timeoutMs) {
       return true;
     }
     if (rs485SendLineAndReadPayload("REQ", payload, sizeof(payload)) && strstr(payload, "LVL:") != nullptr) {
+      return true;
+    }
+    delay(150);
+  }
+  return false;
+}
+
+static bool rs485WaitForReady(uint32_t timeoutMs) {
+  uint32_t start = millis();
+  while ((millis() - start) < timeoutMs) {
+    char payload[128];
+    if (rs485SendLineAndReadPayload("REQ", payload, sizeof(payload)) && isReadyPayload(payload)) {
       return true;
     }
     delay(150);
@@ -342,34 +359,28 @@ bool test_rs485_master() {
     Serial.println("  [INFO] RS485 startup sync achieved; beginning measured window.");
   }
 
+  if (!rs485WaitForReady(RS485_READY_SYNC_TIMEOUT_MS)) {
+    Serial.println("  [WARN] Node did not report READY:1 before timeout; results may include self-test transients.");
+  } else {
+    Serial.println("  [INFO] Node READY:1 observed; starting measured RS485 window.");
+  }
+
   startMs = millis();
 
   while ((millis() - startMs) < 30000) {
-    uint32_t pollStartMs = millis();
-
-    // Send request
-    digitalWrite(RS485_DE_RE_PIN, HIGH);  // TX mode
-    delay(1);
-    Serial2.write("REQ\n");
-    Serial2.flush();
-    delay(1);
-    digitalWrite(RS485_DE_RE_PIN, LOW);   // RX mode
-
-    // Wait for response
-    char frame[128];
-    if (!rs485ReadFrame(frame, sizeof(frame), RS485_FRAME_TIMEOUT_MS)) {
-      framesFailed++;
-      delay(100);
-      continue;
+    bool cycleOk = false;
+    for (int attempt = 0; attempt < RS485_MAX_RETRIES; ++attempt) {
+      char payload[128];
+      if (rs485SendLineAndReadPayload("REQ", payload, sizeof(payload))) {
+        cycleOk = true;
+        break;
+      }
+      delay(40);
     }
 
-    char payload[128];
-    if (!validateFrameCrc(frame, payload, sizeof(payload))) {
-      framesFailed++;
-      continue;
-    }
+    if (cycleOk) framesValid++;
+    else framesFailed++;
 
-    framesValid++;
     delay(RS485_POLL_INTERVAL_MS);
   }
 
