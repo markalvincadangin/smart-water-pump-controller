@@ -51,6 +51,7 @@ bool g_rs485ResponderStarted = false;
 char g_rs485CmdBuf[48];
 size_t g_rs485CmdPos = 0;
 uint8_t g_rs485Seq = 0;
+bool g_mainTestsCompleted = false;
 
 // REFACTOR [QA-TEST-FIX]: ISR counters must use static storage and a named ISR callback.
 volatile uint32_t g_flowPulseCount = 0;
@@ -109,7 +110,7 @@ void handleRs485Command(const char* cmd, int& reqFramesSent, int& pingRepliesSen
 
   if (strcmp(cmd, "REQ") == 0) {
     char payload[96];
-    snprintf(payload, sizeof(payload), "LVL:50;DIST:61.0;FLOW:5.00;ERR:0;LDSC:0;SEQ:%u;NODE_OK:1;", (unsigned)g_rs485Seq);
+    snprintf(payload, sizeof(payload), "LVL:50;DIST:61.0;FLOW:5.00;ERR:0;LDSC:0;SEQ:%u;NODE_OK:1;READY:%d;", (unsigned)g_rs485Seq, g_mainTestsCompleted ? 1 : 0);
     g_rs485Seq++;
     rs485SendFramedPayload(payload);
     reqFramesSent++;
@@ -119,7 +120,7 @@ void handleRs485Command(const char* cmd, int& reqFramesSent, int& pingRepliesSen
 
   if (parsePingSeq(cmd, pingSeq)) {
     char payload[64];
-    snprintf(payload, sizeof(payload), "HELLO;SEQ:%lu;NODE_OK:1;", (unsigned long)pingSeq);
+    snprintf(payload, sizeof(payload), "HELLO;SEQ:%lu;NODE_OK:1;READY:%d;", (unsigned long)pingSeq, g_mainTestsCompleted ? 1 : 0);
     rs485SendFramedPayload(payload);
     pingRepliesSent++;
     Serial1.printf("[TEST] Ping reply: seq=%lu\n", (unsigned long)pingSeq);
@@ -127,7 +128,7 @@ void handleRs485Command(const char* cmd, int& reqFramesSent, int& pingRepliesSen
   }
 
   if (strcmp(cmd, "PING") == 0) {
-    rs485SendFramedPayload("MSG:HELLO_FROM_NODE;");
+    rs485SendFramedPayload(g_mainTestsCompleted ? "MSG:HELLO_FROM_NODE;READY:1;" : "MSG:HELLO_FROM_NODE;READY:0;");
     pingRepliesSent++;
     Serial1.println("[TEST] Ping reply: legacy HELLO");
     return;
@@ -420,6 +421,8 @@ void setup() {
   } else {
     Serial.printf("[ FAIL ] %d test(s) failed\n", testsFailed);
   }
+
+  g_mainTestsCompleted = true;
 }
 
 void loop() {
