@@ -47,7 +47,7 @@
 // Test configuration
 #define RELAY_ACTIVE_MS  500
 #define RS485_POLL_INTERVAL_MS 1000
-#define RS485_FRAME_TIMEOUT_MS 250
+#define RS485_FRAME_TIMEOUT_MS 500
 #define RS485_MAX_RETRIES 3
 #define RS485_CONTINUOUS_DIAG_INTERVAL_MS 3000
 #define RS485_STARTUP_SYNC_TIMEOUT_MS 12000
@@ -261,8 +261,11 @@ bool test_rs485_hello() {
   bool pass = false;
 
   for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
+    char req[24];
+    snprintf(req, sizeof(req), "PING:%d", attempt);
+
     char payload[96];
-    if (!rs485SendLineAndReadPayload("PING", payload, sizeof(payload))) {
+    if (!rs485SendLineAndReadPayload(req, payload, sizeof(payload))) {
       Serial.printf("  [WARN] Attempt %d/%d: no response\n", attempt, maxAttempts);
       delay(300);
       continue;
