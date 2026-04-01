@@ -5,6 +5,7 @@ FirebaseData   fbdo;
 FirebaseAuth   auth;
 FirebaseConfig config;
 Preferences    prefs;
+uint8_t        gLogLevel = 2;
 
 int   cfgTankEmptyCm         = TANK_EMPTY_CM;
 int   cfgTankFullCm          = TANK_FULL_CM;
@@ -27,7 +28,7 @@ bool cfgBypassLevelSensor      = false;
 bool cfgBypassFlowSensor       = false;   // NEW: bypass dry-run + flow-stuck checks
 
 float flowRateLpm             = 0.0f;
-int   waterLevelPct           = 0;
+int   waterLevelPct           = -1;
 bool  isRunning               = false;
 int   prevWaterLevelPct       = 0;
 
@@ -36,6 +37,7 @@ bool   isDryRunError     = false;
 bool   isLevelSensorError = false;
 bool   isFlowSensorError = false;
 bool   isOverflowError   = false;
+bool   manualRuntimeWarning = false;
 
 int           levelSensorFailCount     = 0;
 unsigned long levelLastValidMs         = 0;
@@ -56,6 +58,9 @@ unsigned long levelSensorFailStartMs   = 0;
 unsigned long flowStuckStartMs         = 0;
 bool          flowStuckTimerActive     = false;
 unsigned long pumpOffStartMs           = 0;
+bool          offTimerActive           = false;
+unsigned long offTimerEndMs            = 0;
+int           pumpCooldownRemainingSec = 0;
 
 unsigned long remoteSensorLastRxMs              = 0;
 uint32_t      remoteSensorConsecutiveFailCount  = 0;
@@ -64,6 +69,7 @@ bool          remoteSensorOnline                = false;
 bool          remoteSensorStable                = false;
 uint32_t      remoteSensorOkStreak              = 0;
 uint32_t      remoteSensorFailStreak            = 0;
+uint32_t      remoteSensorLevelDiscardCount     = 0;
 
 unsigned long levelLastUpdateMs                 = 0;
 
@@ -125,7 +131,7 @@ unsigned long lastHeapDiagMs      = 0;
 uint32_t      minFreeHeapObserved = 0;
 
 // Runtime mode / operator intent
-String        runMode          = "OFF";
+String        runMode          = "AUTO_STANDBY";
 String        runPrevPumpMode  = "AUTO";
 unsigned long runStartMs       = 0;
 bool          isManualRun      = false;

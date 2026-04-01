@@ -82,7 +82,35 @@ static bool parseFloatField(const char* s, const char* key, float& out) {
   return true;
 }
 
-static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flowOut, int& errOut, uint32_t& seqOut) {
+static bool validateSensorResponseFrame(const char* payload) {
+  if (!payload) return false;
+
+  size_t len = strlen(payload);
+  if (len < 24 || len >= RS485_RX_LINE_MAX) return false;
+
+  // Payload returned by rs485ReadFrame must not still contain frame delimiters.
+  if (strchr(payload, 0x02) != nullptr || strchr(payload, 0x03) != nullptr) return false;
+
+  if (strstr(payload, "LVL:") == nullptr) return false;
+  if (strstr(payload, "FLOW:") == nullptr) return false;
+  if (strstr(payload, "ERR:") == nullptr) return false;
+  if (strstr(payload, "SEQ:") == nullptr) return false;
+
+  const char* crcPos = strstr(payload, "CRC:");
+  if (!crcPos) return false;
+  if (strstr(crcPos + 1, "CRC:") != nullptr) return false;
+  if (strlen(crcPos) != 8) return false;  // CRC: + exactly 4 hex chars
+
+  // CRC token must be the last token in payload.
+  if (strchr(crcPos + 4, ';') != nullptr) return false;
+
+  // Require at least one key-value separator to ensure basic frame shape.
+  if (strchr(payload, ';') == nullptr) return false;
+
+  return true;
+}
+
+static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flowOut, int& errOut, uint32_t& seqOut, uint32_t& ldscOut) {
   // Expected payload (no STX/ETX):
   // - Legacy: LVL:..;FLOW:..;ERR:..;SEQ:..;CRC:XXXX
   // - vNext:  LVL:..;DIST:..;FLOW:..;ERR:..;SEQ:..;CRC:XXXX
@@ -111,6 +139,7 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   float flow = 0.0f;
   int err = 0;
   uint32_t seq = 0;
+  uint32_t ldsc = 0;
 
   // LVL may be legacy-derived. DIST (cm) is preferred when present to prevent calibration drift.
   if (!parseIntField(payload, "LVL:", lvl)) return false;
@@ -118,6 +147,8 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   if (!parseFloatField(payload, "FLOW:", flow)) return false;
   if (!parseIntField(payload, "ERR:", err)) return false;
   if (!parseUIntField(payload, "SEQ:", seq)) return false;
+  // REFACTOR [M-03]: LDSC is optional for backward compatibility.
+  (void)parseUIntField(payload, "LDSC:", ldsc);
 
   if (dist >= 0.0f) {
     // Sanity range only (protocol-level). Calibration happens on master via cfgTank*.
@@ -139,6 +170,7 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   flowOut = flow;
   errOut = err;
   seqOut = seq;
+  ldscOut = ldsc;
   return true;
 }
 
@@ -164,6 +196,7 @@ static bool pollRemoteSensorNodeInternal() {
   float flow = flowRateLpm;
   int err = (remoteSensorLastErrCode < 0) ? 0 : remoteSensorLastErrCode;
   uint32_t seq = 0;
+  uint32_t ldsc = 0;
   static uint32_t lastSeqSeen = 0xFFFFFFFFu;
   static uint16_t dupSeqCount = 0;
 
@@ -178,10 +211,14 @@ static bool pollRemoteSensorNodeInternal() {
 
     char payload[RS485_RX_LINE_MAX];
     if (!rs485ReadFrame(payload, sizeof(payload), RS485_FRAME_TIMEOUT_MS)) {
-      Serial.println("[RS485-ERR] ReadFrame Timeout/Fail");
+      LOG(LOG_LEVEL_ERROR, "RS485-ERR", "ReadFrame Timeout/Fail");
       continue;
     }
-    if (!parseSensorFrameStrict(payload, lvl, flow, err, seq)) {
+    if (!validateSensorResponseFrame(payload)) {
+      LOG(LOG_LEVEL_WARN, "RS485-ERR", "Frame structure invalid.");
+      continue;
+    }
+    if (!parseSensorFrameStrict(payload, lvl, flow, err, seq, ldsc)) {
       Serial.print("[RS485-ERR] Parse strict failed. Payload: ");
       Serial.println(payload);
       continue;
@@ -197,6 +234,7 @@ static bool pollRemoteSensorNodeInternal() {
     remoteSensorLastRxMs = now;
     remoteSensorOnline = true;
     remoteSensorConsecutiveFailCount = 0;
+    remoteSensorLevelDiscardCount = ldsc;
     levelLastUpdateMs = now; // freshness timestamp (valid RS485 frame)
 
     remoteSensorOkStreak++;

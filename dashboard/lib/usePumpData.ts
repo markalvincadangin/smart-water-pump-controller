@@ -14,21 +14,58 @@ const CONTROL_PATH = "/pump_system/control";
 const MAX_HISTORY = 60; // Keep last 60 data points (~3 min at 3s intervals)
 
 const DEFAULT_STATUS: PumpStatus = {
-  water_level_percent: 0,
   is_running: false,
   flow_rate_lpm: 0,
+  run_mode: "AUTO_STANDBY",
+  pump_cooldown_remaining_sec: 0,
   is_error: false,
-  is_level_sensor_error: false,
+  is_sensor_error: false,
   is_flow_sensor_error: false,
   is_overflow_error: false,
+  last_fault_code: "",
+  last_fault_message: "",
+  is_idle_mode: false,
+  is_sleeping: false,
+  emergency_stop_latched: false,
+  manual_desired: false,
+  bypass_level_sensor: false,
+  bypass_flow_sensor: false,
+  manual_runtime_warning: false,
+  remote_sensor_stable: false,
+  level_fresh: false,
+  level_sensor_health_pct: 0,
+  level_estimate_active: false,
+  remote_level_discard_count: 0,
+  countdown_remaining_sec: 0,
+  flow_volume_added_l: 0,
   wifi_rssi: 0,
-  last_boot_reason: "",
   uptime_minutes: 0,
+  last_boot_reason: "",
+  debug_log_level: 2,
+  total_pump_cycles: 0,
+  total_pump_run_min: 0,
+  ultrasonic_cycles_ok: 0,
+  ultrasonic_cycles_timeout: 0,
+  ultrasonic_last_good_cm: 0,
+  free_heap_bytes: 0,
+  min_free_heap_observed_bytes: 0,
+  firebase_consecutive_failures: 0,
+  firebase_last_error: "",
 };
 
 const DEFAULT_CONTROL: PumpControl = {
   mode: "AUTO",
+  manual_desired: false,
+  emergency_stop: false,
+  reset_stop: false,
   clear_error: false,
+  countdown_start: false,
+  countdown_duration_min: 10,
+  countdown_add_time: false,
+  countdown_add_min: 5,
+  bypass_level_sensor: false,
+  bypass_flow_sensor: false,
+  reboot_request_id: 0,
 };
 
 export function usePumpData() {
@@ -73,88 +110,102 @@ export function usePumpData() {
     const unsubStatus = onValue(
       statusDbRef,
       (snap) => {
-        if (snap.exists()) {
-          const data = snap.val() as PumpStatus;
-          statusRef.current = data;
-          setConnected(true);
-          setError(null);
-          setLastUpdateAtMs(Date.now());
+        if (!snap.exists()) {
+          setConnected(false);
+          return;
+        }
+        const raw = snap.val() as (Partial<PumpStatus> & {
+          is_level_sensor_error?: boolean;
+          min_free_heap_bytes?: number;
+        }) | null;
+        if (!raw) return;
+        // REFACTOR [N-06/N-07]: normalize firmware canonical keys into dashboard model.
+        const data: PumpStatus = {
+          ...DEFAULT_STATUS,
+          ...raw,
+          is_sensor_error: raw.is_sensor_error ?? raw.is_level_sensor_error ?? false,
+          min_free_heap_observed_bytes:
+            raw.min_free_heap_observed_bytes ?? raw.min_free_heap_bytes ?? 0,
+        };
+        statusRef.current = data;
+        setConnected(true);
+        setError(null);
+        setLastUpdateAtMs(Date.now());
 
-          // Append to rolling history
-          const timeLabel = formatPhtTime(Date.now());
+        // Append to rolling history
+        const timeLabel = formatPhtTime(Date.now());
 
-          // Append to rolling history (level + flow)
+        // Append to rolling history (level + flow)
           setHistory((prev) => {
-            const next = [
+            const next: HistoryEntry[] = [
               ...prev,
               {
                 time: timeLabel,
-                level: data.water_level_percent,
+                level: data.water_level_percent ?? 0,
                 flow: parseFloat(data.flow_rate_lpm.toFixed(2)),
               },
             ];
             return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
           });
 
-          // Derive lightweight event markers for the history chart
-          const runMode = (data.run_mode ?? "") as string;
-          const isRunning = !!data.is_running;
-          const faultCode = (data.last_fault_code ?? "") as string;
+        // Derive lightweight event markers for the history chart
+        const runMode = (data.run_mode ?? "") as string;
+        const isRunning = !!data.is_running;
+        const faultCode = (data.last_fault_code ?? "") as string;
 
-          setHistoryEvents((prev) => {
-            const events: HistoryEvent[] = [];
+        setHistoryEvents((prev) => {
+          const events: HistoryEvent[] = [];
 
-            const lastRunMode = lastRunModeRef.current;
-            const lastIsRunning = lastIsRunningRef.current;
-            const lastFaultCode = lastFaultCodeRef.current;
+          const lastRunMode = lastRunModeRef.current;
+          const lastIsRunning = lastIsRunningRef.current;
+          const lastFaultCode = lastFaultCodeRef.current;
 
-            if (lastRunMode && runMode && runMode !== lastRunMode) {
-              events.push({
-                time: timeLabel,
-                type: "mode_change",
-                runMode,
-                prevRunMode: lastRunMode,
-              });
-            }
+          if (lastRunMode && runMode && runMode !== lastRunMode) {
+            events.push({
+              time: timeLabel,
+              type: "mode_change",
+              runMode,
+              prevRunMode: lastRunMode,
+            });
+          }
 
-            if (lastIsRunning === false && isRunning === true) {
-              events.push({
-                time: timeLabel,
-                type: "run_start",
-                runMode,
-              });
-            } else if (lastIsRunning === true && isRunning === false) {
-              events.push({
-                time: timeLabel,
-                type: "run_stop",
-                runMode,
-              });
-            }
+          if (lastIsRunning === false && isRunning === true) {
+            events.push({
+              time: timeLabel,
+              type: "run_start",
+              runMode,
+            });
+          } else if (lastIsRunning === true && isRunning === false) {
+            events.push({
+              time: timeLabel,
+              type: "run_stop",
+              runMode,
+            });
+          }
 
-            if (faultCode && faultCode !== lastFaultCode && faultCode !== "") {
-              events.push({
-                time: timeLabel,
-                type: "fault",
-                runMode,
-                faultCode,
-              });
-            }
+          if (faultCode && faultCode !== lastFaultCode && faultCode !== "") {
+            events.push({
+              time: timeLabel,
+              type: "fault",
+              runMode,
+              faultCode,
+            });
+          }
 
-            lastRunModeRef.current = runMode || lastRunMode || null;
-            lastIsRunningRef.current = isRunning;
-            lastFaultCodeRef.current = faultCode || lastFaultCode || null;
+          lastRunModeRef.current = runMode || lastRunMode || null;
+          lastIsRunningRef.current = isRunning;
+          lastFaultCodeRef.current = faultCode || lastFaultCode || null;
 
-            if (events.length === 0) return prev;
-            const next = [...prev, ...events];
-            return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
-          });
+          if (events.length === 0) return prev;
+          const next = [...prev, ...events];
+          return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
+        });
 
-          setSnapshot((prev) => ({
-            status: data,
-            control: prev?.control ?? controlRef.current,
-            updatedAt: Date.now(),
-          }));
-        }
+        setSnapshot((prev: PumpSnapshot | null) => ({
+          status: data,
+          control: prev?.control ?? controlRef.current,
+          updatedAt: Date.now(),
+        }));
       },
       (err) => {
         console.error("[RTDB]", err);
@@ -166,9 +217,10 @@ export function usePumpData() {
     // Listen to /pump_system/control
     const unsubControl = onValue(controlDbRef, (snap) => {
       if (snap.exists()) {
-        const data = snap.val() as PumpControl;
+        const data = snap.val() as PumpControl | null;
+        if (!data) return;
         controlRef.current = data;
-        setSnapshot((prev) =>
+        setSnapshot((prev: PumpSnapshot | null) =>
           prev ? { ...prev, control: data } : null
         );
         setLastUpdateAtMs(Date.now());

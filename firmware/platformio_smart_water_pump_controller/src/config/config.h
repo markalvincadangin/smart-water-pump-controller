@@ -25,7 +25,15 @@
 // ---- Credentials ----
 // Copy `secrets.h.example` → `secrets.h` and fill in WiFi + Firebase credentials.
 // Never commit `secrets.h`.
-#include "secrets.h"
+#if defined(__has_include)
+	#if __has_include("secrets.h")
+		#include "secrets.h"
+	#else
+		#include "secrets.h.example"
+	#endif
+#else
+	#include "secrets.h.example"
+#endif
 
 // ---- GPIO mapping ----
 #define RELAY_PIN        4
@@ -46,7 +54,7 @@
 #define PUMP_STOP_LEVEL  100
 
 // ---- Safety + timing ----
-#define DRY_RUN_THRESHOLD_LPM  0.5f
+#define DRY_RUN_THRESHOLD_LPM  1.0f
 #define DRY_RUN_TIMEOUT_MS     30000
 
 #define FLOW_CALIBRATION_FACTOR  7.5f
@@ -141,10 +149,40 @@
 #define MIN_PUMP_OFF_TIME_MS         30000
 
 // Syslog configuration
+#ifndef APP_HOSTNAME
+	#define APP_HOSTNAME "smartflow-controller"
+#endif
+
+#ifndef SYSLOG_SERVER
+	#define SYSLOG_SERVER "255.255.255.255"
+#endif
+
+#ifndef SYSLOG_PORT
+	#define SYSLOG_PORT 514
+#endif
 
 
 
 // Redirect all Serial prints in the application to our AppLogger (which routes to HardwareSerial + UDP Syslog)
 #include "../utils/app_logger.h"
 #define Serial app_logger
+
+// -----------------------------------------------------------------------------
+// REFACTOR [Phase 1]: Formalized logging macro with component tags and levels.
+// -----------------------------------------------------------------------------
+#define LOG_LEVEL_ERROR   0
+#define LOG_LEVEL_WARN    1
+#define LOG_LEVEL_INFO    2
+#define LOG_LEVEL_DEBUG   3
+#define LOG_LEVEL_VERBOSE 4
+
+#define LOG_COMPILE_FLOOR LOG_LEVEL_INFO
+
+extern uint8_t gLogLevel;
+
+#define LOG(level, comp, fmt, ...) do { \
+  if ((level) <= LOG_COMPILE_FLOOR && (level) <= gLogLevel) { \
+    app_logger.printf("[%s] " fmt "\n", comp, ##__VA_ARGS__); \
+  } \
+} while(0)
 

@@ -29,7 +29,7 @@ void checkLevelSensorFailure(int sensorReading) {
     levelSensorFailCount++;
     if (levelSensorFailCount >= cfgLevelSensorFailureThreshold && !isLevelSensorError) {
       isLevelSensorError = true;
-      Serial.printf("[SENSOR][ERROR] Ultrasonic (level) failure: %d consecutive timeouts.\n", levelSensorFailCount);
+      LOG(LOG_LEVEL_ERROR, "SENSOR", "[ERROR] Ultrasonic (level) failure: %d consecutive timeouts.", levelSensorFailCount);
       pushFirebaseErrorLog("ERROR", "SENSOR_ULTRASONIC", "Ultrasonic (level) failure: consecutive timeouts.");
     }
     if (isLevelSensorError && cfgAutoBypassOnSensorFail && !cfgBypassLevelSensor) {
@@ -38,13 +38,13 @@ void checkLevelSensorFailure(int sensorReading) {
         cfgBypassLevelSensor = true;
         autoBypassWasEngaged = true;
         autoBypassActive = true;
-        Serial.println("[AUTO-BYPASS] Enabled after sustained sensor failure.");
+        LOG(LOG_LEVEL_ERROR, "AUTO-BYPASS", "Enabled after sustained sensor failure.");
       }
     }
   } else {
     levelLastValidMs = millis();
     if (isLevelSensorError) {
-      Serial.println("[SENSOR][INFO] Ultrasonic (level) recovered. Error cleared.");
+      LOG(LOG_LEVEL_ERROR, "SENSOR", "[INFO] Ultrasonic (level) recovered. Error cleared.");
     }
     levelSensorFailCount = 0;
     isLevelSensorError = false;
@@ -54,7 +54,7 @@ void checkLevelSensorFailure(int sensorReading) {
       levelAnchorPct = sensorReading;
       flowVolumeAddedL = 0.0f;
       estimatedLevelPct = (float)sensorReading;
-      Serial.println("[ESTIMATE] Anchor reset to recovered sensor reading.");
+      LOG(LOG_LEVEL_INFO, "ESTIMATE", "Anchor reset to recovered sensor reading.");
     } else {
       levelAnchorPct = sensorReading;
     }
@@ -62,7 +62,7 @@ void checkLevelSensorFailure(int sensorReading) {
       cfgBypassLevelSensor = false;
       autoBypassWasEngaged = false;
       autoBypassActive = false;
-      Serial.println("[AUTO-BYPASS] Sensor recovered. Bypass auto-disabled.");
+      LOG(LOG_LEVEL_INFO, "AUTO-BYPASS", "Sensor recovered. Bypass auto-disabled.");
     }
   }
 }
@@ -73,7 +73,7 @@ void checkFlowSensorStuck() {
     flowStuckStartMs = 0;
     if (isFlowSensorError) {
       isFlowSensorError = false;
-      Serial.println("[SENSOR][INFO] Flow sensor error cleared (bypass active).");
+      LOG(LOG_LEVEL_ERROR, "SENSOR", "[INFO] Flow sensor error cleared (bypass active).");
     }
     return;
   }
@@ -88,14 +88,13 @@ void checkFlowSensorStuck() {
         lastFaultMessage = "Flow sensor reading abnormal (stuck-high while pump OFF).";
         flowStuckHighEventCount++;
         flowStuckHighEventCountWin++;
-        Serial.printf("[SENSOR][ERROR] Flow stuck-high: %.1f LPM while pump OFF for >%ds.\n",
-                      flowRateLpm, (int)(FLOW_STUCK_TIMEOUT_MS / 1000));
+        LOG(LOG_LEVEL_ERROR, "SENSOR", "[ERROR] Flow stuck-high: %.1f LPM while pump OFF for >%ds.", flowRateLpm, (int)(FLOW_STUCK_TIMEOUT_MS / 1000));
         pushFirebaseErrorLog("ERROR", "SENSOR_FLOW", "Flow stuck-high while pump OFF.");
       }
     }
   } else {
     if (isFlowSensorError) {
-      Serial.println("[SENSOR][INFO] Flow sensor recovered. Error cleared.");
+      LOG(LOG_LEVEL_ERROR, "SENSOR", "[INFO] Flow sensor recovered. Error cleared.");
       isFlowSensorError = false;
     }
     flowStuckTimerActive = false;
@@ -105,9 +104,13 @@ void checkFlowSensorStuck() {
 
 
 void checkOverflowProtection() {
+  static bool manualRuntimeWarnLogged = false;
+
   if (!isRunning || !(pumpMode == "AUTO" || pumpMode == "COUNTDOWN" || pumpMode == "MANUAL")) {
     pumpAutoStartTracking = false;
     pumpAutoStartMs = 0;
+    manualRuntimeWarning = false;
+    manualRuntimeWarnLogged = false;
     return;
   }
 
@@ -119,11 +122,26 @@ void checkOverflowProtection() {
 
   unsigned long maxRuntimeMs = (unsigned long)cfgMaxPumpRuntimeMin * 60000UL;
   unsigned long elapsed = millis() - pumpAutoStartMs;
+
+  // Pre-warning for manual operation before hard cutoff.
+  if (pumpMode == "MANUAL") {
+    unsigned long warnThresholdMs = (maxRuntimeMs * 9UL) / 10UL;
+    bool shouldWarn = elapsed >= warnThresholdMs;
+    manualRuntimeWarning = shouldWarn;
+    if (shouldWarn && !manualRuntimeWarnLogged) {
+      manualRuntimeWarnLogged = true;
+      LOG(LOG_LEVEL_WARN, "SAFETY", "[WARN] Manual runtime reached 90%% of limit (%d min).", cfgMaxPumpRuntimeMin);
+    }
+  } else {
+    manualRuntimeWarning = false;
+    manualRuntimeWarnLogged = false;
+  }
+
   if (elapsed >= maxRuntimeMs) {
     isOverflowError = true;
     setPump(false);
     pumpAutoStartTracking = false;
-    Serial.printf("[SAFETY][ERROR] Max runtime exceeded (%d min). Pump stopped.\n", cfgMaxPumpRuntimeMin);
+    LOG(LOG_LEVEL_ERROR, "SAFETY", "[ERROR] Max runtime exceeded (%d min). Pump stopped.", cfgMaxPumpRuntimeMin);
     pushFirebaseErrorLog("CRITICAL", "SAFETY_OVERFLOW", "Max runtime exceeded. Pump stopped.");
   }
 }
@@ -153,20 +171,20 @@ void checkDryRunProtection() {
     if (!dryRunTimerActive) {
       dryRunTimerActive = true;
       dryRunStartMs = millis();
-      Serial.println("[SAFETY][WARN] Dry-run condition detected. Timer started.");
+      LOG(LOG_LEVEL_WARN, "SAFETY", "[WARN] Dry-run condition detected. Timer started.");
     } else {
       unsigned long elapsed = millis() - dryRunStartMs;
       if (elapsed >= dryRunTimeoutMs) {
         isDryRunError = true;
         // HARD SAFETY: always stop the pump regardless of mode.
         setPump(false);
-        Serial.println("[SAFETY][ERROR] DRY-RUN LOCKOUT. Pump stopped; waiting for acknowledge.");
+        LOG(LOG_LEVEL_ERROR, "SAFETY", "[ERROR] DRY-RUN LOCKOUT. Pump stopped; waiting for acknowledge.");
         pushFirebaseErrorLog("CRITICAL", "SAFETY_DRY_RUN", "DRY-RUN LOCKOUT. Pump stopped.");
       }
     }
   } else {
     if (dryRunTimerActive) {
-      Serial.println("[SAFETY][INFO] Flow restored. Dry-run timer reset.");
+      LOG(LOG_LEVEL_INFO, "SAFETY", "[INFO] Flow restored. Dry-run timer reset.");
     }
     dryRunTimerActive = false;
     dryRunStartMs = 0;
@@ -180,6 +198,9 @@ void checkSafetyCutoff() {
 }
 
 void executePumpLogic() {
+  // REFACTOR [C-02]: suspend logic until first valid level.
+  if (waterLevelPct < 0) return;
+
   isManualRun = (pumpMode == "MANUAL");
 
   // Emergency stop latch: highest priority.
@@ -208,20 +229,33 @@ void executePumpLogic() {
   bool isLevelFresh = (levelLastUpdateMs > 0) && ((millis() - levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
   bool allowStartFromSensors = remoteSensorStable && isLevelFresh && !isLevelSensorError && !cfgBypassLevelSensor;
 
-  if (pumpMode == "MANUAL" && isRunning && manualDesired) {
-    runMode = "MANUAL_ON";
-  } else if (pumpMode == "MANUAL") {
-    runMode = "MANUAL_OFF";
-  } else if (pumpMode == "COUNTDOWN" && isCountdownActive) {
-    runMode = "COUNTDOWN";
-  } else if (pumpMode == "COUNTDOWN" && !isCountdownActive) {
-    runMode = "OFF";
-  } else if (pumpMode == "AUTO" && isRunning) {
-    runMode = "AUTO";
-  } else if (pumpMode == "AUTO" && !isRunning) {
-    runMode = "AUTO_STANDBY";
+  // REFACTOR [H-07]: expose cooldown mode while off-timer is active.
+  if (!isRunning && pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
+    offTimerActive = true;
+    offTimerEndMs = pumpOffStartMs + MIN_PUMP_OFF_TIME_MS;
+    uint32_t remainMs = (offTimerEndMs > millis()) ? (offTimerEndMs - millis()) : 0;
+    pumpCooldownRemainingSec = (int)(remainMs / 1000UL);
+    runMode = (pumpMode == "MANUAL") ? "MANUAL_COOLDOWN" : (pumpMode == "COUNTDOWN" ? "COUNTDOWN" : "AUTO_COOLDOWN");
   } else {
-    runMode = isRunning ? "AUTO" : "OFF";
+    offTimerActive = false;
+    offTimerEndMs = 0;
+    pumpCooldownRemainingSec = 0;
+
+    if (pumpMode == "MANUAL" && isRunning && manualDesired) {
+      runMode = "MANUAL_ON";
+    } else if (pumpMode == "MANUAL") {
+      runMode = "MANUAL_OFF";
+    } else if (pumpMode == "COUNTDOWN" && isCountdownActive) {
+      runMode = "COUNTDOWN";
+    } else if (pumpMode == "COUNTDOWN" && !isCountdownActive) {
+      runMode = "AUTO_STANDBY";
+    } else if (pumpMode == "AUTO" && isRunning) {
+      runMode = "AUTO";
+    } else if (pumpMode == "AUTO" && !isRunning) {
+      runMode = "AUTO_STANDBY";
+    } else {
+      runMode = isRunning ? "AUTO" : "AUTO_STANDBY";
+    }
   }
 
   if (pumpMode == "MANUAL") {
@@ -243,7 +277,7 @@ void executePumpLogic() {
     }
     if (isLevelSensorError && !cfgBypassLevelSensor) {
       if (isRunning) {
-        Serial.println("[MANUAL] Level sensor error — stopping (fail-safe).");
+        LOG(LOG_LEVEL_ERROR, "MANUAL", "Level sensor error — stopping (fail-safe).");
         lastFaultCode    = "LEVEL_SENSOR";
         lastFaultMessage = "Level sensor offline: pump stopped in MANUAL (fail-safe).";
         setPump(false);
@@ -251,7 +285,7 @@ void executePumpLogic() {
       return;
     }
     if (!cfgBypassLevelSensor && waterLevelPct >= cfgPumpStopLevel) {
-      Serial.printf("[MANUAL] Tank full (%d%%). Stopping pump (mode stays MANUAL).\n", waterLevelPct);
+      LOG(LOG_LEVEL_INFO, "MANUAL", "Tank full (%d%%). Stopping pump (mode stays MANUAL).", waterLevelPct);
       setPump(false);
       return;
     }
@@ -274,7 +308,7 @@ void executePumpLogic() {
         return;
       }
       if (!cfgBypassLevelSensor && waterLevelPct >= cfgPumpStopLevel) {
-        Serial.printf("[COUNTDOWN] Tank full (%d%%). Stopping early.\n", waterLevelPct);
+        LOG(LOG_LEVEL_INFO, "COUNTDOWN", "Tank full (%d%%). Stopping early.", waterLevelPct);
         setPump(false); isCountdownActive = false; countdownEndMs = 0;
         // Option B: mode stays COUNTDOWN
         return;
@@ -289,7 +323,7 @@ void executePumpLogic() {
 
   if (isSleeping) {
     if (isRunning && waterLevelPct >= cfgPumpStopLevel) {
-      Serial.printf("[AUTO] Water at %d%%. Stopping pump.\n", waterLevelPct);
+      LOG(LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Stopping pump.", waterLevelPct);
       setPump(false);
     }
     return;
@@ -302,7 +336,7 @@ void executePumpLogic() {
   // HARD SAFETY: stale or unstable comm => pump OFF and block start.
   if (!allowStartFromSensors) {
     if (isRunning) {
-      Serial.println("[AUTO] No fresh/stable level data — stopping pump (fail-safe).");
+      LOG(LOG_LEVEL_ERROR, "AUTO", "No fresh/stable level data — stopping pump (fail-safe).");
       bool isLevelFresh = (levelLastUpdateMs > 0) && ((millis() - levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
       lastFaultCode = (!remoteSensorStable || !isLevelFresh) ? "COMM_LOSS" : "STALE_LEVEL";
       lastFaultMessage = "No fresh/stable level data: controller stopped pump (failsafe).";
@@ -315,10 +349,10 @@ void executePumpLogic() {
     if (pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
       return;
     }
-    Serial.printf("[AUTO] Water at %d%%. Starting pump.\n", waterLevelPct);
+    LOG(LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Starting pump.", waterLevelPct);
     setPump(true);
   } else if (isRunning && waterLevelPct >= cfgPumpStopLevel) {
-    Serial.printf("[AUTO] Water at %d%%. Stopping pump.\n", waterLevelPct);
+    LOG(LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Stopping pump.", waterLevelPct);
     setPump(false);
   }
 }

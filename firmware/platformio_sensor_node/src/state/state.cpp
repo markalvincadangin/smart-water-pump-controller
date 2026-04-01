@@ -15,4 +15,7 @@ int      snLastGoodLevelPct  = 0;
 bool     snLevelError        = false;
 bool     snFlowError         = false;
 uint8_t  snSeq               = 0;
+uint16_t snLevelDiscardCount = 0;
+uint8_t  flowErrAssertCount  = 0;
+uint8_t  flowErrClearCount   = 0;
 

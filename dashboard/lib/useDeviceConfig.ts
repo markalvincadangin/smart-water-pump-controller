@@ -39,6 +39,7 @@ export function useDeviceConfig() {
             idle_firebase_interval_ms: val.idle_firebase_interval_ms ?? DEFAULT_DEVICE_CONFIG.idle_firebase_interval_ms,
             auto_bypass_on_sensor_fail: val.auto_bypass_on_sensor_fail ?? DEFAULT_DEVICE_CONFIG.auto_bypass_on_sensor_fail,
             auto_bypass_delay_sec: val.auto_bypass_delay_sec ?? DEFAULT_DEVICE_CONFIG.auto_bypass_delay_sec,
+            debug_log_level: val.debug_log_level ?? DEFAULT_DEVICE_CONFIG.debug_log_level,
           });
         } else {
           setConfig({ ...DEFAULT_DEVICE_CONFIG });

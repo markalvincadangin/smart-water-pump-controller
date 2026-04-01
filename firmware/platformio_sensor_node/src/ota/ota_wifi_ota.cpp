@@ -4,7 +4,15 @@
 #include <ESP8266WiFi.h>
 
 #include "config/config.h"
-#include "config/secrets_ota.h"
+#if defined(__has_include)
+  #if __has_include("config/secrets_ota.h")
+    #include "config/secrets_ota.h"
+  #else
+    #include "config/secrets_ota.h.example"
+  #endif
+#else
+  #include "config/secrets_ota.h.example"
+#endif
 
 #ifndef OTA_WIFI_CONNECT_TIMEOUT_MS
   #define OTA_WIFI_CONNECT_TIMEOUT_MS 30000UL
@@ -31,17 +39,17 @@ static void ota_install_handlers() {
 
   ArduinoOTA.onStart([]() {
 #if SENSOR_DEBUG_ENABLED
-    SENSOR_DBGLN("[SN] OTA: start");
+    SENSOR_DBGF("[SN][INFO] OTA: start\n");
 #endif
   });
   ArduinoOTA.onEnd([]() {
 #if SENSOR_DEBUG_ENABLED
-    SENSOR_DBGLN("[SN] OTA: end — rebooting");
+    SENSOR_DBGF("[SN][INFO] OTA: end - rebooting\n");
 #endif
   });
   ArduinoOTA.onError([](ota_error_t e) {
 #if SENSOR_DEBUG_ENABLED
-    SENSOR_DBGF("[SN] OTA error: %u\n", (unsigned)e);
+    SENSOR_DBGF("[SN][ERR] OTA error: %u\n", (unsigned)e);
 #endif
   });
 }
@@ -60,12 +68,11 @@ void ota_wifi_setup() {
 
 #if SENSOR_DEBUG_ENABLED
   if (WiFi.status() == WL_CONNECTED) {
-    SENSOR_DBGLN("\n[SN] OTA: Wi-Fi connected.");
-    SENSOR_DBGF("[SN] OTA: IP %s  (hostname %s.local)\n",
-                WiFi.localIP().toString().c_str(),
+    SENSOR_DBGF("[SN][INFO] OTA: Wi-Fi connected.\n");
+    SENSOR_DBGF("[SN][INFO] OTA: IP %s  (hostname %s.local)\n", WiFi.localIP().toString().c_str(),
                 OTA_HOSTNAME);
   } else {
-    SENSOR_DBGLN("\n[SN] OTA: Wi-Fi not connected yet (will retry; RS-485 still runs).");
+    SENSOR_DBGF("[SN][INFO] OTA: Wi-Fi not connected yet (will retry; RS-485 still runs).\n");
   }
 #endif
 
@@ -73,7 +80,7 @@ void ota_wifi_setup() {
     ArduinoOTA.begin();
     s_need_ota_begin = false;
 #if SENSOR_DEBUG_ENABLED
-    SENSOR_DBGLN("[SN] OTA: listener ready (ArduinoOTA / espota).");
+    SENSOR_DBGF("[SN][INFO] OTA: listener ready (ArduinoOTA / espota).\n");
 #endif
   }
 }
@@ -89,7 +96,7 @@ void ota_wifi_loop() {
       WiFi.hostname(OTA_HOSTNAME);
       WiFi.begin(OTA_WIFI_SSID, OTA_WIFI_PASSWORD);
 #if SENSOR_DEBUG_ENABLED
-      SENSOR_DBGLN("[SN] OTA: Wi-Fi reconnect attempt…");
+      SENSOR_DBGF("[SN][INFO] OTA: Wi-Fi reconnect attempt...\n");
 #endif
     }
     return;
@@ -99,7 +106,7 @@ void ota_wifi_loop() {
     ArduinoOTA.begin();
     s_need_ota_begin = false;
 #if SENSOR_DEBUG_ENABLED
-    SENSOR_DBGF("[SN] OTA: listener active, IP %s\n", WiFi.localIP().toString().c_str());
+    SENSOR_DBGF("[SN][INFO] OTA: listener active, IP %s\n", WiFi.localIP().toString().c_str());
 #endif
   }
 

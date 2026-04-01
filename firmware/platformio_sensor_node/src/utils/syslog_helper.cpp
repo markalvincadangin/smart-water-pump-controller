@@ -3,7 +3,15 @@
 #include <WiFiUdp.h>
 #include <Syslog.h>
 #include "../config/config.h"
-#include "../config/secrets_ota.h"
+#if defined(__has_include)
+  #if __has_include("../config/secrets_ota.h")
+    #include "../config/secrets_ota.h"
+  #else
+    #include "../config/secrets_ota.h.example"
+  #endif
+#else
+  #include "../config/secrets_ota.h.example"
+#endif
 
 #if SENSOR_DEBUG_ENABLED
 

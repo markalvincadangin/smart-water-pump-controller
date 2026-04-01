@@ -7,6 +7,7 @@ extern FirebaseData   fbdo;
 extern FirebaseAuth   auth;
 extern FirebaseConfig config;
 extern Preferences    prefs;
+extern uint8_t        gLogLevel;
 
 // Device config (mutable, persisted)
 extern int   cfgTankEmptyCm;
@@ -41,6 +42,7 @@ extern bool   isDryRunError;
 extern bool   isLevelSensorError;
 extern bool   isFlowSensorError;
 extern bool   isOverflowError;
+extern bool   manualRuntimeWarning;
 
 extern String        runMode;
 extern String        runPrevPumpMode;
@@ -78,6 +80,9 @@ extern unsigned long levelSensorFailStartMs;
 // Flow stuck detection
 extern unsigned long flowStuckStartMs;
 extern bool          flowStuckTimerActive;
+extern bool          offTimerActive;
+extern unsigned long offTimerEndMs;
+extern int           pumpCooldownRemainingSec;
 
 // Pump runtime/cycles + min-off tracking
 extern unsigned long totalPumpRunSec;
@@ -95,6 +100,7 @@ extern bool          remoteSensorOnline;
 extern bool          remoteSensorStable;
 extern uint32_t      remoteSensorOkStreak;
 extern uint32_t      remoteSensorFailStreak;
+extern uint32_t      remoteSensorLevelDiscardCount;
 
 extern unsigned long levelLastUpdateMs;
 

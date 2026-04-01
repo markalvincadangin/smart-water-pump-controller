@@ -14,11 +14,11 @@ void setup() {
 #if !DEBUG_USB_MODE
   SENSOR_DBG_PORT.begin(SENSOR_DEBUG_BAUD);
   delay(10);
-  SENSOR_DBGLN("\n[SN] Boot: Sensor node debug enabled (Serial1 GPIO2 TX).");
+  SENSOR_DBGF("[SN][INFO] Boot: Sensor node debug enabled (Serial1 GPIO2 TX).\n");
 #else
-  SENSOR_DBGLN("\n[SN] Boot: DEBUG_USB_MODE enabled (UART0 over USB). RS-485 slave disabled.");
+  SENSOR_DBGF("[SN][INFO] Boot: DEBUG_USB_MODE enabled (UART0 over USB). RS-485 slave disabled.\n");
 #endif
-  SENSOR_DBGF("[SN] RS485 UART0 baud: %lu\n", (unsigned long)RS485_BAUD);
+  SENSOR_DBGF("[SN][INFO] RS485 UART0 baud: %lu\n", (unsigned long)RS485_BAUD);
 #endif
 
 #if !DEBUG_USB_MODE

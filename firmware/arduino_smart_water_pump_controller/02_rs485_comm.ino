@@ -1,8 +1,10 @@
 // -----------------------------------------------------------------------------
 // RS-485 Tank Link (ESP32 Master)
 // - Sends "REQ\n" to the remote sensor node (NodeMCU V2 / ESP8266)
-// - Expects: "LVL:<value>;FLOW:<value>;ERR:<code>\n"
-// - Updates: waterLevelPct, flowRateLpm, remoteSensorOnline, remoteSensorLastErrCode
+// - Expects: STX "LVL:<n>;DIST:<cm>;FLOW:<lpm>;ERR:<code>;LDSC:<n>;SEQ:<n>;CRC:<hex4>" ETX
+//   (DIST and LDSC fields are optional for backward compat with pre-Phase2 NodeMCU firmware)
+// - Updates: waterLevelPct, flowRateLpm, remoteSensorOnline, remoteSensorLastErrCode,
+//            remoteSensorLevelDiscardCount
 // -----------------------------------------------------------------------------
 
 #include <smart_water_pump_controller_shared.h>
@@ -98,7 +100,8 @@ static bool parseFloatField(const char* s, const char* key, float& out) {
   return true;
 }
 
-static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flowOut, int& errOut, uint32_t& seqOut) {
+static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flowOut,
+                                    int& errOut, uint32_t& seqOut, uint32_t& ldscOut) {
   const char* crcPos = strstr(payload, "CRC:");
   if (!crcPos) return false;
   if (strlen(crcPos) < 8) return false;
@@ -120,6 +123,7 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   float flow = 0.0f;
   int err = 0;
   uint32_t seq = 0;
+  uint32_t ldsc = 0;
 
   // LVL may be legacy-derived. DIST (cm) is preferred when present to prevent calibration drift.
   if (!parseIntField(payload, "LVL:", lvl)) return false;
@@ -127,6 +131,8 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   if (!parseFloatField(payload, "FLOW:", flow)) return false;
   if (!parseIntField(payload, "ERR:", err)) return false;
   if (!parseUIntField(payload, "SEQ:", seq)) return false;
+  // REFACTOR [3.3]: LDSC field added in Phase 2 NodeMCU firmware. Optional — zero if absent.
+  (void)parseUIntField(payload, "LDSC:", ldsc);
 
   if (dist >= 0.0f) {
     if (!(dist >= 1.0f) || dist > 300.0f) return false;
@@ -143,10 +149,11 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   if (!(flow >= 0.0f) || flow > FLOW_MAX_SANE_LPM) return false;
   if (err < 0 || err > 7) return false;
 
-  lvlOut = lvl;
+  lvlOut  = lvl;
   flowOut = flow;
-  errOut = err;
-  seqOut = seq;
+  errOut  = err;
+  seqOut  = seq;
+  ldscOut = ldsc;
   return true;
 }
 
@@ -167,7 +174,8 @@ bool pollRemoteSensorNode() {
   int lvl = waterLevelPct;
   float flow = flowRateLpm;
   int err = remoteSensorLastErrCode < 0 ? 0 : remoteSensorLastErrCode;
-  uint32_t seq = 0;
+  uint32_t seq  = 0;
+  uint32_t ldsc = 0;  // REFACTOR [3.3]: level discard count from NodeMCU Phase 2
   static uint32_t lastSeqSeen = 0xFFFFFFFFu;
   static uint16_t dupSeqCount = 0;
 
@@ -182,12 +190,17 @@ bool pollRemoteSensorNode() {
 
     char payload[RS485_RX_LINE_MAX];
     if (!rs485ReadFrame(payload, sizeof(payload), RS485_FRAME_TIMEOUT_MS)) {
-      Serial.println("[RS485-ERR] ReadFrame Timeout/Fail");
+      if (now - lastRs485WarnMs >= 60000UL) {
+        lastRs485WarnMs = now;
+        LOG(LOG_WARN, "RS485", "ReadFrame timeout/fail (attempt %d/%d)", attempt + 1, RS485_MAX_RETRIES);
+      }
       continue;
     }
-    if (!parseSensorFrameStrict(payload, lvl, flow, err, seq)) {
-      Serial.print("[RS485-ERR] Parse strict failed. Payload: ");
-      Serial.println(payload);
+    if (!parseSensorFrameStrict(payload, lvl, flow, err, seq, ldsc)) {
+      if (now - lastRs485WarnMs >= 60000UL) {
+        lastRs485WarnMs = now;
+        LOG(LOG_WARN, "RS485", "Parse strict failed. payload=%s", payload);
+      }
       continue;
     }
 
@@ -203,6 +216,7 @@ bool pollRemoteSensorNode() {
     remoteSensorOnline = true;
     remoteSensorConsecutiveFailCount = 0;
     levelLastUpdateMs = now;
+    remoteSensorLevelDiscardCount = ldsc;  // REFACTOR [3.3]: propagate LDSC from NodeMCU
 
     remoteSensorOkStreak++;
     remoteSensorFailStreak = 0;

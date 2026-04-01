@@ -4,12 +4,12 @@
 
 void loadDeviceConfigFromNVS() {
   if (!prefs.begin(NVS_NAMESPACE, true)) {  // read-only
-    Serial.println("[NVS] Namespace open failed. Using firmware defaults.");
+    LOG(LOG_WARN, "NVS", "Namespace open failed. Using firmware defaults.");
     return;
   }
   if (prefs.getInt("tank_empty", -1) == -1) {
     prefs.end();
-    Serial.println("[NVS] No saved config. Using firmware defaults.");
+    LOG(LOG_WARN, "NVS", "No saved config. Using firmware defaults.");
     return;
   }
   int te = prefs.getInt("tank_empty", TANK_EMPTY_CM);
@@ -39,18 +39,18 @@ void loadDeviceConfigFromNVS() {
   prefs.end();
 
   if (schemaVer > NVS_SCHEMA_VERSION) {
-    Serial.println("[NVS] Schema version from newer firmware. Using defaults.");
+    LOG(LOG_WARN, "NVS", "Schema version from newer firmware. Using defaults.");
     return;
   }
   if (schemaVer < NVS_SCHEMA_VERSION) {
-    Serial.printf("[NVS] Schema v%d loaded into firmware v%d — new fields use defaults.\n",
+    LOG(LOG_INFO, "NVS", "Schema v%d loaded into firmware v%d — new fields use defaults.",
                   schemaVer, NVS_SCHEMA_VERSION);
   }
   // Validate: if NVS was corrupted, keep firmware defaults
   if (te < 5 || te > 200 || tf < 1 || tf >= te || ps < 0 || ps > 100 || po < 0 || po > 100 || po <= ps
       || drLpm < 0.1f || drLpm > 10.0f || drSec < 10 || drSec > 300
       || flowCal < 0.1f || flowCal > 20.0f || maxRuntime < 30 || maxRuntime > 480) {
-    Serial.println("[NVS] Stored config invalid. Using firmware defaults.");
+    LOG(LOG_WARN, "NVS", "Stored config invalid. Using firmware defaults.");
     return;
   }
   cfgTankEmptyCm = te;
@@ -76,12 +76,13 @@ void loadDeviceConfigFromNVS() {
   if (autoBypassSec >= 10 && autoBypassSec <= 300) cfgAutoBypassDelaySec = autoBypassSec;
   cfgBypassFlowSensor = bypassFlow;
 
-  Serial.println("[NVS] Device config loaded.");
+  LOG(LOG_INFO, "NVS", "Device config loaded: empty=%dcm full=%dcm start=%d%% stop=%d%%",
+                cfgTankEmptyCm, cfgTankFullCm, cfgPumpStartLevel, cfgPumpStopLevel);
 }
 
 void saveDeviceConfigToNVS() {
   if (!prefs.begin(NVS_NAMESPACE, false)) {  // read-write
-    Serial.println("[NVS] Failed to open for write. Config not persisted.");
+    LOG(LOG_WARN, "NVS", "Failed to open for write. Config not persisted.");
     return;
   }
   prefs.putInt("tank_empty", cfgTankEmptyCm);
@@ -106,7 +107,7 @@ void saveDeviceConfigToNVS() {
   prefs.putBool("bypass_flow", cfgBypassFlowSensor);
   prefs.putInt("schema_ver", NVS_SCHEMA_VERSION);
   prefs.end();
-  Serial.println("[NVS] Device config saved.");
+  LOG(LOG_INFO, "NVS", "Device config saved.");
 }
 
 // =============================================================================
@@ -132,7 +133,7 @@ bool isInSleepWindow(int currentHour) {
 
 void checkCrashLoop() {
   if (!prefs.begin(NVS_STATE_NAMESPACE, false)) {
-    Serial.println("[BOOT] NVS state namespace open failed.");
+    LOG(LOG_WARN, "NVS", "State namespace open failed.");
     return;
   }
 
@@ -161,10 +162,9 @@ void checkCrashLoop() {
     lastFaultCode = "SAFE_MODE";
     lastFaultMessage = "Crash loop detected. Controller in safe mode. Power cycle to recover.";
     prefs.putULong("safe_mode_ms", safeModeEnteredMs);
-    Serial.printf("[ERROR] CRASH LOOP DETECTED: %d boots without reaching stable uptime. Entering SAFE MODE.\n", bootCount);
-    Serial.println("[SAFE MODE] Pump OFF. Firebase disabled. Serial only.");
+    LOG(LOG_ERROR, "BOOT", "CRASH LOOP DETECTED: %d boots without stable uptime. SAFE MODE.", bootCount);
   } else {
-    Serial.printf("[BOOT] Boot count (uncleared): %d/%d\n", bootCount, CRASH_LOOP_THRESHOLD);
+    LOG(LOG_INFO, "BOOT", "Boot count (uncleared): %d/%d", bootCount, CRASH_LOOP_THRESHOLD);
   }
 
   prefs.end();
@@ -198,15 +198,15 @@ void loadStateFromNVS() {
     pumpMode = savedMode;
     lastPersistedMode = savedMode;
     if (savedMode == "COUNTDOWN") {
-      Serial.println("[BOOT] Restored COUNTDOWN mode from NVS. Timer will restart on Firebase sync.");
+      LOG(LOG_INFO, "NVS", "Restored COUNTDOWN mode. Timer restart needed on Firebase sync.");
     } else if (savedMode == "MANUAL") {
       manualDesired = false;  // never auto-start after reboot
-      Serial.println("[BOOT] Restored MANUAL mode. Pump remains OFF until manual_desired is true.");
+      LOG(LOG_INFO, "NVS", "Restored MANUAL mode. Pump remains OFF until manual_desired=true.");
     }
   } else {
     pumpMode = "AUTO";
     lastPersistedMode = "AUTO";
-    Serial.printf("[BOOT] Legacy/invalid mode '%s' not restored. Defaulting to AUTO.\n", savedMode.c_str());
+    LOG(LOG_WARN, "NVS", "Legacy/invalid mode '%s' not restored. Defaulting to AUTO.", savedMode.c_str());
   }
   isDryRunError = savedDryRun;
   lastPersistedDryRun = savedDryRun;
@@ -215,7 +215,7 @@ void loadStateFromNVS() {
   cfgBypassFlowSensor = savedBypassFlow;
   lastPersistedBypassFlow = savedBypassFlow;
 
-  Serial.printf("[BOOT] Last state: Level=%d%%, Mode=%s, DryRun=%s, Bypass=%s, Cycles=%lu, RunSec=%lu\n",
+  LOG(LOG_INFO, "NVS", "State loaded: level=%d%% mode=%s dryRun=%s bypass=%s cycles=%lu runSec=%lu",
                 savedLevel, pumpMode.c_str(), isDryRunError ? "YES" : "NO", savedBypass ? "YES" : "NO",
                 (unsigned long)totalPumpCycles, (unsigned long)totalPumpRunSec);
 }
@@ -231,8 +231,9 @@ void persistStateToNVS() {
     || (levelDelta >= NVS_LEVEL_DELTA_THRESHOLD)
     || (now - lastLevelWriteMs >= NVS_LEVEL_INTERVAL_MS);
   bool uptimeNeedsWrite = (now - lastUptimeWriteMs >= NVS_UPTIME_INTERVAL_MS);
-  static bool crashLoopClearedThisBoot = false;
-  bool crashLoopClearDue = (!crashLoopClearedThisBoot) && (now >= 60000UL);
+  
+  // REFACTOR [H-06]: success-based clear (see loop() and pushFirebaseStatus())
+  bool crashLoopClearDue = false; 
 
   if (!modeChanged && !dryRunChanged && !bypassChanged && !telemetryChanged && !levelNeedsWrite && !uptimeNeedsWrite && !crashLoopClearDue) return;
 
@@ -241,7 +242,7 @@ void persistStateToNVS() {
   if (modeChanged) {
     prefs.putString("mode", pumpMode);
     lastPersistedMode = pumpMode;
-    Serial.printf("[NVS] Mode persisted: %s\n", pumpMode.c_str());
+    LOG(LOG_DEBUG, "NVS", "Mode persisted: %s", pumpMode.c_str());
   }
   if (dryRunChanged) {
     prefs.putBool("dry_run_err", isDryRunError);
@@ -252,7 +253,7 @@ void persistStateToNVS() {
     lastPersistedBypass = cfgBypassLevelSensor;
     prefs.putBool("bypass_flow", cfgBypassFlowSensor);
     lastPersistedBypassFlow = cfgBypassFlowSensor;
-    Serial.printf("[NVS] Bypass flags persisted: LVL=%s, FLOW=%s\n", 
+    LOG(LOG_DEBUG, "NVS", "Bypass flags persisted: LVL=%s FLOW=%s",
                   cfgBypassLevelSensor ? "ON" : "OFF", cfgBypassFlowSensor ? "ON" : "OFF");
   }
   if (telemetryChanged) {
@@ -270,10 +271,13 @@ void persistStateToNVS() {
     lastUptimeWriteMs = now;
   }
 
+  // REFACTOR [N-02]: crashLoopClearedThisBoot was undeclared. Fix: use crashCounterCleared.
+  // crashLoopClearDue is always false; block retained here as documented dead code.
+  // Success-based clear is handled in pushFirebaseStatus() (REFACTOR [H-06]).
   if (crashLoopClearDue) {
     prefs.putInt("boot_count", 0);
-    crashLoopClearedThisBoot = true;
-    Serial.println("[BOOT] Stable uptime reached. Crash-loop counter cleared.");
+    crashCounterCleared = true;  // N-02 FIX: was crashLoopClearedThisBoot (undeclared)
+    LOG(LOG_INFO, "BOOT", "Stable uptime reached. Crash-loop counter cleared.");
   }
 
   prefs.end();

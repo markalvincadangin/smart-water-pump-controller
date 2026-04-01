@@ -30,7 +30,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#070B10",
+  themeColor: "#185FA5", /* SmartFlow brand color (Phase 6) */
 };
 
 export default function RootLayout({
@@ -39,8 +39,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
-      <body className="bg-canvas text-text-primary font-body antialiased overflow-x-hidden">
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning
+      style={{ 
+        // Force the variable names expected by tailwind.config.ts
+        "--font-geist": GeistSans.style.fontFamily,
+        "--font-geist-mono": GeistMono.style.fontFamily 
+      } as React.CSSProperties}>
+      <body className="bg-canvas text-text-primary font-sans antialiased overflow-x-hidden">
         <ThemeProvider attribute="data-theme">
           <a
             href="#main"

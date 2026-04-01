@@ -20,6 +20,10 @@
   #define DEBUG_USB_MODE            0
 #endif
 
+#if DEBUG_USB_MODE
+  #warning "DEBUG_USB_MODE=1: bench debug mode enabled; RS-485 slave traffic is disabled for production safety."
+#endif
+
 // Ultrasonic
 #define US_TIMEOUT_US       100000UL
 #define US_SAMPLES          5
@@ -98,4 +102,5 @@
   #define SENSOR_DBGLN(msg) do {} while (0)
   #define SENSOR_DBGF(...)  do {} while (0)
 #endif
+
 

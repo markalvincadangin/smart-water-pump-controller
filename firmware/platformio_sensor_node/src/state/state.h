@@ -17,4 +17,7 @@ extern int      snLastGoodLevelPct;
 extern bool     snLevelError;
 extern bool     snFlowError;
 extern uint8_t  snSeq;
+extern uint16_t snLevelDiscardCount;
+extern uint8_t  flowErrAssertCount;
+extern uint8_t  flowErrClearCount;
 

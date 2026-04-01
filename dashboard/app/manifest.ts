@@ -11,8 +11,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Water, managed. Real-time monitoring and pump control with safety-first automation.",
     start_url: "/",
     display: "standalone",
-    background_color: "#0a0e14",
-    theme_color: "#0A0E14",
+    background_color: "#F1EFE8",
+    theme_color: "#185FA5", /* SmartFlow brand color (Phase 6) */
     orientation: "any",
     icons: [
       { src: "/logos/brandmark.svg", sizes: "72x72", type: "image/svg+xml", purpose: "any" },
