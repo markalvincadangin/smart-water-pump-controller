@@ -5,3 +5,5 @@ ART-0003,FW-RS-008,,code_review,firmware/platformio_smart_water_pump_controller/
 ART-0004,FW-RS-008,,code_review,firmware/platformio_sensor_node/src/config/config.h,2026-04-01T00:18:56Z,Copilot,,NodeMCU turnaround constant
 ART-0005,,,execution_report,docs/audit/qa/2026-04-01/day-0/WAVE_A_EXECUTION_REPORT.md,2026-04-01T00:18:56Z,Copilot,,Wave A execution summary
 ART-0006,FW-LOG-005,,build_output,docs/audit/qa/2026-04-01/day-0/WAVE_A_EXECUTION_REPORT.md,2026-04-01T00:20:50Z,Copilot,,Clean debug-usb compile warning evidence
+ART-0007,,,serial_log,docs/audit/qa/2026-04-01/day-0/logs/ESP32_FIRST_COM3_2026-04-01.log,2026-04-01T01:06:17Z,Copilot,,ESP32-first master test run on COM3
+ART-0008,,,serial_log,docs/audit/qa/2026-04-01/day-0/logs/NODEMCU_STANDALONE_COM3_2026-04-01.log,2026-04-01T09:15:18+08:00,Copilot,,NodeMCU standalone debug-usb run on COM3

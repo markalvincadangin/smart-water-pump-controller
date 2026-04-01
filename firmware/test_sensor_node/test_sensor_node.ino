@@ -4,7 +4,7 @@
 // TC-S-01: Hardware Sanity
 // TC-S-02: Ultrasonic Sensor
 // TC-S-03: Flow Sensor
-// TC-S-04: RS-485 Slave Echo Server
+// TC-S-04: RS-485 Slave Responder (REQ frame + PING hello)
 // TC-S-05: CRC Self-Test
 //
 // Usage:
@@ -47,6 +47,10 @@ int testsRun = 0;
 int testsPassed = 0;
 int testsFailed = 0;
 
+bool g_rs485ResponderStarted = false;
+char g_rs485CmdBuf[48];
+size_t g_rs485CmdPos = 0;
+
 // REFACTOR [QA-TEST-FIX]: ISR counters must use static storage and a named ISR callback.
 volatile uint32_t g_flowPulseCount = 0;
 
@@ -60,6 +64,97 @@ struct TestCase {
   const char* name;
   TestFn fn;
 };
+
+void ensureRs485ResponderStarted() {
+  if (g_rs485ResponderStarted) return;
+  Serial.begin(RS485_BAUD); // UART0 shared with USB/RS485 on NodeMCU
+  pinMode(PIN_RS485_DE_RE, OUTPUT);
+  digitalWrite(PIN_RS485_DE_RE, LOW); // RX mode
+  g_rs485ResponderStarted = true;
+}
+
+void rs485SendFramedPayload(const char* payload) {
+  uint16_t crc = crc16_modbus((const uint8_t*)payload, strlen(payload));
+
+  digitalWrite(PIN_RS485_DE_RE, HIGH);
+  delayMicroseconds(60);
+
+  Serial.write(0x02);
+  Serial.print(payload);
+  Serial.printf("CRC:%04X", (unsigned)crc);
+  Serial.write(0x03);
+  Serial.flush();
+
+  delay(2);
+  digitalWrite(PIN_RS485_DE_RE, LOW);
+}
+
+bool parsePingSeq(const char* cmd, uint32_t& seqOut) {
+  if (strncmp(cmd, "PING:", 5) != 0) return false;
+
+  const char* p = cmd + 5;
+  if (*p == '\0') return false;
+
+  char* endPtr = nullptr;
+  unsigned long seq = strtoul(p, &endPtr, 10);
+  if (endPtr == p || *endPtr != '\0') return false;
+
+  seqOut = (uint32_t)seq;
+  return true;
+}
+
+void handleRs485Command(const char* cmd, int& reqFramesSent, int& pingRepliesSent) {
+  uint32_t pingSeq = 0;
+
+  if (strcmp(cmd, "REQ") == 0) {
+    rs485SendFramedPayload("LVL:50;DIST:61.0;FLOW:5.00;ERR:0;LDSC:0;SEQ:0;");
+    reqFramesSent++;
+    Serial1.println("[TEST] Echo: sent REQ frame");
+    return;
+  }
+
+  if (parsePingSeq(cmd, pingSeq)) {
+    char payload[64];
+    snprintf(payload, sizeof(payload), "HELLO;SEQ:%lu;NODE_OK:1;", (unsigned long)pingSeq);
+    rs485SendFramedPayload(payload);
+    pingRepliesSent++;
+    Serial1.printf("[TEST] Ping reply: seq=%lu\n", (unsigned long)pingSeq);
+    return;
+  }
+
+  if (strcmp(cmd, "PING") == 0) {
+    rs485SendFramedPayload("MSG:HELLO_FROM_NODE;");
+    pingRepliesSent++;
+    Serial1.println("[TEST] Ping reply: legacy HELLO");
+    return;
+  }
+
+  rs485SendFramedPayload("ERR:BAD_CMD;NODE_OK:1;");
+}
+
+void serviceRs485Responder(int& reqFramesSent, int& pingRepliesSent) {
+  while (Serial.available() > 0) {
+    int c = Serial.read();
+    if (c < 0) return;
+
+    if (c == '\r') continue;
+
+    if (c == '\n') {
+      g_rs485CmdBuf[g_rs485CmdPos] = '\0';
+      if (g_rs485CmdPos > 0) {
+        handleRs485Command(g_rs485CmdBuf, reqFramesSent, pingRepliesSent);
+      }
+      g_rs485CmdPos = 0;
+      continue;
+    }
+
+    if (g_rs485CmdPos < (sizeof(g_rs485CmdBuf) - 1)) {
+      g_rs485CmdBuf[g_rs485CmdPos++] = (char)c;
+    } else {
+      g_rs485CmdPos = 0;
+    }
+  }
+}
 
 void runTest(const char* name, TestFn fn) {
   Serial.printf("[ RUN ] %s\n", name);
@@ -209,55 +304,33 @@ bool test_flow_sensor() {
   return pulseCount > 0;
 }
 
-// TC-S-04: RS-485 Slave Echo Server (listen for REQ, send test frame)
+// TC-S-04: RS-485 Slave Responder (listen for REQ/PING)
 bool test_rs485_echo_server() {
-  Serial.println("  RS485 Echo Server: Waiting 5s for REQ commands...");
-
-  Serial.begin(RS485_BAUD); // UART0 for RS485
-  pinMode(PIN_RS485_DE_RE, OUTPUT);
-  digitalWrite(PIN_RS485_DE_RE, LOW); // RX mode
+  Serial.println("  RS485 Responder: Waiting 5s for REQ/PING commands...");
+  ensureRs485ResponderStarted();
 
   uint32_t startMs = millis();
-  int framesSent = 0;
+  int reqFramesSent = 0;
+  int pingRepliesSent = 0;
 
   while (millis() - startMs < 5000) {
-    if (Serial.available()) {
-      String cmd = Serial.readStringUntil('\n');
-      cmd.trim();
-
-      if (cmd == "REQ") {
-        // Send hardcoded test frame: STX LVL:50;DIST:61.0;FLOW:5.00;ERR:0;LDSC:0;SEQ:0;CRC:XXXX ETX
-        char payload[] = "LVL:50;DIST:61.0;FLOW:5.00;ERR:0;LDSC:0;SEQ:0;";
-        uint16_t crc = crc16_modbus((const uint8_t*)payload, strlen(payload));
-
-        digitalWrite(PIN_RS485_DE_RE, HIGH); // TX mode
-        delayMicroseconds(60);
-
-        Serial.write(0x02); // STX
-        Serial.print(payload);
-        Serial.printf("CRC:%04X", (unsigned)crc);
-        Serial.write(0x03); // ETX
-        Serial.flush();
-
-        delay(2); // Wait for shift register
-        digitalWrite(PIN_RS485_DE_RE, LOW); // RX mode
-
-        framesSent++;
-        Serial1.printf("[TEST] Echo: sent frame seq=0 crc=%04X\n", (unsigned)crc);
-      }
-    }
+    serviceRs485Responder(reqFramesSent, pingRepliesSent);
     delay(10);
   }
 
+  // Restore USB serial output so remaining tests and summary are readable.
   Serial.end();
-  Serial1.printf("  RS485 Echo: %d frames sent\n", framesSent);
+  delay(20);
+  Serial.begin(115200);
+  delay(20);
+  Serial1.printf("  RS485 Responder: REQ frames=%d, PING replies=%d\n", reqFramesSent, pingRepliesSent);
 
-  if (framesSent == 0) {
+  if ((reqFramesSent + pingRepliesSent) == 0) {
 #if REQUIRE_RS485_REQ_FRAME
-    Serial1.println("  ERROR: No REQ observed while REQUIRE_RS485_REQ_FRAME=1.");
+    Serial1.println("  ERROR: No RS485 commands observed while REQUIRE_RS485_REQ_FRAME=1.");
     return false;
 #else
-    Serial1.println("  INFO: No REQ observed in standalone mode (acceptable for bench-only run).");
+    Serial1.println("  INFO: No REQ/PING observed in standalone mode (acceptable for bench-only run).");
     return true;
 #endif
   }
@@ -325,6 +398,15 @@ void setup() {
 }
 
 void loop() {
-  // All tests run once in setup()
-  delay(1000);
+  // Keep serving RS-485 commands after one-time setup tests so one-laptop
+  // workflow (flash node first, master later) still works.
+  if (!g_rs485ResponderStarted) {
+    ensureRs485ResponderStarted();
+    Serial1.println("[TEST] Persistent RS485 responder active (REQ/PING).\n");
+  }
+
+  int reqFramesSent = 0;
+  int pingRepliesSent = 0;
+  serviceRs485Responder(reqFramesSent, pingRepliesSent);
+  delay(5);
 }

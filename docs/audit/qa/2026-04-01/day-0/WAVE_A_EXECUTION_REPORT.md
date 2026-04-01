@@ -21,11 +21,11 @@ Baseline values captured:
 
 ### 2.2 Hardware visibility
 - Command: arduino-cli board list
-- Result: no boards found
+- Result: initial run found no boards; later run detected COM3 (CP210x)
 - Command: pio device list
-- Result: no devices returned
+- Result: later run detected COM3 (Silicon Labs CP210x USB to UART Bridge)
 
-Conclusion: hardware-dependent runtime tests are blocked in this environment until boards are connected.
+Conclusion: hardware-dependent runtime tests are executable when COM3 board is attached. Integration tests still require both nodes connected on RS-485.
 
 ## 3. Software-side Validation Executed
 
@@ -89,7 +89,8 @@ The following spec tests were executable via code-review method and are now mark
 ## 5. Blockers for Wave B (P1 Hardware Execution)
 
 Current hard blocker:
-- No connected ESP32/NodeMCU boards detected by Arduino CLI or PlatformIO.
+- Only one USB serial target (COM3) can be exercised at a time in this setup.
+- Full RS-485 integration assertions require both nodes wired together (and NodeMCU not in debug-usb mode).
 
 Cannot execute P1 runtime tests without this:
 - Boot behavior timing tests
@@ -97,6 +98,44 @@ Cannot execute P1 runtime tests without this:
 - dry-run/overflow fault injection timing tests
 - RS-485 runtime retry/timeout behavior tests
 - Firebase live one-shot reset behavior tests
+
+## 5.1 ESP32-First Live Run (COM3)
+
+An actual ESP32-first hardware run was executed after COM3 became available.
+
+- Upload target: ESP32-D0WD-V3 on COM3
+- Firmware flashed: firmware/test_master_node
+- Runtime log artifact: docs/audit/qa/2026-04-01/day-0/logs/ESP32_FIRST_COM3_2026-04-01.log
+
+Observed master test outcomes:
+- TC-M-01 GPIO/Relay: PASS
+- TC-M-02 RS-485 Master Poll: FAIL (0 valid, 86 failed)
+- TC-M-03 WiFi Connection: PASS
+- TC-M-04 Firebase Read/Write: FAIL (missing Firebase prerequisites in test build context)
+- TC-M-05 Integration: FAIL (RS-485 peer unavailable)
+
+Interpretation:
+- ESP32 hardware path and WiFi stack are functioning.
+- RS-485 and integration failures are expected while NodeMCU peer is unavailable.
+- Firebase R/W failure is prerequisite/configuration related and not a crash condition.
+
+## 5.2 NodeMCU Standalone Live Run (COM3)
+
+A standalone NodeMCU bench run was executed after NodeMCU was connected to COM3.
+
+- Upload target: NodeMCU 1.0 (ESP8266) on COM3
+- Firmware flashed: firmware/platformio_sensor_node (`nodemcuv2_debug_usb`)
+- Runtime log artifact: docs/audit/qa/2026-04-01/day-0/logs/NODEMCU_STANDALONE_COM3_2026-04-01.log
+
+Observed standalone outcomes:
+- Flash/build: PASS
+- Boot log: PASS (`DEBUG_USB_MODE enabled` observed)
+- Periodic telemetry: PASS (`lvl/dist/flow/err/seq/ldsc` debug lines observed)
+
+Interpretation:
+- NodeMCU standalone firmware path is alive and stable on USB bench mode.
+- RS-485 request/response runtime tests remain pending because `DEBUG_USB_MODE=1` intentionally disables RS-485 slave traffic.
+- For integration tests, reconnect TX/RX to MAX485 and run non-debug production profile (`nodemcuv2`).
 
 ## 6. Safety and Audit Position
 - Safety rule preserved: no firmware behavior changed in this wave.

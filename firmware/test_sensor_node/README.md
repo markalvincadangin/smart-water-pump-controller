@@ -93,7 +93,7 @@
 
 ---
 
-### TC-S-04: RS-485 Slave Echo Server ✓
+### TC-S-04: RS-485 Slave Responder ✓
 **Purpose:** Verify RS-485 transceiver and slave response capability.
 
 **What it does:**
@@ -102,21 +102,27 @@
   ```
   STX LVL:50;DIST:61.0;FLOW:5.00;ERR:0;LDSC:0;SEQ:0;CRC:3F9A ETX
   ```
-- Count frames sent and report
+- When "PING\n" is received, send a simple hello frame:
+  ```
+  STX MSG:HELLO_FROM_NODE;CRC:XXXX ETX
+  ```
+- Count responses sent and report
 
 **Expected output:**
 ```
 [ RUN ] TC-S-04: RS-485 Echo Server
-  RS485 Echo Server: Waiting 5s for REQ commands...
-  RS485 Echo: 1 frames sent
+  RS485 Responder: Waiting 5s for REQ/PING commands...
+  RS485 Responder: REQ frames=1, PING replies=1
 [ PASS] TC-S-04: RS-485 Echo Server
 ```
 
 **Pass criteria:**
-- At least 1 frame sent within the 5s window
+- At least 1 response sent within the 5s window (REQ frame and/or PING hello)
 - With this test alone (no external master), 0 frames sent is acceptable when `REQUIRE_RS485_REQ_FRAME=0` (default)
 - If `REQUIRE_RS485_REQ_FRAME=1` is enabled, 0 frames sent is a FAIL
 - Combine with TC-M-02 (ESP32 test) to verify full half-duplex link
+
+After the one-time test suite completes, the sketch keeps a persistent RS-485 responder active in `loop()` so the ESP32 master can be flashed later from the same laptop and still receive REQ/PING responses.
 
 ---
 

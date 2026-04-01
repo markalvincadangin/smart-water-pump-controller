@@ -5,6 +5,7 @@
 **Tests Included:**
 | Test ID | Name | Duration | Hardware Needed | Pass Criteria |
 |---------|------|----------|-----------------|---------------|
+| TC-M-00 | RS-485 Hello Handshake | ~3s | NodeMCU responder + RS-485 link | Receives `MSG:HELLO_FROM_NODE;` with valid CRC |
 | TC-M-01 | GPIO & Relay | 1s + wait | Relay connected to GPIO4 | Relay cycles on/off, user confirms |
 | TC-M-02 | RS-485 Master | 30s | NodeMCU running RS-485 slave | ≥90% valid frames in 30s window |
 | TC-M-03 | WiFi Connection | ~20s | WiFi network + credentials | Connects within timeout, DNS checks pass (2/3) |
@@ -62,6 +63,12 @@ ESP32 GPIO5    → RS-485 DE/RE (transmit enable, active HIGH)
 
 For TC-M-02 (RS-485 polling), the NodeMCU must be running `test_sensor_node.ino`.
 
+One-laptop flash sequence (recommended):
+1. Flash NodeMCU first with `firmware/test_sensor_node/test_sensor_node.ino`.
+2. Keep NodeMCU powered and connected on RS-485 bus.
+3. Move USB cable to ESP32 and flash `firmware/test_master_node/test_master_node.ino`.
+4. Open ESP32 serial monitor; the master test will run TC-M-00 hello first, then the full RS-485 poll.
+
 **Connection:**
 ```
 ESP32 MAX485 A      → NodeMCU MAX485 A
@@ -72,6 +79,22 @@ GND                 → GND (common)
 ---
 
 ## Detailed Test Procedures
+
+### TC-M-00: RS-485 Hello Handshake
+
+**Purpose:** Quick sanity test to confirm Node responds to master request before full polling.
+
+**Procedure:**
+1. NodeMCU runs sensor test sketch and is wired on RS-485.
+2. ESP32 sends `PING` over RS-485.
+3. Node replies with framed payload: `MSG:HELLO_FROM_NODE;` plus CRC.
+
+**Pass Criteria:**
+- Master receives framed reply.
+- CRC is valid.
+- Payload matches exactly `MSG:HELLO_FROM_NODE;`.
+
+---
 
 ### TC-M-01: GPIO and Relay
 
