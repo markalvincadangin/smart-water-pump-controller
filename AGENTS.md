@@ -49,3 +49,6 @@ This is an IoT project with three software components (firmware requires physica
 - No Docker, no monorepo tooling, no pre-commit hooks.
 - Firmware directories (`firmware/`) contain Arduino/PlatformIO code for ESP32/ESP8266 — compilation requires PlatformIO CLI (`pip install platformio`) but flashing requires physical USB boards.
 - The RTDB export JSON file in the repo root (named after the Firebase project with `-default-rtdb-export.json` suffix) can be imported into Firebase for realistic test data without hardware.
+- When killing the Next.js dev server, orphaned `next-server` child processes may remain bound to the port. Use `netstat -tlnp | grep 300` to find and kill them by PID before restarting.
+- The dashboard has a health endpoint at `/api/health` that returns `{"status":"ok","firebase":"initialized"}` when Firebase is properly configured — useful for quick verification.
+- `.env.local` is gitignored. Firebase secrets are injected as environment variables; write them to `dashboard/.env.local` before running the dev server.
