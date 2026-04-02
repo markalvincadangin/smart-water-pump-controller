@@ -3,20 +3,35 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
-import { Wifi, Clock, AlertTriangle } from "lucide-react";
+import { Wifi, Clock, AlertTriangle, Settings, Bell, LogOut } from "lucide-react";
 import clsx from "clsx";
+import IdleModeBadge from "./IdleModeBadge";
 
 interface HeaderProps {
   isConnected: boolean;
   rssi?: number | null;
   lastUpdated?: number | null; // timestamp in ms
+  isIdleMode?: boolean;
+  waterLevelPercent?: number | null;
+  onOpenDeviceConfig?: () => void;
+  onOpenAlertsConfig?: () => void;
+  onSignOut?: () => void;
 }
 
 /**
  * REFACTOR [D4.1]: SmartFlow Global Header
  * Features sticky positioning, brand wordmark, and connection health telemetry.
  */
-export default function Header({ isConnected, rssi, lastUpdated }: HeaderProps) {
+export default function Header({
+  isConnected,
+  rssi,
+  lastUpdated,
+  isIdleMode = false,
+  waterLevelPercent = null,
+  onOpenDeviceConfig,
+  onOpenAlertsConfig,
+  onSignOut,
+}: HeaderProps) {
   const [relativeTime, setRelativeTime] = useState<string>("just now");
 
   useEffect(() => {
@@ -43,11 +58,11 @@ export default function Header({ isConnected, rssi, lastUpdated }: HeaderProps) 
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b border-[var(--card-border)] bg-[var(--card-bg)]/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 w-full border-b border-[var(--card-border)] bg-[var(--page-bg)]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-screen-lg items-center justify-between px-4">
           {/* Left: Wordmark */}
           <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-80">
-            <span className="font-sans text-xl font-bold tracking-tight text-sf-blue">
+            <span className="font-sans text-lg font-bold tracking-tight text-[var(--text-primary)]">
               SmartFlow
             </span>
           </Link>
@@ -55,6 +70,11 @@ export default function Header({ isConnected, rssi, lastUpdated }: HeaderProps) 
           {/* Right: Status Cluster */}
           <div className="flex items-center gap-4">
             <div className="hidden items-center gap-3 md:flex">
+              {/* Idle badge */}
+              <IdleModeBadge
+                isIdle={isIdleMode}
+                waterLevelPercent={typeof waterLevelPercent === "number" ? waterLevelPercent : 0}
+              />
               {/* RSSI Badge */}
               {rssi !== undefined && rssi !== 0 && (
                 <div className={clsx("flex items-center gap-1.5 font-mono text-xs font-medium", getRssiColor(rssi))}>
@@ -81,7 +101,32 @@ export default function Header({ isConnected, rssi, lastUpdated }: HeaderProps) 
                 )}
                 title={isConnected ? "Firebase Connected" : "Reconnecting..."}
               />
-              <ThemeToggle />
+              <div className="flex items-center gap-1 border-l border-[var(--card-border)] pl-3 ml-1">
+                 <button 
+                    onClick={onOpenDeviceConfig}
+                    className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--card-hover)] rounded-md transition-all"
+                    aria-label="Device Settings"
+                 >
+                    <Settings size={18} strokeWidth={2} />
+                 </button>
+                 <button 
+                    onClick={onOpenAlertsConfig}
+                    className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--card-hover)] rounded-md transition-all"
+                    aria-label="Alerts Config"
+                 >
+                    <Bell size={18} strokeWidth={2} />
+                 </button>
+                 <button 
+                    onClick={onSignOut}
+                    className="p-1.5 text-[var(--text-muted)] hover:text-[var(--accent-red,#ef4444)] hover:bg-[var(--accent-red,#ef4444)]/10 rounded-md transition-all ml-1"
+                    aria-label="Sign Out"
+                 >
+                    <LogOut size={18} strokeWidth={2} />
+                 </button>
+              </div>
+              <div className="border-l border-[var(--card-border)] pl-3 ml-1">
+                 <ThemeToggle />
+              </div>
             </div>
           </div>
         </div>

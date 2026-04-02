@@ -4,7 +4,7 @@
 
 // NodeMCU V2 (ESP8266) production pinout (see hardware/wiring_notes.md)
 #define PIN_RS485_DE_RE   14   // D5 / GPIO14
-#define PIN_FLOW_INPUT    13   // D7 / GPIO13
+#define PIN_FLOW_INPUT    12   // D6 / GPIO12 (temporary diagnostic reroute)
 #define PIN_US_TRIG        5   // D1 / GPIO5
 #define PIN_US_ECHO       16   // D0 / GPIO16
 
@@ -34,13 +34,35 @@
 // - TANK_US_DIST_FULL_CM: reading when the tank is physically FULL (water close to sensor).
 // - TANK_US_DIST_EMPTY_CM: reading when the tank is physically EMPTY (water far from sensor).
 // Level% = 100 * (EMPTY - measured) / (EMPTY - FULL), clamped 0–100.
-// Defaults (122 / 8) match the original install; change these to match YOUR tank and mounting.
+// Calibrated to current field geometry (2026-04-01):
+// - sensor to tank bottom (empty reference): 118 cm
+// - full reference used by ops: 0 cm
 #ifndef TANK_US_DIST_EMPTY_CM
-  #define TANK_US_DIST_EMPTY_CM  122.0f
+  #define TANK_US_DIST_EMPTY_CM  120.0f
 #endif
 #ifndef TANK_US_DIST_FULL_CM
-  #define TANK_US_DIST_FULL_CM   8.0f
+  #define TANK_US_DIST_FULL_CM   0.0f
 #endif
+
+// Additive trim for installation-specific ultrasonic reference offset.
+// Positive values increase reported distance.
+#ifndef TANK_US_DISTANCE_OFFSET_CM
+  #define TANK_US_DISTANCE_OFFSET_CM 10.5f
+#endif
+
+// JSN-SR04T capability guardrail with safety margin.
+// Readings outside this reliability band are treated as invalid samples.
+#ifndef US_SENSOR_MIN_CM
+  #define US_SENSOR_MIN_CM 20.0f
+#endif
+#ifndef US_SENSOR_MAX_CM
+  #define US_SENSOR_MAX_CM 450.0f
+#endif
+#ifndef US_SENSOR_MARGIN_CM
+  #define US_SENSOR_MARGIN_CM 5.0f
+#endif
+#define US_RELIABLE_MIN_CM (US_SENSOR_MIN_CM + US_SENSOR_MARGIN_CM)
+#define US_RELIABLE_MAX_CM (US_SENSOR_MAX_CM - US_SENSOR_MARGIN_CM)
 
 // Flow calibration (YF-G1 typical).
 // Convert pulse frequency (Hz) to liters per minute:
@@ -58,7 +80,7 @@
 
 // Flow signal hardening
 // Reject pulses faster than this (deglitch / EMI). 2ms => 500Hz (~66 L/min at 7.5)
-#define FLOW_MIN_PULSE_INTERVAL_US 2000UL
+#define FLOW_MIN_PULSE_INTERVAL_US 800UL  // temporary diagnostic tuning
 #define FLOW_MAX_SANE_LPM          100.0f
 #define FLOW_TIMEOUT_MS            5000UL
 

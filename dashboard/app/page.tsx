@@ -1,7 +1,7 @@
 // app/page.tsx
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ControlMode, LogLevel } from "@/lib/types";
 
@@ -44,6 +44,7 @@ export default function DashboardPage() {
     setManualDesired,
     startCountdown,
     addCountdownTime,
+    stopCountdown,
     triggerEmergencyStop,
     resetEmergencyStop,
     setBypassLevelSensor,
@@ -63,6 +64,8 @@ export default function DashboardPage() {
   const [showDeviceConfig, setShowDeviceConfig] = useState(false);
   const [restartSentAt, setRestartSentAt] = useState<number | null>(null);
   const [restartSawStale, setRestartSawStale] = useState(false);
+  const [announceMessage, setAnnounceMessage] = useState<string>("");
+  const lastAnnounceRef = useRef<{ runMode?: string; isRunning?: boolean; fault?: string }>({});
 
   // Status timestamp for staleness
   const updatedAt = snapshot?.updatedAt ?? null;
@@ -92,10 +95,33 @@ export default function DashboardPage() {
     modeCandidate === "AUTO" || modeCandidate === "MANUAL" || modeCandidate === "COUNTDOWN"
       ? modeCandidate
       : "AUTO";
-  const manualDesired = status?.manual_desired ?? control?.manual_desired ?? false;
+  // Use control node (instant write) as primary source for manual intent.
+  // Falls back to status.manual_desired (hardware echo) only when control has no value.
+  const manualDesired = control?.manual_desired ?? status?.manual_desired ?? false;
   const emergencyStopLatched = status?.emergency_stop_latched ?? false;
 
   const { pendingMode, setPendingMode } = usePendingControl(mode);
+  const controlsDisabled = !connected;
+
+  // Accessibility: announce state changes (WCAG 4.1.3)
+  useEffect(() => {
+    const runMode = status?.run_mode ?? "";
+    const isRunning = status?.is_running ?? false;
+    const fault = status?.last_fault_code ?? "";
+
+    const last = lastAnnounceRef.current;
+    if (last.isRunning === false && isRunning === true) {
+      setAnnounceMessage(`Pump started (${runMode || "unknown mode"}).`);
+    } else if (last.isRunning === true && isRunning === false) {
+      setAnnounceMessage(`Pump stopped (${runMode || "unknown mode"}).`);
+    } else if (fault && fault !== last.fault) {
+      setAnnounceMessage(`Alert: ${fault}.`);
+    } else if (runMode && runMode !== last.runMode) {
+      setAnnounceMessage(`Mode changed: ${runMode}.`);
+    }
+
+    lastAnnounceRef.current = { runMode, isRunning, fault };
+  }, [status?.is_running, status?.last_fault_code, status?.run_mode]);
 
   const handleRequestReboot = (): Promise<void> => {
     setRestartSentAt(Date.now());
@@ -125,13 +151,21 @@ export default function DashboardPage() {
   return (
     <AuthGuard>
       <div className="min-h-screen flex flex-col bg-[var(--page-bg)]">
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {announceMessage}
+        </div>
         <Header 
           isConnected={connected} 
           rssi={status?.wifi_rssi} 
           lastUpdated={updatedAt} 
+          isIdleMode={status?.is_idle_mode ?? false}
+          waterLevelPercent={status?.water_level_percent ?? null}
+          onOpenDeviceConfig={() => setShowDeviceConfig(true)}
+          onOpenAlertsConfig={() => setShowNotifications(true)}
+          onSignOut={handleSignOut}
         />
 
-        <main id="main" className="flex-1 w-full max-w-screen-lg mx-auto px-4 py-6 md:py-8 space-y-6">
+        <main id="main" className="flex-1 w-full max-w-screen-lg mx-auto px-4 py-8 md:py-10 space-y-8">
           
           {/* Restart Progress Banner */}
           {restartSentAt != null && (
@@ -161,7 +195,7 @@ export default function DashboardPage() {
           </ErrorBoundary>
 
           {/* Primary Operations Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             
             <ErrorBoundary componentName="TankLevelCard">
               <TankLevelCard 
@@ -186,35 +220,78 @@ export default function DashboardPage() {
                 bootReason={status?.last_boot_reason ?? "Unknown"}
                 totalCycles={status?.total_pump_cycles ?? 0}
                 cooldownRemainingSec={status?.pump_cooldown_remaining_sec}
+                requestedMode={pendingMode ?? mode}
                 isLoading={!status}
               />
             </ErrorBoundary>
 
             <ErrorBoundary componentName="ControlPanel">
                <ControlPanel 
-                  currentMode={mode}
+                  currentMode={pendingMode ?? mode}
                   manualDesired={manualDesired}
                   isEmergencyStopLatched={emergencyStopLatched}
-                  isPending={!!pendingMode}
+                  isPending={!!pendingMode || controlsDisabled}
                   countdownRemainingSec={status?.countdown_remaining_sec}
                   onSetMode={async (m) => {
+                    if (controlsDisabled) {
+                      toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
+                      return;
+                    }
                     setPendingMode(m);
-                    try { await setMode(m); } catch { toast({ kind: "error", title: "Mode change failed" }); }
+                    try { await setMode(m); } catch (err) { toast({ kind: "error", title: "Mode change failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
                   }}
-                  onSetManualDesired={setManualDesired}
-                  onStartCountdown={startCountdown}
-                  onAddCountdownTime={addCountdownTime}
-                  onEmergencyStop={triggerEmergencyStop}
-                  onResetStop={resetEmergencyStop}
+                  onSetManualDesired={async (on) => {
+                    if (controlsDisabled) {
+                      toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
+                      return;
+                    }
+                    try { await setManualDesired(on); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
+                  }}
+                  onStartCountdown={async (min) => {
+                    if (controlsDisabled) {
+                      toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
+                      return;
+                    }
+                    try { await startCountdown(min); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
+                  }}
+                  onAddCountdownTime={async (min) => {
+                    if (controlsDisabled) {
+                      toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
+                      return;
+                    }
+                    try { await addCountdownTime(min); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
+                  }}
+                  onStopCountdown={async () => {
+                    if (controlsDisabled) {
+                      toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
+                      return;
+                    }
+                    try { await stopCountdown(); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
+                  }}
+                  onEmergencyStop={async () => {
+                    if (controlsDisabled) {
+                      toast({ kind: "error", title: "Offline — reconnecting", detail: "Emergency Stop is unavailable while Firebase is disconnected." });
+                      return;
+                    }
+                    try { await triggerEmergencyStop(); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
+                  }}
+                  onResetStop={async () => {
+                    if (controlsDisabled) {
+                      toast({ kind: "error", title: "Offline — reconnecting", detail: "Reset is unavailable while Firebase is disconnected." });
+                      return;
+                    }
+                    try { await resetEmergencyStop(); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
+                  }}
                   startLevel={config?.pump_start_level}
                   stopLevel={config?.pump_stop_level}
+                  pumpRunMode={status?.run_mode ?? ""}
                   isLoading={!status}
                />
             </ErrorBoundary>
           </div>
 
           {/* Secondary Layout: History & Diagnostics */}
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-8">
             <ErrorBoundary componentName="DiagnosticsCard">
               <DiagnosticsCard 
                 freeHeap={status?.free_heap_bytes ?? 0}
@@ -253,12 +330,7 @@ export default function DashboardPage() {
             </ErrorBoundary>
           </div>
 
-          {/* Footer Actions */}
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-8 pb-4 opacity-60 hover:opacity-100 transition-opacity">
-             <button onClick={() => setShowDeviceConfig(true)} className="text-[10px] font-bold uppercase tracking-widest hover:text-sf-blue">Device Settings</button>
-             <button onClick={() => setShowNotifications(true)} className="text-[10px] font-bold uppercase tracking-widest hover:text-sf-blue">Alerts Config</button>
-             <button onClick={handleSignOut} className="text-[10px] font-bold uppercase tracking-widest hover:text-sf-red">Sign Out</button>
-          </div>
+          {/* Footer Actions Removed & Hoisted to Header */}
 
         </main>
       </div>
@@ -281,8 +353,8 @@ export default function DashboardPage() {
           onRequestReboot={handleRequestReboot}
           bypassLevelSensor={status?.bypass_level_sensor ?? false}
           bypassFlowSensor={status?.bypass_flow_sensor ?? false}
-          onSetBypassLevelSensor={setBypassLevelSensor}
-          onSetBypassFlowSensor={setBypassFlowSensor}
+          onSetBypassLevelSensor={isAdmin ? setBypassLevelSensor : undefined}
+          onSetBypassFlowSensor={isAdmin ? setBypassFlowSensor : undefined}
         />
       )}
       <InstallPrompt />

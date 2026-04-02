@@ -2,15 +2,20 @@
 
 #include "../state/state.h"
 #include "../connectivity/connectivity_cloud.h"
+#include "../utils/time_utils.h"
 
 void setPump(bool on) {
+  if (on == isRunning) return;
+
   if (on && !isRunning) {
     totalPumpCycles++;
     pumpOnSinceMs = millis();
+    LOG(LOG_LEVEL_INFO, "PUMP", "Relay ENERGIZED. Pump is now ON.");
   }
   if (!on && isRunning && pumpOnSinceMs > 0) {
     totalPumpRunSec += (millis() - pumpOnSinceMs) / 1000UL;
     pumpOnSinceMs = 0;
+    LOG(LOG_LEVEL_INFO, "PUMP", "Relay DE-ENERGIZED. Pump is now OFF.");
   }
 
   digitalWrite(RELAY_PIN, on ? LOW : HIGH);
@@ -34,7 +39,7 @@ void checkLevelSensorFailure(int sensorReading) {
     }
     if (isLevelSensorError && cfgAutoBypassOnSensorFail && !cfgBypassLevelSensor) {
       if (levelSensorFailStartMs == 0) levelSensorFailStartMs = millis();
-      if ((millis() - levelSensorFailStartMs) >= (unsigned long)cfgAutoBypassDelaySec * 1000UL) {
+      if (elapsedMillis32(millis(), levelSensorFailStartMs) >= (uint32_t)cfgAutoBypassDelaySec * 1000UL) {
         cfgBypassLevelSensor = true;
         autoBypassWasEngaged = true;
         autoBypassActive = true;
@@ -81,7 +86,7 @@ void checkFlowSensorStuck() {
     if (!flowStuckTimerActive) {
       flowStuckTimerActive = true;
       flowStuckStartMs = millis();
-    } else if (millis() - flowStuckStartMs >= FLOW_STUCK_TIMEOUT_MS) {
+    } else if (elapsedMillis32(millis(), flowStuckStartMs) >= FLOW_STUCK_TIMEOUT_MS) {
       if (!isFlowSensorError) {
         isFlowSensorError = true;
         lastFaultCode = "FLOW_SENSOR";
@@ -120,8 +125,8 @@ void checkOverflowProtection() {
     return;
   }
 
-  unsigned long maxRuntimeMs = (unsigned long)cfgMaxPumpRuntimeMin * 60000UL;
-  unsigned long elapsed = millis() - pumpAutoStartMs;
+  uint32_t maxRuntimeMs = (uint32_t)cfgMaxPumpRuntimeMin * 60000UL;
+  uint32_t elapsed = elapsedMillis32(millis(), pumpAutoStartMs);
 
   // Pre-warning for manual operation before hard cutoff.
   if (pumpMode == "MANUAL") {
@@ -159,8 +164,9 @@ void checkDryRunProtection() {
   // If remote sensor data is stale/unstable, do not advance a dry-run timer.
   // Comm loss must fail-safe by stopping the pump via freshness/stability gates,
   // not by misclassifying as DRY_RUN.
-  bool isLevelFresh = (levelLastUpdateMs > 0) && ((millis() - levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
-  if (!remoteSensorStable || !isLevelFresh) {
+  bool levelFreshGate = (levelLastUpdateMs > 0) &&
+                        (elapsedMillis32(millis(), levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
+  if (!remoteSensorStable || !levelFreshGate) {
     dryRunTimerActive = false;
     dryRunStartMs = 0;
     return;
@@ -173,8 +179,8 @@ void checkDryRunProtection() {
       dryRunStartMs = millis();
       LOG(LOG_LEVEL_WARN, "SAFETY", "[WARN] Dry-run condition detected. Timer started.");
     } else {
-      unsigned long elapsed = millis() - dryRunStartMs;
-      if (elapsed >= dryRunTimeoutMs) {
+      uint32_t elapsedDr = elapsedMillis32(millis(), dryRunStartMs);
+      if (elapsedDr >= dryRunTimeoutMs) {
         isDryRunError = true;
         // HARD SAFETY: always stop the pump regardless of mode.
         setPump(false);
@@ -225,15 +231,17 @@ void executePumpLogic() {
     return;
   }
 
-  // Sensor validity gate: require fresh/stable remote data unless bypass is enabled.
-  bool isLevelFresh = (levelLastUpdateMs > 0) && ((millis() - levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
-  bool allowStartFromSensors = remoteSensorStable && isLevelFresh && !isLevelSensorError && !cfgBypassLevelSensor;
+  // Sensor validity gate: single freshness snapshot for this loop (M-26).
+  uint32_t nowMsPump = millis();
+  const bool levelFreshOk = (levelLastUpdateMs > 0) &&
+    (elapsedMillis32(nowMsPump, levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
+  bool allowStartFromSensors = remoteSensorStable && levelFreshOk && !isLevelSensorError && !cfgBypassLevelSensor;
 
   // REFACTOR [H-07]: expose cooldown mode while off-timer is active.
-  if (!isRunning && pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
+  if (!isRunning && pumpOffStartMs > 0 && elapsedMillis32(nowMsPump, pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
     offTimerActive = true;
     offTimerEndMs = pumpOffStartMs + MIN_PUMP_OFF_TIME_MS;
-    uint32_t remainMs = (offTimerEndMs > millis()) ? (offTimerEndMs - millis()) : 0;
+    uint32_t remainMs = (offTimerEndMs > nowMsPump) ? (uint32_t)(offTimerEndMs - nowMsPump) : 0;
     pumpCooldownRemainingSec = (int)(remainMs / 1000UL);
     runMode = (pumpMode == "MANUAL") ? "MANUAL_COOLDOWN" : (pumpMode == "COUNTDOWN" ? "COUNTDOWN" : "AUTO_COOLDOWN");
   } else {
@@ -248,7 +256,7 @@ void executePumpLogic() {
     } else if (pumpMode == "COUNTDOWN" && isCountdownActive) {
       runMode = "COUNTDOWN";
     } else if (pumpMode == "COUNTDOWN" && !isCountdownActive) {
-      runMode = "AUTO_STANDBY";
+      runMode = "COUNTDOWN";
     } else if (pumpMode == "AUTO" && isRunning) {
       runMode = "AUTO";
     } else if (pumpMode == "AUTO" && !isRunning) {
@@ -268,8 +276,7 @@ void executePumpLogic() {
     // In MANUAL, we still require fresh/stable level data when bypass is OFF.
     if (!cfgBypassLevelSensor && !allowStartFromSensors) {
       if (isRunning) {
-        bool isLevelFresh = (levelLastUpdateMs > 0) && ((millis() - levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
-        lastFaultCode = (!remoteSensorStable || !isLevelFresh) ? "COMM_LOSS" : "STALE_LEVEL";
+        lastFaultCode = (!remoteSensorStable || !levelFreshOk) ? "COMM_LOSS" : "STALE_LEVEL";
         lastFaultMessage = "No fresh/stable level data. Pump stopped (failsafe).";
         setPump(false);
       }
@@ -289,7 +296,7 @@ void executePumpLogic() {
       setPump(false);
       return;
     }
-    if (!isRunning && pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
+    if (!isRunning && pumpOffStartMs > 0 && elapsedMillis32(nowMsPump, pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
       return;
     }
     setPump(true);
@@ -299,8 +306,7 @@ void executePumpLogic() {
   if (pumpMode == "COUNTDOWN") {
     if (isCountdownActive) {
       if (!cfgBypassLevelSensor && !allowStartFromSensors) {
-        bool isLevelFresh = (levelLastUpdateMs > 0) && ((millis() - levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
-        lastFaultCode = (!remoteSensorStable || !isLevelFresh) ? "COMM_LOSS" : "STALE_LEVEL";
+        lastFaultCode = (!remoteSensorStable || !levelFreshOk) ? "COMM_LOSS" : "STALE_LEVEL";
         lastFaultMessage = "No fresh/stable level data. Pump stopped (failsafe).";
         setPump(false);
         isCountdownActive = false; countdownEndMs = 0;
@@ -313,10 +319,12 @@ void executePumpLogic() {
         // Option B: mode stays COUNTDOWN
         return;
       }
-      if (!isRunning && pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
+      if (!isRunning && pumpOffStartMs > 0 && elapsedMillis32(nowMsPump, pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
         return;
       }
       setPump(true);
+    } else {
+      setPump(false);
     }
     return;
   }
@@ -337,8 +345,7 @@ void executePumpLogic() {
   if (!allowStartFromSensors) {
     if (isRunning) {
       LOG(LOG_LEVEL_ERROR, "AUTO", "No fresh/stable level data — stopping pump (fail-safe).");
-      bool isLevelFresh = (levelLastUpdateMs > 0) && ((millis() - levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
-      lastFaultCode = (!remoteSensorStable || !isLevelFresh) ? "COMM_LOSS" : "STALE_LEVEL";
+      lastFaultCode = (!remoteSensorStable || !levelFreshOk) ? "COMM_LOSS" : "STALE_LEVEL";
       lastFaultMessage = "No fresh/stable level data: controller stopped pump (failsafe).";
       setPump(false);
     }
@@ -346,7 +353,7 @@ void executePumpLogic() {
   }
 
   if (!isRunning && waterLevelPct <= cfgPumpStartLevel) {
-    if (pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
+    if (pumpOffStartMs > 0 && elapsedMillis32(nowMsPump, pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
       return;
     }
     LOG(LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Starting pump.", waterLevelPct);

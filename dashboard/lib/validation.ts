@@ -1,4 +1,8 @@
 import { DeviceConfig } from "./types";
+import {
+  DEVICE_CONFIG_ULTRASONIC_MAX_CM,
+  DEVICE_CONFIG_ULTRASONIC_MIN_CM,
+} from "./constants";
 
 /**
  * REFACTOR [D6.1]: Device Configuration Validation
@@ -15,11 +19,17 @@ export function validateDeviceConfig(form: DeviceConfig): ValidationResult {
   if (form.tank_full_cm >= form.tank_empty_cm) {
     return { isValid: false, error: "Full (cm) must be less than Empty (cm)." };
   }
-  if (form.tank_empty_cm < 5 || form.tank_empty_cm > 200) {
-    return { isValid: false, error: "Empty distance: enter 5\u2013200 cm." };
+  if (form.tank_empty_cm < DEVICE_CONFIG_ULTRASONIC_MIN_CM || form.tank_empty_cm > DEVICE_CONFIG_ULTRASONIC_MAX_CM) {
+    return {
+      isValid: false,
+      error: `Empty distance: enter ${DEVICE_CONFIG_ULTRASONIC_MIN_CM}-${DEVICE_CONFIG_ULTRASONIC_MAX_CM} cm.`,
+    };
   }
-  if (form.tank_full_cm < 1 || form.tank_full_cm >= form.tank_empty_cm) {
-    return { isValid: false, error: "Full distance: enter 1 to (Empty - 1) cm." };
+  if (form.tank_full_cm < DEVICE_CONFIG_ULTRASONIC_MIN_CM || form.tank_full_cm >= form.tank_empty_cm) {
+    return {
+      isValid: false,
+      error: `Full distance: enter ${DEVICE_CONFIG_ULTRASONIC_MIN_CM} to (Empty - 1) cm.`,
+    };
   }
 
   // Automation Thresholds
@@ -32,31 +42,105 @@ export function validateDeviceConfig(form: DeviceConfig): ValidationResult {
   if (form.pump_stop_level < 0 || form.pump_stop_level > 100) {
     return { isValid: false, error: "Pump stop: 0\u2013100%." };
   }
-  if (form.max_pump_runtime_min < 1 || form.max_pump_runtime_min > 480) {
-    return { isValid: false, error: "Max runtime: 1\u2013480 minutes." };
+  // Per QA spec: 30–480 minutes
+  if (form.max_pump_runtime_min < 30 || form.max_pump_runtime_min > 480) {
+    return { isValid: false, error: "Max runtime: 30\u2013480 minutes." };
   }
 
   // Safety Guards
   if (form.dry_run_threshold_lpm < 0.1 || form.dry_run_threshold_lpm > 10) {
     return { isValid: false, error: "No-flow threshold: 0.1\u201310 L/min." };
   }
-  if (form.dry_run_timeout_sec < 5 || form.dry_run_timeout_sec > 600) {
-    return { isValid: false, error: "Shutdown delay: 5\u2013600 sec." };
+  // Per QA spec: 10–300 sec
+  if (form.dry_run_timeout_sec < 10 || form.dry_run_timeout_sec > 300) {
+    return { isValid: false, error: "Shutdown delay: 10\u2013300 sec." };
   }
-  if (form.auto_bypass_on_sensor_fail && (form.auto_bypass_delay_sec == null || form.auto_bypass_delay_sec < 5 || form.auto_bypass_delay_sec > 600)) {
-    return { isValid: false, error: "Auto-bypass delay: 5\u2013600 sec when enabled." };
+  // Per QA spec: 10–300 sec
+  if (form.auto_bypass_on_sensor_fail && (form.auto_bypass_delay_sec == null || form.auto_bypass_delay_sec < 10 || form.auto_bypass_delay_sec > 300)) {
+    return { isValid: false, error: "Auto-bypass delay: 10\u2013300 sec when enabled." };
   }
 
   // Intervals & Calibration
   if (form.flow_calibration_factor < 0.1 || form.flow_calibration_factor > 20) {
     return { isValid: false, error: "Flow calibration factor: 0.1\u201320." };
   }
-  if (form.idle_sensor_interval_ms < 1000 || form.idle_sensor_interval_ms > 120000) {
-    return { isValid: false, error: "Idle level check: 1000\u2013120000 ms." };
+  // Per QA plan target: 5000–60000ms
+  if (form.idle_sensor_interval_ms < 5000 || form.idle_sensor_interval_ms > 60000) {
+    return { isValid: false, error: "Idle level check: 5000\u201360000 ms." };
   }
-  if (form.idle_firebase_interval_ms < 10000 || form.idle_firebase_interval_ms > 600000) {
-    return { isValid: false, error: "Sync interval: 10000\u2013600000 ms." };
+  // Per QA plan target: 10000–120000ms
+  if (form.idle_firebase_interval_ms < 10000 || form.idle_firebase_interval_ms > 120000) {
+    return { isValid: false, error: "Sync interval: 10000\u2013120000 ms." };
   }
 
   return { isValid: true, error: null };
+}
+
+export type DeviceConfigField =
+  | "tank_empty_cm"
+  | "tank_full_cm"
+  | "pump_start_level"
+  | "pump_stop_level"
+  | "dry_run_threshold_lpm"
+  | "dry_run_timeout_sec"
+  | "max_pump_runtime_min"
+  | "flow_calibration_factor"
+  | "idle_sensor_interval_ms"
+  | "idle_firebase_interval_ms"
+  | "auto_bypass_delay_sec";
+
+export type FieldErrors = Partial<Record<DeviceConfigField, string>>;
+
+// REFACTOR [D6]: Field-level validation for inline errors
+export function validateDeviceConfigFields(form: DeviceConfig): FieldErrors {
+  const errors: FieldErrors = {};
+
+  if (form.tank_full_cm >= form.tank_empty_cm) {
+    errors.tank_full_cm = "Must be less than Empty (cm).";
+    errors.tank_empty_cm = "Must be greater than Full (cm).";
+  }
+  if (form.tank_empty_cm < DEVICE_CONFIG_ULTRASONIC_MIN_CM || form.tank_empty_cm > DEVICE_CONFIG_ULTRASONIC_MAX_CM) {
+    errors.tank_empty_cm = `Enter ${DEVICE_CONFIG_ULTRASONIC_MIN_CM}-${DEVICE_CONFIG_ULTRASONIC_MAX_CM} cm.`;
+  }
+  if (form.tank_full_cm < DEVICE_CONFIG_ULTRASONIC_MIN_CM || form.tank_full_cm >= form.tank_empty_cm) {
+    errors.tank_full_cm = `Enter ${DEVICE_CONFIG_ULTRASONIC_MIN_CM} to (Empty - 1) cm.`;
+  }
+
+  if (form.pump_start_level < 0 || form.pump_start_level > 100) {
+    errors.pump_start_level = "Enter 0–100%.";
+  }
+  if (form.pump_stop_level < 0 || form.pump_stop_level > 100) {
+    errors.pump_stop_level = "Enter 0–100%.";
+  }
+  if (form.pump_start_level >= form.pump_stop_level) {
+    errors.pump_start_level = "Must be less than stop level.";
+    errors.pump_stop_level = "Must be greater than start level.";
+  }
+
+  if (form.max_pump_runtime_min < 30 || form.max_pump_runtime_min > 480) {
+    errors.max_pump_runtime_min = "Enter 30–480 min.";
+  }
+
+  if (form.dry_run_threshold_lpm < 0.1 || form.dry_run_threshold_lpm > 10) {
+    errors.dry_run_threshold_lpm = "Enter 0.1–10.0 LPM.";
+  }
+  if (form.dry_run_timeout_sec < 10 || form.dry_run_timeout_sec > 300) {
+    errors.dry_run_timeout_sec = "Enter 10–300 sec.";
+  }
+
+  if (form.auto_bypass_on_sensor_fail && (form.auto_bypass_delay_sec < 10 || form.auto_bypass_delay_sec > 300)) {
+    errors.auto_bypass_delay_sec = "Enter 10–300 sec.";
+  }
+
+  if (form.flow_calibration_factor < 0.1 || form.flow_calibration_factor > 20) {
+    errors.flow_calibration_factor = "Enter 0.1–20.0.";
+  }
+  if (form.idle_sensor_interval_ms < 5000 || form.idle_sensor_interval_ms > 60000) {
+    errors.idle_sensor_interval_ms = "Enter 5000–60000 ms.";
+  }
+  if (form.idle_firebase_interval_ms < 10000 || form.idle_firebase_interval_ms > 120000) {
+    errors.idle_firebase_interval_ms = "Enter 10000–120000 ms.";
+  }
+
+  return errors;
 }

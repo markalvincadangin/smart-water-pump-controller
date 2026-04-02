@@ -6,22 +6,23 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { usePumpData } from "@/lib/usePumpData";
 
 const mockUnsub = jest.fn();
-const mockOnValue = jest.fn(() => mockUnsub);
-const mockSet = jest.fn(() => Promise.resolve());
-const mockRef = jest.fn((db: unknown, path: string) => ({ _path: path }));
+const mockOnValue = jest.fn((..._args: any[]) => mockUnsub) as jest.Mock<any, any>;
+const mockSet = jest.fn<Promise<void>, [unknown, unknown]>(() => Promise.resolve());
+const mockRef = jest.fn((db: unknown, p: string) => ({ _path: p }));
 const mockOnAuthStateChanged = jest.fn((auth: unknown, cb: (u: unknown) => void) => {
   setTimeout(() => cb({ uid: "test-uid", email: "test@example.com" }), 0);
   return mockUnsub;
 });
 
 jest.mock("firebase/database", () => ({
-  ref: (...args: unknown[]) => mockRef(...args),
-  onValue: (...args: unknown[]) => mockOnValue(...args),
-  set: (...args: unknown[]) => mockSet(...args),
+  ref: (db: unknown, p: string) => mockRef(db, p),
+  onValue: (r: unknown, onData: (snap: unknown) => void, onError?: (err: unknown) => void) =>
+    mockOnValue(r, onData, onError),
+  set: (r: unknown, v: unknown) => mockSet(r, v),
 }));
 
 jest.mock("firebase/auth", () => ({
-  onAuthStateChanged: (...args: unknown[]) => mockOnAuthStateChanged(...args),
+  onAuthStateChanged: (auth: unknown, cb: (u: unknown) => void) => mockOnAuthStateChanged(auth, cb),
 }));
 
 jest.mock("@/lib/firebase", () => ({
@@ -107,8 +108,8 @@ describe("usePumpData", () => {
       result.current.startCountdown(0);
     });
 
-    const setCalls = mockSet.mock.calls;
-    const durationCall = setCalls.find((c: unknown[]) => typeof c[1] === "number");
+    const setCalls = mockSet.mock.calls as Array<[unknown, unknown]>;
+    const durationCall = setCalls.find((c) => typeof c[1] === "number");
     expect(durationCall?.[1]).toBe(1);
   });
 

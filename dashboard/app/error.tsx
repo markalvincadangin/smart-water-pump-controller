@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export default function Error({
   error,
   reset,
@@ -23,12 +25,12 @@ export default function Error({
           >
             Retry
           </button>
-          <a
+          <Link
             href="/"
             className="flex-1 px-4 py-2.5 rounded-xl border border-surface-4 text-text-secondary font-mono text-sm text-center hover:bg-surface-3 transition-colors"
           >
             Home
-          </a>
+          </Link>
         </div>
         {error?.digest && (
           <p className="text-[10px] font-mono text-text-muted mt-4">Ref: {error.digest}</p>

@@ -12,17 +12,19 @@ interface PumpStatusCardProps {
   totalCycles: number;
   cooldownRemainingSec?: number;
   isLoading?: boolean;
+  /** The mode requested via control node — shows pending if different from runMode category. */
+  requestedMode?: "AUTO" | "MANUAL" | "COUNTDOWN";
 }
 
-const MODE_LABELS: Record<string, { label: string; chipClass: string }> = {
-  'AUTO_STANDBY':    { label: 'AUTO — Standby',       chipClass: 'bg-sf-gray-50 text-sf-gray-600 border-sf-gray-100' },
-  'AUTO':            { label: 'AUTO — Running',        chipClass: 'bg-sf-teal-light text-sf-teal border-sf-teal/20' },
-  'AUTO_COOLDOWN':   { label: 'AUTO — Cooldown',       chipClass: 'bg-sf-blue-light text-sf-blue-mid border-sf-blue/20' },
-  'MANUAL_ON':       { label: 'MANUAL — On',           chipClass: 'bg-sf-teal-light text-sf-teal border-sf-teal/20' },
-  'MANUAL_OFF':      { label: 'MANUAL — Off',          chipClass: 'bg-sf-gray-50 text-sf-gray-600 border-sf-gray-100' },
-  'MANUAL_COOLDOWN': { label: 'MANUAL — Cooldown',     chipClass: 'bg-sf-blue-light text-sf-blue-mid border-sf-blue/20' },
-  'COUNTDOWN':       { label: 'Countdown',             chipClass: 'bg-sf-blue-light text-sf-blue border-sf-blue/20' },
-  'STOPPED':         { label: 'Emergency Stop',        chipClass: 'bg-sf-red-light text-sf-red border-sf-red/20 outline outline-sf-red/30' },
+const MODE_LABELS: Record<string, { label: string; chipClass: string; dotClass: string }> = {
+  'AUTO_STANDBY':    { label: 'AUTO — Standby',        chipClass: 'text-[var(--text-secondary)] border-[var(--card-border)]', dotClass: 'bg-[var(--text-muted)]' },
+  'AUTO':            { label: 'AUTO — Running',        chipClass: 'text-sf-teal border-sf-teal/30 bg-sf-teal/5', dotClass: 'bg-sf-teal animate-pulse' },
+  'AUTO_COOLDOWN':   { label: 'AUTO — Cooldown',       chipClass: 'text-sf-blue border-sf-blue/30 bg-sf-blue/5', dotClass: 'bg-sf-blue' },
+  'MANUAL_ON':       { label: 'MANUAL — On',           chipClass: 'text-sf-teal border-sf-teal/30 bg-sf-teal/5', dotClass: 'bg-sf-teal animate-pulse' },
+  'MANUAL_OFF':      { label: 'MANUAL — Off',          chipClass: 'text-[var(--text-secondary)] border-[var(--card-border)]', dotClass: 'bg-[var(--text-muted)]' },
+  'MANUAL_COOLDOWN': { label: 'MANUAL — Cooldown',     chipClass: 'text-sf-blue border-sf-blue/30 bg-sf-blue/5', dotClass: 'bg-sf-blue' },
+  'COUNTDOWN':       { label: 'Countdown Active',      chipClass: 'text-sf-blue border-sf-blue/30 bg-sf-blue/5', dotClass: 'bg-sf-blue animate-pulse' },
+  'STOPPED':         { label: 'Emergency Stop',        chipClass: 'text-sf-red border-sf-red/30 bg-sf-red/5', dotClass: 'bg-sf-red animate-pulse' },
 };
 
 /**
@@ -38,8 +40,18 @@ export default function PumpStatusCard({
   totalCycles,
   cooldownRemainingSec = 0,
   isLoading = false,
+  requestedMode,
 }: PumpStatusCardProps) {
   const [localCooldown, setLocalCooldown] = useState(cooldownRemainingSec);
+
+  // Derive the broad category of the current status run_mode
+  const runModeCategory: "AUTO" | "MANUAL" | "COUNTDOWN" | null =
+    runMode.startsWith("MANUAL") ? "MANUAL" :
+    runMode.startsWith("COUNTDOWN") ? "COUNTDOWN" :
+    (runMode.startsWith("AUTO") || runMode === "AUTO_STANDBY") ? "AUTO" : null;
+
+  // True when the requested mode (from control node) doesn't match actual hardware state
+  const isPendingModeChange = !!requestedMode && runModeCategory !== null && requestedMode !== runModeCategory;
 
   useEffect(() => {
     setLocalCooldown(cooldownRemainingSec);
@@ -72,7 +84,7 @@ export default function PumpStatusCard({
     );
   }
 
-  const activeMode = MODE_LABELS[runMode] || { label: runMode, chipClass: 'bg-sf-gray-50 text-sf-gray-400' };
+  const activeMode = MODE_LABELS[runMode] || { label: runMode, chipClass: 'text-[var(--text-muted)] border-[var(--card-border)]', dotClass: 'bg-[var(--text-muted)]' };
   const showCooldown = runMode.endsWith('_COOLDOWN') && localCooldown > 0;
 
   const formatUptime = (min: number) => {
@@ -84,42 +96,51 @@ export default function PumpStatusCard({
 
   return (
     <div className="card p-6 flex flex-col gap-6">
-      <h3 className="card-header">Pump Status</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)] self-start">Pump Status</h3>
 
       {/* Mode Chip */}
       <div 
         className={clsx(
-          "status-chip border transition-all duration-300 transform scale-105 origin-left px-3 py-1.5 inline-flex",
+          "border rounded-full px-3 py-1.5 inline-flex items-center gap-2 self-start transition-colors duration-300 text-sm font-medium",
           activeMode.chipClass
         )}
         role="status"
         aria-live="polite"
       >
+        <div className={clsx("w-2 h-2 rounded-full", activeMode.dotClass)} />
         {activeMode.label}
         {showCooldown && (
-          <span className="ml-1.5 font-mono opacity-80 border-l border-current pl-1.5">
+          <span className="ml-1 font-mono opacity-80 border-l border-current pl-2 text-xs">
             {localCooldown}s
           </span>
         )}
       </div>
 
+      {/* Pending mode indicator — shows while ESP32 is acknowledging the mode change */}
+      {isPendingModeChange && (
+        <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-[var(--text-muted)] animate-pulse">
+          <div className="w-1.5 h-1.5 rounded-full bg-sf-blue animate-ping" />
+          applying {requestedMode?.toLowerCase()} mode…
+        </div>
+      )}
+
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 gap-y-4 mt-2">
+      <div className="grid grid-cols-1 gap-y-3 mt-auto">
         <MetricRow 
-          label="Flow" 
-          value={isRunning ? `${flowRate.toFixed(2)} LPM` : "— LPM"} 
+          label="Flow Indicator" 
+          value={isRunning ? `${flowRate.toFixed(2)} LPM` : "—"} 
           isHighlighted={isRunning && flowRate > 0}
         />
         <MetricRow 
-          label="Uptime" 
+          label="System Uptime" 
           value={formatUptime(uptimeMin)} 
         />
         <MetricRow 
-          label="Boot" 
+          label="Boot Reason" 
           value={bootReason} 
         />
         <MetricRow 
-          label="Cycles" 
+          label="Total Cycles" 
           value={totalCycles.toLocaleString()} 
         />
       </div>
@@ -129,12 +150,12 @@ export default function PumpStatusCard({
 
 function MetricRow({ label, value, isHighlighted }: { label: string; value: string; isHighlighted?: boolean }) {
   return (
-    <div className="flex items-center justify-between group transition-colors">
-      <span className="text-xs font-mono font-medium text-[var(--text-muted)] uppercase tracking-wider">
+    <div className="flex items-end justify-between group border-b border-[var(--card-border)] border-dashed pb-2 last:border-0 last:pb-0">
+      <span className="text-xs font-medium text-[var(--text-secondary)]">
         {label}
       </span>
       <span className={clsx(
-        "font-mono text-sm sm:text-base font-semibold transition-colors tabular-nums",
+        "font-mono text-sm font-semibold transition-colors tabular-nums tracking-tight",
         isHighlighted ? "text-sf-teal" : "text-[var(--text-primary)]"
       )}>
         {value}

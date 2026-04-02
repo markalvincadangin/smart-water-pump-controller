@@ -3,16 +3,17 @@
  */
 import { renderHook, act } from "@testing-library/react";
 import { usePendingControl } from "@/lib/usePendingControl";
+import type { PumpControl } from "@/lib/types";
 
 // Mock toast so we can assert it was called
-const toastSpy = jest.fn();
+const mockToast = jest.fn();
 jest.mock("@/lib/toast", () => ({
-  toast: (msg: unknown) => toastSpy(msg),
+  toast: (msg: unknown) => mockToast(msg),
 }));
 
 describe("usePendingControl", () => {
   beforeEach(() => {
-    toastSpy.mockClear();
+    mockToast.mockClear();
   });
 
   it("initializes with null pendingMode and false pendingAck", () => {
@@ -32,16 +33,16 @@ describe("usePendingControl", () => {
   it("when currentMode equals pendingMode, clears pendingMode and shows toast", () => {
     const { result, rerender } = renderHook(
       ({ currentMode }) => usePendingControl(currentMode),
-      { initialProps: { currentMode: "AUTO" as const } }
+      { initialProps: { currentMode: "AUTO" as PumpControl["mode"] } }
     );
     act(() => {
       result.current.setPendingMode("COUNTDOWN");
     });
     expect(result.current.pendingMode).toBe("COUNTDOWN");
 
-    rerender({ currentMode: "COUNTDOWN" });
+    rerender({ currentMode: "COUNTDOWN" as PumpControl["mode"] });
     expect(result.current.pendingMode).toBeNull();
-    expect(toastSpy).toHaveBeenCalledWith(
+    expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "success",
         title: "Mode confirmed: COUNTDOWN",
@@ -52,13 +53,13 @@ describe("usePendingControl", () => {
   it("does not clear pendingMode when currentMode differs", () => {
     const { result, rerender } = renderHook(
       ({ currentMode }) => usePendingControl(currentMode),
-      { initialProps: { currentMode: "AUTO" as const } }
+      { initialProps: { currentMode: "AUTO" as PumpControl["mode"] } }
     );
     act(() => {
       result.current.setPendingMode("MANUAL");
     });
     rerender({ currentMode: "AUTO" });
     expect(result.current.pendingMode).toBe("MANUAL");
-    expect(toastSpy).not.toHaveBeenCalled();
+    expect(mockToast).not.toHaveBeenCalled();
   });
 });
