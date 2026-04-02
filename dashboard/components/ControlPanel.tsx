@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Play, Square, Timer, ShieldAlert, Check, Plus } from "lucide-react";
 import clsx from "clsx";
+import type { ControlMode } from "@/lib/types";
 
 interface ControlPanelProps {
-  currentMode: string; // AUTO, MANUAL, COUNTDOWN
+  currentMode: ControlMode; // AUTO, MANUAL, COUNTDOWN
   manualDesired: boolean;
   isEmergencyStopLatched: boolean;
   isPending?: boolean;
@@ -14,11 +15,14 @@ interface ControlPanelProps {
   onSetManualDesired: (on: boolean) => void;
   onStartCountdown: (min: number) => void;
   onAddCountdownTime: (min: number) => void;
+  onStopCountdown?: () => void;
   onEmergencyStop: () => void;
   onResetStop: () => void;
   startLevel?: number;
   stopLevel?: number;
   isLoading?: boolean;
+  /** Actual hardware run_mode from status — used to show cooldown feedback. */
+  pumpRunMode?: string;
 }
 
 /**
@@ -36,24 +40,44 @@ export default function ControlPanel({
   onSetManualDesired,
   onStartCountdown,
   onAddCountdownTime,
+  onStopCountdown,
   onEmergencyStop,
   onResetStop,
   startLevel,
   stopLevel,
   isLoading = false,
+  pumpRunMode = "",
 }: ControlPanelProps) {
   const [timerDuration, setTimerDuration] = useState(15);
   const [confirmingEStop, setConfirmingEStop] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [confirmingManualMode, setConfirmingManualMode] = useState(false);
 
+  // Smooth local timer interpolation to prevent jumping every 3s from Firebase
+  const [localSec, setLocalSec] = useState(countdownRemainingSec);
+
+  useEffect(() => {
+    // If we drift by more than 3 seconds or the timer just started/stopped, snap to server truth
+    if (Math.abs(localSec - countdownRemainingSec) > 3) {
+      setLocalSec(countdownRemainingSec);
+    }
+  }, [countdownRemainingSec, localSec]);
+
+  useEffect(() => {
+    if (currentMode !== "COUNTDOWN" || localSec <= 0) return;
+    const interval = setInterval(() => {
+      setLocalSec((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [currentMode, localSec]);
+
   if (isLoading) {
     return (
       <div className="card p-6 space-y-6 animate-pulse min-h-[300px]">
         <div className="h-4 w-24 skeleton" />
-        <div className="h-10 w-full skeleton rounded-chip" />
-        <div className="h-24 w-full skeleton rounded-lg" />
-        <div className="h-12 w-full skeleton rounded-chip mt-auto" />
+        <div className="h-10 w-full skeleton rounded-md" />
+        <div className="h-24 w-full skeleton" />
+        <div className="h-12 w-full skeleton rounded-md mt-auto" />
       </div>
     );
   }
@@ -77,27 +101,27 @@ export default function ControlPanel({
 
   return (
     <div className="card p-6 flex flex-col gap-6 relative">
-      <h3 className="card-header">Controls</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)] self-start">Control Panel</h3>
 
       {/* Mode Selector (Segmented) */}
-      <div className="flex p-1 bg-sf-gray-50 rounded-chip border border-[var(--card-border)]/50 gap-1">
+      <div className="flex p-1 bg-sf-gray-100 dark:bg-sf-gray-900 rounded-lg border border-[var(--card-border)]/50 gap-1">
         <ModeButton 
           id="AUTO" 
-          label="AUTO" 
+          label="Auto" 
           active={currentMode === "AUTO"} 
           onClick={() => handleModeChange("AUTO")} 
           disabled={isPending || isEmergencyStopLatched}
         />
         <ModeButton 
           id="MANUAL" 
-          label="MANUAL" 
+          label="Manual" 
           active={currentMode === "MANUAL"} 
           onClick={() => handleModeChange("MANUAL")} 
           disabled={isPending || isEmergencyStopLatched}
         />
         <ModeButton 
           id="TIMER" 
-          label="TIMER" 
+          label="Timer" 
           active={currentMode === "COUNTDOWN"} 
           onClick={() => handleModeChange("COUNTDOWN")} 
           disabled={isPending || isEmergencyStopLatched}
@@ -105,7 +129,7 @@ export default function ControlPanel({
       </div>
 
       {/* Mode-Specific Actions */}
-      <div className="flex-1 min-h-[100px] flex flex-col justify-center border-y border-[var(--card-border)]/30 py-4">
+      <div className="flex-1 min-h-[100px] flex flex-col justify-center border-y border-[var(--card-border)]/50 py-5">
         
         {/* MANUAL: Pump Toggle */}
         {currentMode === "MANUAL" && !confirmingManualMode && (
@@ -113,27 +137,36 @@ export default function ControlPanel({
              <button
                 onClick={() => onSetManualDesired(!manualDesired)}
                 disabled={isPending}
+                aria-label={manualDesired ? "Stop pump (manual mode)" : "Start pump (manual mode)"}
                 className={clsx(
-                  "w-full flex items-center justify-center gap-2 py-3 rounded-chip font-bold transition-all transform active:scale-95",
-                  manualDesired ? "btn-ghost" : "btn-primary"
+                  "w-full flex items-center justify-center gap-2 py-3 rounded-md font-medium transition-all transform active:scale-[0.98] border shadow-sm",
+                  manualDesired 
+                    ? "bg-[var(--card-bg)] text-[var(--text-primary)] border-[var(--card-border)] hover:bg-sf-gray-50 dark:hover:bg-sf-gray-900" 
+                    : "bg-[var(--text-primary)] text-[var(--page-bg)] border-transparent hover:opacity-90"
                 )}
              >
-                {manualDesired ? <Square size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                {manualDesired ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
                 {manualDesired ? "Stop Pump" : "Start Pump"}
              </button>
-             <p className="text-[10px] text-center text-[var(--text-muted)] italic">
+             <p className="text-[11px] text-center text-[var(--text-muted)] mt-1">
                Manual mode bypasses automatic level thresholds.
              </p>
+             {manualDesired && pumpRunMode === "MANUAL_COOLDOWN" && (
+               <div className="flex items-center justify-center gap-2 text-[11px] font-mono text-sf-blue animate-pulse mt-1">
+                 <div className="w-1.5 h-1.5 rounded-full bg-sf-blue" />
+                 Cooldown active — pump will start shortly
+               </div>
+             )}
           </div>
         )}
 
         {/* Manual Confirm Speedbump */}
         {confirmingManualMode && (
-           <div className="bg-sf-amber-light/50 border border-sf-amber/20 rounded-lg p-4 animate-slide-up">
-              <p className="text-sm font-medium text-sf-amber-dark mb-3">Switch to manual control?</p>
+           <div className="bg-sf-amber/10 border border-sf-amber/20 rounded-md p-4 animate-slide-up">
+              <p className="text-sm font-medium text-sf-amber-dark dark:text-sf-amber mb-4">Switch to manual control?</p>
               <div className="flex gap-2">
-                 <button onClick={confirmManualMode} className="btn-primary flex-1 py-2 text-sm">Switch</button>
-                 <button onClick={() => setConfirmingManualMode(false)} className="btn-ghost flex-1 py-2 text-sm">Cancel</button>
+                 <button onClick={confirmManualMode} className="bg-sf-amber text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm hover:bg-sf-amber-dark transition-colors flex-1">Switch</button>
+                 <button onClick={() => setConfirmingManualMode(false)} className="bg-[var(--card-bg)] border border-[var(--card-border)] px-4 py-2 rounded-md text-sm font-medium hover:bg-sf-gray-50 transition-colors flex-1">Cancel</button>
               </div>
            </div>
         )}
@@ -141,24 +174,35 @@ export default function ControlPanel({
         {/* TIMER (Countdown) Controls */}
         {currentMode === "COUNTDOWN" && (
            <div className="flex flex-col gap-4 animate-fade-in">
-              {countdownRemainingSec > 0 ? (
-                <div className="flex flex-col gap-3">
-                   <div className="flex items-center justify-between px-2">
-                      <span className="text-xs font-mono font-medium text-sf-blue">Time remaining</span>
-                      <span className="font-mono text-xl font-bold text-sf-blue">
-                         {Math.floor(countdownRemainingSec / 60)}:{(countdownRemainingSec % 60).toString().padStart(2, '0')}
+              {localSec > 0 ? (
+                <div className="flex flex-col gap-4">
+                   <div className="flex items-center justify-between px-1">
+                      <span className="text-xs font-medium text-[var(--text-secondary)]">Time remaining</span>
+                      <span className="font-mono text-2xl font-semibold tabular-nums tracking-tight">
+                         {Math.floor(localSec / 60)}:{(localSec % 60).toString().padStart(2, '0')}
                       </span>
                    </div>
-                   <button 
-                      onClick={() => onAddCountdownTime(5)}
-                      className="btn-ghost flex items-center justify-center gap-2 py-2 text-sm"
-                   >
-                      <Plus size={16} />
-                      Add 5 minutes
-                   </button>
+                   <div className="flex gap-2">
+                       <button 
+                          onClick={() => onAddCountdownTime(5)}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md border border-[var(--card-border)] hover:bg-sf-gray-50 dark:hover:bg-sf-gray-900 text-sm font-medium transition-colors"
+                          aria-label="Add 5 minutes to countdown"
+                       >
+                          <Plus size={16} />
+                          Add 5 min
+                       </button>
+                       <button 
+                          onClick={() => onStopCountdown?.()}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md border border-sf-amber/30 bg-sf-amber/10 text-sf-amber-dark dark:text-sf-amber hover:bg-sf-amber/20 text-sm font-medium transition-colors"
+                          aria-label="Stop countdown timer"
+                       >
+                          <Square size={16} />
+                          Stop Timer
+                       </button>
+                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-4">
                     <div className="flex items-center gap-3">
                        <input 
                           type="number" 
@@ -166,16 +210,18 @@ export default function ControlPanel({
                           max="120"
                           value={timerDuration}
                           onChange={(e) => setTimerDuration(parseInt(e.target.value) || 1)}
-                          className="flex-1 bg-white border border-[var(--card-border)] rounded-chip px-3 py-2 font-mono text-sm focus:outline-sf-blue"
+                          aria-label="Countdown duration minutes"
+                          className="flex-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-md px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-sf-blue/50"
                        />
                        <span className="text-xs font-medium text-[var(--text-muted)]">min</span>
                     </div>
                     <button 
                        onClick={() => onStartCountdown(timerDuration)}
                        disabled={isPending}
-                       className="btn-primary py-2.5 flex items-center justify-center gap-2"
+                       className="bg-[var(--text-primary)] text-[var(--page-bg)] py-2.5 rounded-md flex items-center justify-center gap-2 font-medium hover:opacity-90 transition-opacity active:scale-[0.98]"
+                       aria-label="Start countdown timer"
                     >
-                       <Timer size={18} />
+                       <Timer size={16} />
                        Start Timer
                     </button>
                 </div>
@@ -185,13 +231,13 @@ export default function ControlPanel({
 
         {/* AUTO state info */}
         {currentMode === "AUTO" && (
-          <div className="flex flex-col items-center justify-center gap-2 text-[var(--text-muted)] animate-fade-in">
-             <div className="h-10 w-10 rounded-full bg-sf-teal-light flex items-center justify-center text-sf-teal mb-1">
-                <Check size={20} />
+          <div className="flex flex-col items-center justify-center gap-3 text-[var(--text-muted)] animate-fade-in py-2">
+             <div className="h-8 w-8 rounded-full bg-sf-green/10 flex items-center justify-center text-sf-green">
+                <Check size={16} />
              </div>
-             <p className="text-xs font-medium uppercase tracking-wider">System Automatic</p>
-             <p className="text-[10px] text-center max-w-[160px] leading-relaxed">
-                Pump will start at {startLevel ?? 20}% and stop at {stopLevel ?? 90}%.
+             <p className="text-sm font-medium text-[var(--text-secondary)]">System Automatic</p>
+             <p className="text-xs text-center max-w-[180px] leading-relaxed">
+                Pump starts at {startLevel ?? 20}% and stops at {stopLevel ?? 90}%.
              </p>
           </div>
         )}
@@ -204,17 +250,36 @@ export default function ControlPanel({
              {!confirmingEStop ? (
                <button 
                   onClick={() => setConfirmingEStop(true)}
-                  className="btn-danger w-full flex items-center justify-center gap-2 py-3 shadow-lg shadow-sf-red/10 group active:scale-95 transition-transform"
+                  className="w-full flex items-center justify-center gap-2 py-3 border border-sf-red/30 bg-sf-red/5 text-sf-red font-semibold rounded-md hover:bg-sf-red hover:text-white transition-all transform active:scale-[0.98]"
+                  aria-label="Emergency stop — open confirmation"
+                  disabled={isPending}
                >
-                  <ShieldAlert size={18} className="group-hover:animate-pulse" />
-                  EMERGENCY STOP
+                  <ShieldAlert size={16} />
+                  Emergency Stop
                </button>
              ) : (
-               <div className="bg-sf-red-light border border-sf-red/20 rounded-chip p-3 flex flex-col gap-3 animate-slide-up shadow-xl shadow-sf-red/5">
-                  <span className="text-sf-red text-sm font-bold text-center">🛑 STOP PUMP NOW?</span>
+               <div className="bg-sf-red/10 border border-sf-red/30 rounded-md p-4 flex flex-col gap-4 animate-slide-up shadow-sm">
+                  <span className="text-sf-red text-sm font-semibold text-center">Stop pump immediately?</span>
                   <div className="flex gap-2">
-                     <button onClick={onEmergencyStop} className="btn-danger flex-1 py-1.5 text-xs">CONFIRM</button>
-                     <button onClick={() => setConfirmingEStop(false)} className="btn-ghost flex-1 py-1.5 text-xs">CANCEL</button>
+                     <button
+                       onClick={() => {
+                         onEmergencyStop();
+                         setConfirmingEStop(false);
+                       }}
+                       className="bg-sf-red text-white flex-1 py-2 rounded-md font-medium text-sm hover:bg-sf-red-dark transition-colors"
+                       aria-label="Confirm emergency stop"
+                       disabled={isPending}
+                     >
+                       Confirm
+                     </button>
+                     <button
+                       onClick={() => setConfirmingEStop(false)}
+                       className="border border-sf-red/30 text-sf-red hover:bg-sf-red/5 flex-1 py-2 rounded-md font-medium text-sm transition-colors"
+                       aria-label="Cancel emergency stop confirmation"
+                       disabled={isPending}
+                     >
+                       Cancel
+                     </button>
                   </div>
                </div>
              )}
@@ -224,22 +289,55 @@ export default function ControlPanel({
               {!confirmingReset ? (
                 <button 
                    onClick={() => setConfirmingReset(true)}
-                   className="btn-primary w-full py-3 animate-pulse"
+                   className="w-full flex items-center justify-center gap-2 py-3 bg-[var(--text-primary)] text-[var(--page-bg)] font-semibold rounded-md animate-pulse"
+                   aria-label="Reset latched emergency stop — open confirmation"
+                   disabled={isPending}
                 >
-                   RESET LATCHED STOP
+                   Reset Latched Stop
                 </button>
               ) : (
-                <div className="bg-sf-blue-light border border-sf-blue/20 rounded-chip p-3 flex flex-col gap-3 animate-slide-up">
-                   <span className="text-sf-blue text-sm font-bold text-center">RESET SYSTEM?</span>
+                <div className="bg-sf-blue/10 border border-sf-blue/30 rounded-md p-4 flex flex-col gap-4 animate-slide-up">
+                   <span className="text-sf-blue text-sm font-semibold text-center">Reset system to Auto?</span>
                    <div className="flex gap-2">
-                      <button onClick={onResetStop} className="btn-primary flex-1 py-1.5 text-xs">RESET</button>
-                      <button onClick={() => setConfirmingReset(false)} className="btn-ghost flex-1 py-1.5 text-xs">CANCEL</button>
+                      <button
+                        onClick={() => {
+                          onResetStop();
+                          setConfirmingReset(false);
+                        }}
+                        className="bg-sf-blue text-white flex-1 py-2 rounded-md font-medium text-sm hover:opacity-90 transition-opacity"
+                        aria-label="Confirm reset emergency stop latch"
+                        disabled={isPending}
+                      >
+                        Reset
+                      </button>
+                      <button
+                        onClick={() => setConfirmingReset(false)}
+                        className="border border-sf-blue/30 text-sf-blue hover:bg-sf-blue/5 flex-1 py-2 rounded-md font-medium text-sm transition-colors"
+                        aria-label="Cancel reset confirmation"
+                        disabled={isPending}
+                      >
+                        Cancel
+                      </button>
                    </div>
                 </div>
               )}
            </>
          )}
       </div>
+
+      {/* Mobile-only sticky E-stop bar (always reachable) */}
+      {!isEmergencyStopLatched && (
+        <div className="fixed bottom-0 left-0 right-0 p-3 bg-[var(--card-bg)] border-t border-[var(--card-border)] md:hidden z-40">
+          <button
+            className="w-full flex items-center justify-center gap-2 py-3 bg-sf-red text-white font-semibold rounded-md hover:bg-sf-red-dark active:scale-[0.98] transition-all"
+            aria-label="Emergency stop — stops pump immediately"
+            onClick={() => setConfirmingEStop(true)}
+            disabled={isPending}
+          >
+            <ShieldAlert size={16} /> Emergency Stop
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -258,10 +356,10 @@ function ModeButton({ label, active, onClick, disabled }: ModeButtonProps) {
       onClick={onClick}
       disabled={disabled}
       className={clsx(
-        "flex-1 py-2 text-[10px] font-bold tracking-widest rounded-chip transition-all",
+        "flex-1 py-1.5 text-xs font-semibold rounded-md transition-all",
         active 
-          ? "bg-sf-blue text-white shadow-sm" 
-          : "text-[var(--text-muted)] hover:bg-sf-gray-100 disabled:opacity-50"
+          ? "bg-[var(--card-bg)] text-[var(--text-primary)] shadow-sm border border-[var(--card-border)]/50" 
+          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 border border-transparent"
       )}
     >
       {label}

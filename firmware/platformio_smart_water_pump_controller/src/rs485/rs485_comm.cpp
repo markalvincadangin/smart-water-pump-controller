@@ -2,6 +2,7 @@
 
 #include "../state/state.h"
 #include "../utils/crc16_modbus.h"
+#include "../utils/time_utils.h"
 
 static void rs485SetTx(bool tx) {
   digitalWrite(RS485_DE_RE_PIN, tx ? HIGH : LOW);
@@ -20,7 +21,7 @@ static bool rs485ReadFrame(char* out, size_t outLen, uint32_t timeoutMs) {
   size_t n = 0;
   bool inFrame = false;
 
-  while ((millis() - start) < timeoutMs) {
+  while (elapsedMillis32(millis(), start) < timeoutMs) {
     while (Serial2.available() > 0) {
       int c = Serial2.read();
       if (c < 0) break;
@@ -99,10 +100,14 @@ static bool validateSensorResponseFrame(const char* payload) {
   const char* crcPos = strstr(payload, "CRC:");
   if (!crcPos) return false;
   if (strstr(crcPos + 1, "CRC:") != nullptr) return false;
-  if (strlen(crcPos) != 8) return false;  // CRC: + exactly 4 hex chars
+  if (strlen(crcPos) < 8) return false;  // CRC: + at least 4 hex chars
 
-  // CRC token must be the last token in payload.
-  if (strchr(crcPos + 4, ';') != nullptr) return false;
+  // Require first 4 CRC characters to be hex, allow optional trailing separators.
+  for (int i = 0; i < 4; i++) {
+    char c = crcPos[4 + i];
+    bool ok = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
+    if (!ok) return false;
+  }
 
   // Require at least one key-value separator to ensure basic frame shape.
   if (strchr(payload, ';') == nullptr) return false;
@@ -151,8 +156,14 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   (void)parseUIntField(payload, "LDSC:", ldsc);
 
   if (dist >= 0.0f) {
-    // Sanity range only (protocol-level). Calibration happens on master via cfgTank*.
-    if (!(dist >= 1.0f) || dist > 300.0f) return false;
+    // Keep protocol tolerant: if DIST is out of sane range, ignore DIST and keep LVL.
+    // This avoids false offline states from otherwise valid CRC frames.
+    if (!(dist >= 1.0f) || dist > 500.0f) {
+      dist = -1.0f;
+    }
+  }
+
+  if (dist >= 0.0f) {
     float rangeCm = (float)(cfgTankEmptyCm - cfgTankFullCm);
     if (rangeCm <= 0.1f) return false;
     float pct = 100.0f * ((float)cfgTankEmptyCm - dist) / rangeCm;
@@ -181,12 +192,13 @@ void rs485_init() {
 }
 
 static bool pollRemoteSensorNodeInternal() {
-  unsigned long now = millis();
+  uint32_t now = millis();
 
-  remoteSensorOnline = (remoteSensorLastRxMs > 0) && ((now - remoteSensorLastRxMs) <= REMOTE_SENSOR_OFFLINE_MS);
+  remoteSensorOnline = (remoteSensorLastRxMs > 0) &&
+                       (elapsedMillis32(now, remoteSensorLastRxMs) <= REMOTE_SENSOR_OFFLINE_MS);
 
-  static unsigned long lastReqMs = 0;
-  if (lastReqMs > 0 && (now - lastReqMs) < RS485_REQ_INTERVAL_MS) {
+  static uint32_t lastReqMs = 0;
+  if (lastReqMs > 0 && elapsedMillis32(now, lastReqMs) < RS485_REQ_INTERVAL_MS) {
     return remoteSensorOnline;
   }
   lastReqMs = now;
@@ -219,8 +231,7 @@ static bool pollRemoteSensorNodeInternal() {
       continue;
     }
     if (!parseSensorFrameStrict(payload, lvl, flow, err, seq, ldsc)) {
-      Serial.print("[RS485-ERR] Parse strict failed. Payload: ");
-      Serial.println(payload);
+      LOG(LOG_LEVEL_ERROR, "RS485-ERR", "Parse strict failed. Payload: %s", payload);
       continue;
     }
     gotFrame = true;

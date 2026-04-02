@@ -3,11 +3,13 @@
 #include "../state/state.h"
 
 static uint32_t lastFlowCalcMs = 0;
+static volatile uint32_t flowRawEdgeCount = 0;
 
 // ----------------------------
 // Flow ISR (hardened)
 // ----------------------------
 static void IRAM_ATTR flowIsr() {
+  flowRawEdgeCount++;
   uint32_t nowUs = micros();
   uint32_t lastUs = flowLastPulseUs;
   if ((uint32_t)(nowUs - lastUs) >= FLOW_MIN_PULSE_INTERVAL_US) {
@@ -103,7 +105,7 @@ static void usServiceOnce(uint32_t nowMs, uint32_t nowUs) {
       return;
     }
     case UsState::TriggerHigh: {
-      if ((uint32_t)(nowUs - usStateEnteredUs) >= 10UL) {
+      if ((uint32_t)(nowUs - usStateEnteredUs) >= 20UL) {
         digitalWrite(PIN_US_TRIG, LOW);
         usState = UsState::WaitRise;
         usStateEnteredUs = nowUs;
@@ -128,8 +130,15 @@ static void usServiceOnce(uint32_t nowMs, uint32_t nowUs) {
     case UsState::WaitFall: {
       if (digitalRead(PIN_US_ECHO) == LOW) {
         uint32_t widthUs = (uint32_t)(nowUs - usEchoRiseUs);
-        float cm = (float)widthUs / 58.0f;
-        if (cm < 2.0f || cm > 250.0f) cm = -1.0f;
+        float rawCm = (float)widthUs / 58.0f;
+        const float fullClampCm = US_RELIABLE_MIN_CM + TANK_US_DISTANCE_OFFSET_CM;
+        float cm = rawCm + TANK_US_DISTANCE_OFFSET_CM;
+        if (rawCm < US_RELIABLE_MIN_CM) {
+          // Near-field readings are unreliable on JSN-SR04T; clamp to a safe full threshold.
+          cm = fullClampCm;
+        } else if (rawCm > US_RELIABLE_MAX_CM) {
+          cm = -1.0f;
+        }
         usPushSample(cm);
 
         // Schedule next sample in the same window
@@ -138,8 +147,11 @@ static void usServiceOnce(uint32_t nowMs, uint32_t nowUs) {
           if (med < 0.0f) {
             snLevelError = true;
           } else {
-            snLastDistanceCm = med;
             int lvl = cmToPercent(med);
+            if (med <= fullClampCm) {
+              // Safety saturation: treat near-sensor region as effectively full.
+              lvl = 100;
+            }
             // REFACTOR [H-02]: plausibility filter with discard observability.
             if (snLastLevelUpdateMs > 0 && abs(lvl - snLastGoodLevelPct) > LEVEL_MAX_DELTA_PCT) {
               snLevelDiscardCount++;
@@ -153,6 +165,7 @@ static void usServiceOnce(uint32_t nowMs, uint32_t nowUs) {
                 SENSOR_DBGF("[SN][WARN] All level samples discarded in window.\n");
               }
             } else {
+              snLastDistanceCm = med;
               snWaterLevelPct = lvl;
               snLastGoodLevelPct = lvl;
               snLastLevelUpdateMs = nowMs;
@@ -189,7 +202,7 @@ void sensors_init() {
   digitalWrite(PIN_US_TRIG, LOW);
 
   pinMode(PIN_FLOW_INPUT, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(PIN_FLOW_INPUT), flowIsr, RISING);
+  attachInterrupt(digitalPinToInterrupt(PIN_FLOW_INPUT), flowIsr, FALLING);
 
   lastFlowCalcMs = millis();
   snLastFlowUpdateMs = millis();
@@ -216,6 +229,8 @@ void sensors_update_nonblocking() {
     flowPulseCount = 0;
     uint32_t disc = flowPulseDiscardCount;
     flowPulseDiscardCount = 0;
+    uint32_t rawEdges = flowRawEdgeCount;
+    flowRawEdgeCount = 0;
     interrupts();
 
     // dt-aware conversion: Hz = pulses / dt(s), then L/min = Hz / FLOW_HZ_PER_LPM
@@ -251,7 +266,12 @@ void sensors_update_nonblocking() {
     }
 
 #if SENSOR_DEBUG_ENABLED
-    SENSOR_DBGF("[SN][INFO] flow=%.2fLPM disc=%lu\n", snFlowRateLpm, (unsigned long)disc);
+  SENSOR_DBGF("[SN][INFO] flow=%.2fLPM pulse=%lu raw=%lu disc=%lu pin=%d\n",
+        snFlowRateLpm,
+        (unsigned long)pulses,
+        (unsigned long)rawEdges,
+        (unsigned long)disc,
+        (int)digitalRead(PIN_FLOW_INPUT));
 #endif
   }
 

@@ -1,0 +1,163 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.wrap{padding:1rem 0;max-width:100%}
+h2{font-size:18px;font-weight:500;color:var(--color-text-primary);margin:1.5rem 0 0.5rem}
+h3{font-size:15px;font-weight:500;color:var(--color-text-secondary);margin:1rem 0 0.5rem;padding-left:0.25rem;border-left:3px solid var(--color-border-secondary)}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1rem}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:500}
+.b-c{background:#FCEBEB;color:#A32D2D}.b-h{background:#FAEEDA;color:#854F0B}.b-m{background:#E6F1FB;color:#0C447C}.b-l{background:#EAF3DE;color:#3B6D11}
+.b-conf{background:#F1EFE8;color:#5F5E5A}.b-mit{background:#E1F5EE;color:#0F6E56}.b-new{background:#EEEDFE;color:#3C3489}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:1rem}
+thead th{text-align:left;padding:6px 8px;background:var(--color-background-secondary);color:var(--color-text-secondary);font-weight:500;font-size:12px;border-bottom:1px solid var(--color-border-tertiary)}
+tbody tr{border-bottom:1px solid var(--color-border-tertiary)}
+tbody tr:hover{background:var(--color-background-secondary)}
+td{padding:6px 8px;vertical-align:top;color:var(--color-text-primary)}
+td.id{font-family:var(--font-mono);font-size:12px;white-space:nowrap;color:var(--color-text-secondary)}
+td.issue{line-height:1.5}
+td.loc{font-size:12px;color:var(--color-text-secondary);white-space:nowrap}
+.note{font-size:12px;color:var(--color-text-secondary);margin-top:4px;font-style:italic}
+.new-tag{display:inline-block;font-size:10px;font-weight:600;background:#EEEDFE;color:#3C3489;border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle}
+.section-meta{font-size:12px;color:var(--color-text-tertiary);margin-bottom:0.5rem}
+hr{border:none;border-top:1px solid var(--color-border-tertiary);margin:1.5rem 0}
+</style>
+<div class="wrap">
+
+<div class="legend">
+  <span class="badge b-c">● Critical</span>
+  <span class="badge b-h">● High</span>
+  <span class="badge b-m">● Medium</span>
+  <span class="badge b-l">● Low</span>
+  <span style="margin-left:8px"></span>
+  <span class="badge b-conf">Confirmed</span>
+  <span class="badge b-mit">Mitigated</span>
+  <span class="badge b-new">★ New finding</span>
+</div>
+
+<h2>Master Node — ESP32 Controller</h2>
+
+<h3>2.1 Transport &amp; Connectivity</h3>
+<table>
+<thead><tr><th>ID</th><th>Sev</th><th>Issue</th><th>Location</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td class="id">M-01</td><td><span class="badge b-h">High</span></td><td class="issue">RS-485 read stalls can delay main loop and starve Firebase work. Up to 3 retries × 250ms = 750ms blocking per cycle.</td><td class="loc">rs485_comm.cpp<br>pollRemoteSensorNodeInternal()</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-02</td><td><span class="badge b-h">High</span></td><td class="issue">Firebase control and status calls are sequential and blocking. Transport failure cascades into repeated cloud timeouts.</td><td class="loc">main.cpp loop()<br>connectivity_cloud.cpp</td><td><span class="badge b-mit">Mitigated</span></td></tr>
+<tr><td class="id">M-10</td><td><span class="badge b-m">Med</span></td><td class="issue">Firebase RTDB timeout on control/status reads when RS-485 is under load. Dashboard actions appear delayed or lost.</td><td class="loc">connectivity_cloud.cpp</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-11</td><td><span class="badge b-m">Med</span></td><td class="issue">RS-485 read-frame timeout bursts during normal polling. Sensor-node status oscillates between online/offline.</td><td class="loc">rs485_comm.cpp</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-21</td><td><span class="badge b-h">High</span></td><td class="issue">rs485ReadFrame() timeout uses unsafe subtraction <code>(millis() - start) &lt; timeoutMs</code>. Frame reads can hang or timeout prematurely at ~50-day millis() wraparound.</td><td class="loc">rs485_comm.cpp:23</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+</tbody>
+</table>
+
+<h3>2.2 Safe Mode &amp; Crash Recovery</h3>
+<table>
+<thead><tr><th>ID</th><th>Sev</th><th>Issue</th><th>Location</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td class="id">M-03</td><td><span class="badge b-h">High</span></td><td class="issue">Crash-loop safe mode disables WiFi, Firebase, and sensor init until latch clears or power cycle. Controller can remain offline and unreachable.</td><td class="loc">persistence.cpp<br>checkCrashLoop()</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-04</td><td><span class="badge b-h">High</span></td><td class="issue">Safe-mode recovery depends on NTP/latch state and auto-clear timer. Recovery can be delayed or inconsistent if NTP doesn't settle cleanly.</td><td class="loc">main.cpp loop()<br>safe mode block</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-06</td><td><span class="badge b-m">Med</span></td><td class="issue">Safety-related state persisted in NVS, but runtime timers (dryRunStartMs, pumpAutoStartMs, pumpOffStartMs) are volatile. A reboot during active operation resets timing context.</td><td class="loc">state.cpp / persistence.cpp</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+</tbody>
+</table>
+
+<h3>2.3 millis() Wraparound Vulnerabilities</h3>
+<div class="section-meta">All comparisons below are unsafe at the ~49.7-day millis() rollover.</div>
+<table>
+<thead><tr><th>ID</th><th>Sev</th><th>Issue</th><th>Location</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td class="id">M-13</td><td><span class="badge b-c">Critical</span></td><td class="issue">Countdown expiry uses <code>millis() &gt;= countdownEndMs</code>. At wraparound this can never expire (timer runs forever) or fire immediately. Pump could run indefinitely.</td><td class="loc">connectivity_cloud.cpp:165<br>checkCountdownExpiry()</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-14</td><td><span class="badge b-c">Critical</span></td><td class="issue">Multiple unsafe subtractions: <code>millis() - pendingModeWritebackSentMs</code>, <code>millis() - levelSensorFailStartMs</code>, <code>millis() - flowStuckStartMs</code>, <code>millis() - pumpOffStartMs</code>. Safety cutoffs may silently fail.</td><td class="loc">connectivity_cloud.cpp:246<br>safety_pump.cpp:41,88,237,296,355</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-20</td><td><span class="badge b-h">High</span></td><td class="issue">Auth cooldown <code>max(firebaseCooldownUntilMs, now + FIREBASE_AUTH_COOLDOWN_MS)</code> — if now approaches ULONG_MAX the addition overflows, permanently blocking Firebase.</td><td class="loc">connectivity_cloud.cpp:201,209,564,572</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+</tbody>
+</table>
+
+<h3>2.4 Control Logic &amp; Configuration Bugs</h3>
+<table>
+<thead><tr><th>ID</th><th>Sev</th><th>Issue</th><th>Location</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td class="id">M-05</td><td><span class="badge b-h">High</span></td><td class="issue">Emergency stop preserves current mode and blocks mode changes while latched. Mode is restored on reset_stop.</td><td class="loc">connectivity_cloud.cpp<br>readFirebaseControl()</td><td><span class="badge b-mit">Mitigated</span></td></tr>
+<tr><td class="id">M-15</td><td><span class="badge b-h">High</span></td><td class="issue">Level freshness check <code>(levelLastUpdateMs &gt; 0) &amp;&amp; (millis() - levelLastUpdateMs) &lt;= STALE</code> — on first boot levelLastUpdateMs=0, subtraction can return ULONG_MAX, making level appear fresh before any sensor frame arrives.</td><td class="loc">safety_pump.cpp:233<br>connectivity_cloud.cpp:458<br>Multiple locations</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-16</td><td><span class="badge b-h">High</span></td><td class="issue">Static one-shot flags in readFirebaseControl() (countdownConsumed, lastEmergencyStop, lastResetStop, lastCountdownStart) are function-local statics. After soft reset they retain stale state, causing missed or replayed control commands.</td><td class="loc">connectivity_cloud.cpp:175–179</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-17</td><td><span class="badge b-m">Med</span></td><td class="issue">Method name typo: <code>setwriteSizeLimit()</code> should be <code>setWriteSizeLimit()</code>. Call may silently fail, leaving write size at library default.</td><td class="loc">connectivity_cloud.cpp:621<br>initFirebase()</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-18</td><td><span class="badge b-h">High</span></td><td class="issue">countdown_add_min is validated (1–120), but if Firebase sends a float cast to int or a value of 0, addMin falls back to COUNTDOWN_ADD_TIME_MIN without logging. A negative value from a malformed dashboard write would wrap unsigned arithmetic.</td><td class="loc">connectivity_cloud.cpp:354–360</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-19</td><td><span class="badge b-m">Med</span></td><td class="issue">countdownRemainSec returns 0 for both "timer complete" and "timer canceled/inactive". Dashboard cannot distinguish between these states.</td><td class="loc">connectivity_cloud.cpp:517–520<br>pushFirebaseStatus()</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-22</td><td><span class="badge b-h">High</span></td><td class="issue">readDeviceConfigFromFirebase() returns early on getJSON() failure but does not check if the returned JSON object is empty or missing expected fields before parsing. An empty object passes silently, leaving stale config in place without any log.</td><td class="loc">connectivity_cloud.cpp:12–13<br>readDeviceConfigFromFirebase()</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-23</td><td><span class="badge b-h">High</span></td><td class="issue">Same root cause as M-15: levelLastUpdateMs initialized to 0 in state.cpp. On startup the freshness guard passes incorrectly, allowing pump start decisions before any RS-485 frame is received. Duplicate of M-15 in a different code path.</td><td class="loc">state.cpp / safety_pump.cpp</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+</tbody>
+</table>
+
+<h3>2.5 Operational &amp; WiFi</h3>
+<table>
+<thead><tr><th>ID</th><th>Sev</th><th>Issue</th><th>Location</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td class="id">M-07</td><td><span class="badge b-m">Med</span></td><td class="issue">Retry/backoff logic logs generic messages that can mask the original upstream fault, making diagnosis slower.</td><td class="loc">main.cpp / connectivity_cloud.cpp</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-08</td><td><span class="badge b-m">Med</span></td><td class="issue">WiFi connect loop in connectWiFi() blocks for up to 20s (40 × 500ms). NTP sync uses 5s blocking getLocalTime(). Combined startup blocking can reach ~25s and stress the watchdog.</td><td class="loc">connectivity_cloud.cpp:590<br>main.cpp:52</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">M-09</td><td><span class="badge b-h">High</span></td><td class="issue">secrets.h files with real credentials exist in the firmware tree. Risk of accidental commit or exposure if repo is shared.</td><td class="loc">config/secrets.h<br>config/secrets_ota.h</td><td><span class="badge b-conf">Risk</span></td></tr>
+<tr><td class="id">M-12</td><td><span class="badge b-l">Low</span></td><td class="issue">PlatformIO test runner can fail in the Unity stage even when firmware compiles successfully. Toolchain issue, not firmware.</td><td class="loc">platformio.ini</td><td><span class="badge b-conf">Toolchain</span></td></tr>
+</tbody>
+</table>
+
+<h3>2.6 New Findings from Code Audit <span class="new-tag">★ New</span></h3>
+<table>
+<thead><tr><th>ID</th><th>Sev</th><th>Issue</th><th>Location</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td class="id">M-24 <span class="new-tag">★</span></td><td><span class="badge b-h">High</span></td><td class="issue">In rs485_comm.cpp pollRemoteSensorNodeInternal(), when a frame parse fails, the raw error is logged via <code>Serial.print()</code> (bypasses the LOG() macro / syslog pipeline). This message will not appear in remote logs, silently hiding parse failures in production.</td><td class="loc">rs485_comm.cpp:232–234</td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">M-25 <span class="new-tag">★</span></td><td><span class="badge b-h">High</span></td><td class="issue">checkOverflowProtection() includes MANUAL mode in the hard runtime cutoff (<code>pumpMode == "MANUAL"</code> is allowed to overflow-stop). This contradicts the original design intent that MANUAL only gets a warning at 90%, not a hard stop — and conflicts with the comment "AUTO/COUNTDOWN only" in the issue register. The cutoff fires equally for all three modes.</td><td class="loc">safety_pump.cpp:113,144–150</td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">M-26 <span class="new-tag">★</span></td><td><span class="badge b-m">Med</span></td><td class="issue">In executePumpLogic(), the isLevelFresh variable is computed at line 233 and then recomputed (redundantly) in at least 3 inner branches (MANUAL path line 275, COUNTDOWN path line 306, AUTO path line 346). The repeated recalculation is inconsistent — a race between millis() calls could produce different results in the same logic pass.</td><td class="loc">safety_pump.cpp:233,275,306,346</td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">M-27 <span class="new-tag">★</span></td><td><span class="badge b-m">Med</span></td><td class="issue">readFirebaseControl() returns early (<code>return true</code>) at line 235 when emergencyStopLatched is set — but this skips processing of all subsequent control fields including reset_stop, clear_error, and bypass toggles. An operator cannot clear a hard lockout while emergency stop is latched; they must power-cycle.</td><td class="loc">connectivity_cloud.cpp:232–236</td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">M-28 <span class="new-tag">★</span></td><td><span class="badge b-m">Med</span></td><td class="issue">pushFirebaseErrorLog() uses esp_timer_get_time() (monotonic uptime, seconds since boot) as the timestamp, not NTP wall-clock time. Logs in Firebase will show relative uptime seconds, making cross-referencing with dashboard events difficult.</td><td class="loc">connectivity_cloud.cpp:652</td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">M-29 <span class="new-tag">★</span></td><td><span class="badge b-l">Low</span></td><td class="issue">In pushFirebaseStatus(), totalPumpRunSec is divided by 60 and truncated to int before being pushed as total_pump_run_min. Sub-minute accumulated runtime is silently lost on every push. Over many short pump cycles this accumulates into reporting drift.</td><td class="loc">connectivity_cloud.cpp:539</td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">M-30 <span class="new-tag">★</span></td><td><span class="badge b-m">Med</span></td><td class="issue">The LOG() macro compile floor is LOG_LEVEL_INFO (level 2). LOG_LEVEL_DEBUG (3) and LOG_LEVEL_VERBOSE (4) messages are dead code — they are compiled out at build time and cannot be enabled at runtime via Firebase's debug_log_level field. The runtime gLogLevel check is unreachable for these levels.</td><td class="loc">config.h:LOG_COMPILE_FLOOR</td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">M-31 <span class="new-tag">★</span></td><td><span class="badge b-h">High</span></td><td class="issue">connectWiFi() log message says "Connection failed after 20s" but the actual timeout is 40 × 500ms = 20s. The message is accidentally correct but the constant 40 is undocumented magic. More importantly, this blocking call runs before watchdog registration — if WiFi hangs beyond ~30s in a future environment, there is no WDT recovery.</td><td class="loc">connectivity_cloud.cpp:590–601</td><td><span class="badge b-new">New</span></td></tr>
+</tbody>
+</table>
+
+<hr>
+<h2>Sensor Node — NodeMCU V2 (ESP8266)</h2>
+
+<h3>3.1 Confirmed Issues</h3>
+<table>
+<thead><tr><th>ID</th><th>Sev</th><th>Issue</th><th>Location</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td class="id">S-01</td><td><span class="badge b-m">Med</span></td><td class="issue">RS-485 slave uses a 20ms inter-byte stall reset to avoid hanging on malformed packets. Incomplete or noisy packets interrupt polling until receiver resets.</td><td class="loc">rs485_slave.cpp:90</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">S-02</td><td><span class="badge b-m">Med</span></td><td class="issue">Response turnaround is immediate after valid packet reception. If Master has not fully switched to RX, the first reply bytes can be lost.</td><td class="loc">rs485_slave.cpp<br>sendFrame()</td><td><span class="badge b-conf">Risk</span></td></tr>
+<tr><td class="id">S-03</td><td><span class="badge b-m">Med</span></td><td class="issue">Ultrasonic plausibility filter rejects level jumps > LEVEL_MAX_DELTA_PCT (20%). Real rapid level changes may be delayed or discarded if they look like outliers.</td><td class="loc">sensors.cpp:~140</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">S-04</td><td><span class="badge b-m">Med</span></td><td class="issue">Flow deglitch uses FLOW_MIN_PULSE_INTERVAL_US=800µs (marked "temporary diagnostic tuning"). Field validation needed for installed YF-G1 sensor.</td><td class="loc">config.h<br>sensors.cpp flowIsr()</td><td><span class="badge b-conf">Field validation needed</span></td></tr>
+<tr><td class="id">S-05</td><td><span class="badge b-l">Low</span></td><td class="issue">Sensor node is telemetry-only; final safety action depends on Master. A Master-side fault delays the actual safety response. Design limitation.</td><td class="loc">System design</td><td><span class="badge b-conf">Design limit</span></td></tr>
+<tr><td class="id">S-06</td><td><span class="badge b-h">High</span></td><td class="issue">flowRawEdgeCount is incremented in the ISR without atomic protection and never synchronized with the main loop (it's cleared by the ISR side only). ISR-main race can corrupt flow count or lose pulses. The variable is marked volatile but reads are not interrupt-protected.</td><td class="loc">sensors.cpp:6,12<br>sensors_update_nonblocking()</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+<tr><td class="id">S-07</td><td><span class="badge b-m">Med</span></td><td class="issue">Sensor node does not explicitly signal "tank full" — it reports level%. The Master relies on cfgPumpStopLevel threshold. If sensor reads slightly below 100% when tank is truly full, overflow protection depends solely on the runtime limit.</td><td class="loc">sensors.cpp / rs485_slave.cpp</td><td><span class="badge b-conf">Design limit</span></td></tr>
+<tr><td class="id">S-08</td><td><span class="badge b-m">Med</span></td><td class="issue">The 20ms partial-frame stall reset is a hardcoded magic number with no documented derivation. At 115200 baud, one byte is ~87µs; 20ms equals ~230 idle bytes — may be excessive or insufficient depending on line transients.</td><td class="loc">rs485_slave.cpp:90</td><td><span class="badge b-conf">Risk</span></td></tr>
+</tbody>
+</table>
+
+<h3>3.2 New Findings from Code Audit <span class="new-tag">★ New</span></h3>
+<table>
+<thead><tr><th>ID</th><th>Sev</th><th>Issue</th><th>Location</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td class="id">S-09 <span class="new-tag">★</span></td><td><span class="badge b-h">High</span></td><td class="issue">In sensors.cpp, flowPulseCount and flowPulseDiscardCount are read and zeroed inside a noInterrupts()/interrupts() block — correct. However, flowRawEdgeCount is also read and zeroed in the same block but its increment in the ISR does NOT check FLOW_MIN_PULSE_INTERVAL_US, making it a different counter with different semantics. It is never used for any safety decision but its zeroing inside noInterrupts() is the only safe access pattern — the ISR increment at line 12 is outside this guard and races.</td><td class="loc">sensors.cpp:12,175–183</td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">S-10 <span class="new-tag">★</span></td><td><span class="badge b-m">Med</span></td><td class="issue">snLevelDiscardCount is uint16_t but is cast to uint8_t (ldsc) before being packed into the RS-485 frame. If discard count exceeds 255, the transmitted value silently wraps to 0–254, misleading the Master's diagnostics.</td><td class="loc">rs485_slave.cpp:40<br><code>uint8_t ldsc = (snLevelDiscardCount > 255) ? 255 : (uint8_t)snLevelDiscardCount</code></td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">S-11 <span class="new-tag">★</span></td><td><span class="badge b-m">Med</span></td><td class="issue">usResetWindow() resets snLevelDiscardCount to 0 at the start of each measurement window. This means the discard count in the RS-485 frame reflects only the current window, not accumulated discards. Master's remoteSensorLevelDiscardCount telemetry is therefore a per-window snapshot, not a cumulative counter — inconsistent with how it's described and displayed.</td><td class="loc">sensors.cpp:50–55</td><td><span class="badge b-new">New</span></td></tr>
+<tr><td class="id">S-12 <span class="new-tag">★</span></td><td><span class="badge b-l">Low</span></td><td class="issue">usMedianValid() returns the middle index (n/2) of a sorted array. For n=4 this returns index 2 (upper median) rather than the average of indices 1 and 2. This is a common median implementation choice but is undocumented, and for even-count windows the result is slightly biased toward higher distances (lower level readings).</td><td class="loc">sensors.cpp:62–80</td><td><span class="badge b-new">New</span></td></tr>
+</tbody>
+</table>
+
+<hr>
+<h2>Cross-System Risks</h2>
+<table>
+<thead><tr><th>ID</th><th>Sev</th><th>Risk</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td class="id">X-01</td><td><span class="badge b-c">Critical</span></td><td class="issue">Any condition leaving pump ON during a communication fault. Fail-safe gates (freshness, stability) exist but M-15/M-23 show a boot-time window where the gate incorrectly passes.</td><td><span class="badge b-conf">Must not regress</span></td></tr>
+<tr><td class="id">X-02</td><td><span class="badge b-h">High</span></td><td class="issue">Backward-compatibility logic for deprecated FORCE_ON/FORCE_OFF modes maps to AUTO — a state transition that could inadvertently re-enable pump operation after an e-stop scenario.</td><td><span class="badge b-conf">Confirmed risk</span></td></tr>
+<tr><td class="id">X-03</td><td><span class="badge b-m">Med</span></td><td class="issue">Persistent state in NVS/Firebase can outlive a reboot. Stale flags (bypass, dry_run_err) survive resets and affect startup behavior.</td><td><span class="badge b-conf">Confirmed</span></td></tr>
+</tbody>
+</table>
+
+<div style="margin-top:1.5rem;padding:10px 12px;background:var(--color-background-secondary);border-radius:8px;border-left:3px solid var(--color-border-primary)">
+<div style="font-size:13px;color:var(--color-text-secondary);line-height:1.7">
+<strong style="color:var(--color-text-primary)">Summary:</strong>
+Total tracked: <strong>39 items</strong> (20 from original register + 12 new findings M-24–M-31, S-09–S-12 + 3 cross-system).
+Critical: 3 (M-13, M-14, X-01) &nbsp;|&nbsp; High: 17 &nbsp;|&nbsp; Medium: 14 &nbsp;|&nbsp; Low: 5.
+Mitigated (no action needed): M-02, M-05. &nbsp;New findings requiring triage: 12.
+</div>
+</div>
+
+</div>

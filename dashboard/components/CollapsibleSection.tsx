@@ -51,8 +51,8 @@ export default function CollapsibleSection({
         }}
         className="flex items-center justify-between gap-2 cursor-pointer list-none min-h-[44px] touch-manipulation py-2 -mx-1 px-1 rounded-lg hover:bg-surface-2/50 md:hover:bg-transparent md:cursor-default"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0">
-          <span className="font-display font-semibold text-sm uppercase tracking-widest text-text-primary">
+        <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2 min-w-0">
+          <span className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">
             {title}
           </span>
           {subtitle && (

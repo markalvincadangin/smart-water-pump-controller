@@ -15,10 +15,10 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#185FA5", /* SmartFlow brand color (Phase 6) */
     orientation: "any",
     icons: [
-      { src: "/logos/brandmark.svg", sizes: "72x72", type: "image/svg+xml", purpose: "any" },
-      { src: "/logos/combinationmark.svg", sizes: "192x192", type: "image/svg+xml", purpose: "any" },
-      { src: "/logos/wordmark.svg", sizes: "512x512", type: "image/svg+xml", purpose: "any" },
-      { src: "/logos/wordmark.svg", sizes: "512x512", type: "image/svg+xml", purpose: "maskable" },
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-192-maskable.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: "/icons/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }
