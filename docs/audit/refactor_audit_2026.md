@@ -295,7 +295,7 @@ Open mismatches:
 | H-02 | Plausibility discard had no counter/promotion | FIXED | snLevelDiscardCount + warning + error promotion implemented |
 | H-03 | Flow discard debug used zeroed global instead of local | FIXED | local disc copy is used consistently in logging/logic |
 | H-04 | Flow error flag non-hysteretic | FIXED | assert/clear dwell hysteresis counters implemented |
-| H-05 | Overflow stops pump in MANUAL | FIXED | MANUAL runtime warning without forced stop |
+| H-05 | Max runtime in MANUAL (overflow path) | DOCUMENTED | Option B (2026-04-02): same 90% warn + hard stop as AUTO/COUNTDOWN; QA/spec updated |
 | H-06 | Crash loop counter clear window too short | FIXED | success-based clear on Firebase push plus 180s fallback |
 | H-07 | No AUTO_COOLDOWN mode while off-timer active | FIXED | AUTO_COOLDOWN and MANUAL_COOLDOWN logic in safety state machine |
 | M-01 | Overlapping level timestamps | FIXED | levelLastUpdateMs used as freshness gate; levelLastValidMs retained for health telemetry |

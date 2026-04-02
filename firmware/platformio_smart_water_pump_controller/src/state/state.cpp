@@ -106,6 +106,20 @@ unsigned long firebaseCooldownUntilMs  = 0;
 uint32_t      firebaseConsecutiveFailCount = 0;
 String        firebaseLastError        = "";
 unsigned long firebaseLastErrorLogMs   = 0;
+uint32_t      firebaseTimeoutCount     = 0;
+uint32_t      firebaseAuthErrorCount   = 0;
+uint32_t      firebaseNotReadySkipCount = 0;
+
+uint32_t      cloudControlOkCount      = 0;
+uint32_t      cloudControlFailCount    = 0;
+uint32_t      cloudStatusOkCount       = 0;
+uint32_t      cloudStatusFailCount     = 0;
+uint32_t      cloudLastControlCallMs   = 0;
+uint32_t      cloudLastStatusCallMs    = 0;
+uint32_t      cloudLastCycleMs         = 0;
+
+uint32_t      rs485LastCallMs          = 0;
+uint32_t      loopMaxMs                = 0;
 
 String        lastPersistedMode   = "AUTO";
 bool          lastPersistedDryRun = false;
@@ -137,6 +151,9 @@ unsigned long runStartMs       = 0;
 bool          isManualRun      = false;
 String        lastFaultCode    = "";
 String        lastFaultMessage = "";
+
+// Emergency stop state preservation
+String        emergencyStopSavedMode = "AUTO";
 
 // Operator intent + stop latch
 bool          manualDesired        = false;

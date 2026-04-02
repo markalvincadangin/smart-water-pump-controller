@@ -86,7 +86,7 @@ validation) remains before full deployment sign-off.**
 |--------|-------|-----|--------|
 | C-01 | Missing void setup() | Restored with REFACTOR comment | ✅ |
 | C-02 | waterLevelPct=0 at init | Initialize -1; omit from Firebase push until valid | ✅ |
-| H-05 | Overflow stops MANUAL pump | Warning-only in MANUAL; pump continues | ✅ |
+| H-05 | Max runtime in MANUAL | Option B: 90% warn + hard stop (docs/QA 2026-04-02) | ✅ |
 | H-06 | 60 s crash counter | Success-based clear + 180 s fallback | ✅ |
 | H-07 | No AUTO_COOLDOWN runMode | AUTO_COOLDOWN/MANUAL_COOLDOWN + pump_cooldown_remaining_sec | ✅ |
 | M-01 | Dual level timestamps | levelLastUpdateMs primary; levelLastValidMs→display only | ✅ |

@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 
 #include "config/config.h"
 #include "state/state.h"
@@ -31,6 +32,7 @@ void setup() {
   lastPersistedMode.reserve(12);
 
   pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH); // Force relay OFF before state machine begins (Active-LOW)
   setPump(false);
 
   rs485_init();
@@ -55,6 +57,21 @@ void setup() {
     }
   }
 
+  // M-31: register WDT before potentially long WiFi connect (WDT_TIMEOUT_SEC covers boot + WiFi).
+  esp_task_wdt_deinit();
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+  esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = (uint32_t)(WDT_TIMEOUT_SEC * 1000),
+    .idle_core_mask = 0,
+    .trigger_panic = true
+  };
+  esp_task_wdt_init(&wdt_config);
+#else
+  esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
+#endif
+  esp_task_wdt_add(NULL);
+  LOG(LOG_LEVEL_ERROR, "INIT", "Watchdog: %ds timeout, task registered (before WiFi).", WDT_TIMEOUT_SEC);
+
   connectWiFi();
 
   if (WiFi.status() == WL_CONNECTED) {
@@ -77,20 +94,6 @@ void setup() {
     LOG(LOG_LEVEL_INFO, "FIREBASE", "Skipped — no WiFi. Will init when WiFi connects.");
   }
 
-  esp_task_wdt_deinit();
-#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
-  esp_task_wdt_config_t wdt_config = {
-    .timeout_ms = (uint32_t)(WDT_TIMEOUT_SEC * 1000),
-    .idle_core_mask = 0,
-    .trigger_panic = true
-  };
-  esp_task_wdt_init(&wdt_config);
-#else
-  esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
-#endif
-  esp_task_wdt_add(NULL);
-  LOG(LOG_LEVEL_ERROR, "INIT", "Watchdog: %ds timeout, task registered.", WDT_TIMEOUT_SEC);
-
   unsigned long nowInit = millis();
   lastSensorMs        = nowInit;
   lastFirebaseMs      = nowInit;
@@ -107,6 +110,7 @@ void setup() {
 
 void loop() {
   unsigned long now = millis();
+  unsigned long loopStartMs = now;
 
   esp_task_wdt_reset();
 
@@ -278,7 +282,9 @@ void loop() {
   if (now - lastSensorMs >= sensorInterval) {
     lastSensorMs = now;
 
+    unsigned long rs485CallStart = millis();
     bool gotFrame = rs485_requestData();
+    rs485LastCallMs = (uint32_t)(millis() - rs485CallStart);
 
     int levelForFailureLogic = gotFrame ? waterLevelPct : -1;
     if (gotFrame && (remoteSensorLastErrCode == 1 || remoteSensorLastErrCode == 3)) {
@@ -306,6 +312,7 @@ void loop() {
                          now - statusPushRetryMs >= STATUS_PUSH_RETRY_MS);
   if (normalIntervalDue || statusRetryDue) {
     if (normalIntervalDue) lastFirebaseMs = now;
+    unsigned long cloudCycleStart = millis();
 
     if (firebaseCooldownUntilMs != 0 && now < firebaseCooldownUntilMs) {
       if (now - firebaseLastErrorLogMs >= 60000) {
@@ -322,15 +329,27 @@ void loop() {
         lastDeviceConfigMs = now;
         readDeviceConfigFromFirebase();
       }
-      readFirebaseControl();
-      pushFirebaseStatus();
+
+      bool controlOk = readFirebaseControl();
+      if (controlOk) {
+        pushFirebaseStatus();
+      } else {
+        // Prevent back-to-back cloud calls in the same cycle when transport is already failing.
+        if (now - firebaseLastErrorLogMs >= 5000UL) {
+          firebaseLastErrorLogMs = now;
+          LOG(LOG_LEVEL_ERROR, "FIREBASE", "Cloud cycle short-circuit after control failure.");
+        }
+      }
     } else {
       if (WiFi.status() != WL_CONNECTED) {
         // wait for WiFi recovery
       } else if (firebaseCooldownUntilMs == 0) {
+        firebaseNotReadySkipCount++;
         LOG(LOG_LEVEL_INFO, "FIREBASE", "Not ready. Skipping sync.");
       }
     }
+
+    cloudLastCycleMs = (uint32_t)(millis() - cloudCycleStart);
   }
 
   persistStateToNVS();
@@ -348,6 +367,11 @@ void loop() {
     ultrasonicCycleTimeoutCountWin = 0;
     flowDiscardMaxSaneCountWin = 0;
     flowStuckHighEventCountWin = 0;
+  }
+
+  uint32_t loopMs = (uint32_t)(millis() - loopStartMs);
+  if (loopMs > loopMaxMs) {
+    loopMaxMs = loopMs;
   }
 
   if (isSleeping) {

@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ref, onValue, set } from "firebase/database";
+import { ref, onValue, set, update } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
 import type { PumpStatus, PumpControl, PumpSnapshot, HistoryEntry, HistoryEvent } from "./types";
@@ -235,49 +235,73 @@ export function usePumpData() {
 
   // ── Control writers ──────────────────────────────────────────────────────
 
-  const setMode = useCallback(async (mode: PumpControl["mode"]) => {
+  const setMode = useCallback(async (newMode: PumpControl["mode"]) => {
     try {
-      const prevMode = controlRef.current?.mode ?? "?";
-      await set(ref(db, `${CONTROL_PATH}/mode`), mode);
+      const prevMode = controlRef.current?.mode ?? "AUTO";
+
+      // Atomically write new mode + safety-reset stale flags from previous mode
+      const updates: Record<string, unknown> = { mode: newMode };
+
+      // Leaving MANUAL: clear persistent pump intent so re-entering MANUAL doesn't auto-start
+      if (prevMode === "MANUAL" && newMode !== "MANUAL") {
+        updates.manual_desired = false;
+      }
+      // Leaving COUNTDOWN: reset all one-shot countdown flags
+      if (prevMode === "COUNTDOWN" && newMode !== "COUNTDOWN") {
+        updates.countdown_start = false;
+        updates.countdown_add_time = false;
+        updates.countdown_stop = false;
+        updates.countdown_add_min = 0;
+      }
+
+      await update(ref(db, CONTROL_PATH), updates);
+
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.set_mode",
           uid: authUser.uid,
           email: authUser.email ?? null,
-          meta: { mode },
-          detail: `Mode changed from ${prevMode} to ${mode}`,
+          meta: { mode: newMode },
+          detail: `Mode changed from ${prevMode} to ${newMode}`,
         });
       }
     } catch (err) {
       console.error("[RTDB] setMode failed:", err);
+      throw err;
     }
   }, [authUser?.email, authUser?.uid]);
 
   const setManualDesired = useCallback(async (on: boolean) => {
     try {
-      // MANUAL is intent-based and persistent
-      await set(ref(db, `${CONTROL_PATH}/mode`), "MANUAL");
-      await set(ref(db, `${CONTROL_PATH}/manual_desired`), on);
+      // Use update so we atomically set both fields (mode only if not already MANUAL)
+      const updates: Record<string, unknown> = { manual_desired: on };
+      if (controlRef.current?.mode !== "MANUAL") updates.mode = "MANUAL";
+      await update(ref(db, CONTROL_PATH), updates);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.manual_desired",
           uid: authUser.uid,
           email: authUser.email ?? null,
           meta: { manual_desired: on },
-          detail: on ? "Manual desired: ON" : "Manual desired: OFF",
+          detail: on ? "Manual pump START requested" : "Manual pump STOP requested",
         });
       }
     } catch (err) {
       console.error("[RTDB] setManualDesired failed:", err);
+      throw err;
     }
   }, [authUser?.email, authUser?.uid]);
 
   const triggerEmergencyStop = useCallback(async () => {
     try {
-      await set(ref(db, `${CONTROL_PATH}/emergency_stop`), true);
-      window.setTimeout(() => {
-        void set(ref(db, `${CONTROL_PATH}/emergency_stop`), false);
-      }, 5000);
+      const updates = {
+        emergency_stop: true,
+        mode: "AUTO",
+        manual_desired: false,
+        countdown_start: false,
+        countdown_stop: true
+      };
+      await update(ref(db, CONTROL_PATH), updates);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.emergency_stop",
@@ -288,15 +312,13 @@ export function usePumpData() {
       }
     } catch (err) {
       console.error("[RTDB] triggerEmergencyStop failed:", err);
+      throw err;
     }
   }, [authUser?.email, authUser?.uid]);
 
   const resetEmergencyStop = useCallback(async () => {
     try {
       await set(ref(db, `${CONTROL_PATH}/reset_stop`), true);
-      window.setTimeout(() => {
-        void set(ref(db, `${CONTROL_PATH}/reset_stop`), false);
-      }, 5000);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.reset_stop",
@@ -307,6 +329,7 @@ export function usePumpData() {
       }
     } catch (err) {
       console.error("[RTDB] resetEmergencyStop failed:", err);
+      throw err;
     }
   }, [authUser?.email, authUser?.uid]);
 
@@ -323,6 +346,7 @@ export function usePumpData() {
       }
     } catch (err) {
       console.error("[RTDB] acknowledgeError failed:", err);
+      throw err;
     }
   }, [authUser?.email, authUser?.uid]);
 
@@ -341,18 +365,21 @@ export function usePumpData() {
       }
     } catch (err) {
       console.error("[RTDB] requestReboot failed:", err);
+      throw err;
     }
   }, [authUser?.email, authUser?.uid]);
 
   const startCountdown = useCallback(async (durationMin: number) => {
     try {
       const safeMin = Math.max(1, Math.min(120, Math.floor(durationMin)));
-      await set(ref(db, `${CONTROL_PATH}/countdown_duration_min`), safeMin);
-      await set(ref(db, `${CONTROL_PATH}/mode`), "COUNTDOWN");
-      await set(ref(db, `${CONTROL_PATH}/countdown_start`), true);
-      window.setTimeout(() => {
-        void set(ref(db, `${CONTROL_PATH}/countdown_start`), false);
-      }, 5000);
+      // Atomic update: set start and explicitly clear stop to prevent race conditions
+      const updates = {
+        countdown_duration_min: safeMin,
+        mode: "COUNTDOWN",
+        countdown_start: true,
+        countdown_stop: false
+      };
+      await update(ref(db, CONTROL_PATH), updates);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.run_countdown_start",
@@ -364,6 +391,7 @@ export function usePumpData() {
       }
     } catch (err) {
       console.error("[RTDB] startCountdown failed:", err);
+      throw err;
     }
   }, [authUser?.email, authUser?.uid]);
 
@@ -373,11 +401,6 @@ export function usePumpData() {
       setIsAddingCountdownTime(true);
       await set(ref(db, `${CONTROL_PATH}/countdown_add_min`), addMin);
       await set(ref(db, `${CONTROL_PATH}/countdown_add_time`), true);
-      // Fallback: reset to false after 20s so the device has time to read (e.g. slow poll or after lockout).
-      window.setTimeout(() => {
-        void set(ref(db, `${CONTROL_PATH}/countdown_add_time`), false);
-        setIsAddingCountdownTime(false);
-      }, 20000);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.run_countdown_add_time",
@@ -390,6 +413,7 @@ export function usePumpData() {
     } catch (err) {
       console.error("[RTDB] addCountdownTime failed:", err);
       setIsAddingCountdownTime(false);
+      throw err;
     }
   }, [authUser?.email, authUser?.uid]);
 
@@ -402,11 +426,12 @@ export function usePumpData() {
 
   const stopCountdown = useCallback(async () => {
     try {
-      // Option B: stop countdown timer without leaving COUNTDOWN mode
-      await set(ref(db, `${CONTROL_PATH}/countdown_stop`), true);
-      window.setTimeout(() => {
-        void set(ref(db, `${CONTROL_PATH}/countdown_stop`), false);
-      }, 5000);
+      // Atomic update: set stop and explicitly clear start to prevent race conditions
+      const updates = {
+        countdown_stop: true,
+        countdown_start: false
+      };
+      await update(ref(db, CONTROL_PATH), updates);
       if (authUser?.uid) {
         await writeAuditEvent({
           action: "control.countdown_stop",
@@ -417,6 +442,7 @@ export function usePumpData() {
       }
     } catch (err) {
       console.error("[RTDB] stopCountdown failed:", err);
+      throw err;
     }
   }, [authUser?.email, authUser?.uid]);
 

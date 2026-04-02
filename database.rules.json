@@ -44,7 +44,13 @@
         "countdown_add_time": {
           ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
         },
+        "countdown_stop": {
+          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+        },
         "bypass_level_sensor": {
+          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+        },
+        "bypass_flow_sensor": {
           ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
         }
       },

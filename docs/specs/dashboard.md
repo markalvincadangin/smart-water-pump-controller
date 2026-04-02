@@ -34,7 +34,7 @@ The dashboard TypeScript types in `dashboard/lib/types.ts` are the canonical UI 
 | `is_level_sensor_error` | bool | Ultrasonic failure |
 | `is_flow_sensor_error` | bool | Flow sensor error |
 | `is_overflow_error` | bool | Max runtime exceeded |
-| `manual_runtime_warning` | bool | MANUAL run exceeded max time (no pump stop) |
+| `manual_runtime_warning` | bool | MANUAL run reached ~90% of configured max runtime (pump still on; overflow cutoff follows at 100%) |
 | `is_idle_mode` | bool | Slow-poll mode active — **Phase 3** |
 | `is_sleeping` | bool | Scheduled light sleep active |
 | `bypass_level_sensor` | bool | |

@@ -127,7 +127,7 @@ Core fields:
 - `manual_desired` / `emergency_stop_latched` (bools)
 - `remote_sensor_stable` / `level_fresh` (safety gate indicators)
 - `bypass_level_sensor` / `bypass_flow_sensor` / `auto_bypass_active` (bool)
-- `manual_runtime_warning` (bool — MANUAL runtime exceeded max; pump not stopped)
+- `manual_runtime_warning` (bool — MANUAL run reached ~90% of max runtime; pump may still be on until hard overflow cutoff at 100%)
 - `is_idle_mode` (bool — slow-poll mode active; added Phase 3)
 - `is_sleeping` (bool — scheduled light sleep active)
 - `remote_level_discard_count` (int — from RS-485 LDSC field; added Phase 3)

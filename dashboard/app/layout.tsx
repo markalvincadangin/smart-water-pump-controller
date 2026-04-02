@@ -17,10 +17,11 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico", type: "image/x-icon" },
-      { url: "/logos/combinationmark.svg", sizes: "192x192", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
     apple: [
-      { url: "/logos/combinationmark.svg", sizes: "180x180", type: "image/svg+xml" },
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
   },
 };
@@ -45,7 +46,7 @@ export default function RootLayout({
         "--font-geist": GeistSans.style.fontFamily,
         "--font-geist-mono": GeistMono.style.fontFamily 
       } as React.CSSProperties}>
-      <body className="bg-canvas text-text-primary font-sans antialiased overflow-x-hidden">
+      <body className="bg-canvas text-text-primary font-sans antialiased overflow-x-hidden" suppressHydrationWarning>
         <ThemeProvider attribute="data-theme">
           <a
             href="#main"

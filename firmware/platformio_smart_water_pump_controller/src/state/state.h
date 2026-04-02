@@ -130,6 +130,9 @@ extern bool          inSafeMode;
 extern unsigned long safeModeEnteredMs;
 extern String        bootReasonStr;
 
+// Emergency stop state preservation
+extern String        emergencyStopSavedMode;
+
 // WiFi/Firebase runtime
 extern unsigned long wifiBackoffMs;
 extern bool          wifiWasConnected;
@@ -141,6 +144,20 @@ extern unsigned long firebaseCooldownUntilMs;
 extern uint32_t      firebaseConsecutiveFailCount;
 extern String        firebaseLastError;
 extern unsigned long firebaseLastErrorLogMs;
+extern uint32_t      firebaseTimeoutCount;
+extern uint32_t      firebaseAuthErrorCount;
+extern uint32_t      firebaseNotReadySkipCount;
+
+extern uint32_t      cloudControlOkCount;
+extern uint32_t      cloudControlFailCount;
+extern uint32_t      cloudStatusOkCount;
+extern uint32_t      cloudStatusFailCount;
+extern uint32_t      cloudLastControlCallMs;
+extern uint32_t      cloudLastStatusCallMs;
+extern uint32_t      cloudLastCycleMs;
+
+extern uint32_t      rs485LastCallMs;
+extern uint32_t      loopMaxMs;
 
 // Persisted-state bookkeeping
 extern String        lastPersistedMode;

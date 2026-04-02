@@ -113,7 +113,7 @@ export default function AlertsCard({
         variant="warning"
         icon={<Info size={18} />}
         title="Manual runtime warning"
-        message="Pump has exceeded recommended safe duration."
+        message="Approaching configured max pump runtime — the pump will stop automatically if that limit is reached."
       />
     );
   }
@@ -169,16 +169,16 @@ export default function AlertsCard({
   }
 
   return (
-    <div className="card p-6 flex flex-col gap-4">
-      <h3 className="card-header">System Alerts</h3>
+    <div className="card p-6 flex flex-col gap-5">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)] self-start">System Alerts</h3>
       
       <div className="flex flex-col gap-3">
         {alerts.length > 0 ? (
           alerts
         ) : (
-          <div className="flex items-center gap-3 py-4 text-[var(--text-muted)] animate-fade-in">
-             <CheckCircle2 size={18} className="text-sf-teal opacity-50" />
-             <span className="text-xs font-medium uppercase tracking-wider">System operating normally</span>
+          <div className="flex items-center gap-3 py-3 text-[var(--text-muted)] animate-fade-in border border-transparent rounded-lg">
+             <CheckCircle2 size={16} className="text-sf-green opacity-80" />
+             <span className="text-xs font-medium uppercase tracking-widest text-[var(--text-secondary)]">System operating normally</span>
           </div>
         )}
       </div>
@@ -196,23 +196,30 @@ interface AlertItemProps {
 
 function AlertItem({ variant, icon, title, message, action }: AlertItemProps) {
   const styles = {
-    critical: "bg-sf-red text-white border-sf-red-dark",
-    danger: "bg-sf-red-light text-sf-red border-sf-red/20",
-    warning: "bg-sf-amber-light text-sf-amber border-sf-amber/20",
-    info: "bg-sf-blue-light text-sf-blue-mid border-sf-blue/20",
+    critical: "bg-sf-red text-white border-transparent",
+    danger: "border border-sf-red/30 bg-sf-red/5 text-[var(--text-primary)]",
+    warning: "border border-sf-amber/30 bg-sf-amber/5 text-[var(--text-primary)]",
+    info: "border border-sf-blue/30 bg-sf-blue/5 text-[var(--text-primary)]",
   };
+
+  const iconColors = {
+    critical: "text-white",
+    danger: "text-sf-red",
+    warning: "text-sf-amber",
+    info: "text-sf-blue",
+  }
 
   return (
     <div className={clsx(
-      "p-3 rounded-chip border flex items-start gap-3 animate-slide-up transition-shadow hover:shadow-sm",
+      "p-4 rounded-lg flex items-start gap-3 animate-slide-up transition-shadow",
       styles[variant]
     )}>
-      <div className="shrink-0 mt-0.5">{icon}</div>
+      <div className={clsx("shrink-0 mt-0.5", iconColors[variant])}>{icon}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-wider leading-none mb-1">{title}</p>
-        <p className="text-xs leading-snug opacity-90">{message}</p>
+        <p className="text-xs font-semibold uppercase tracking-widest leading-none mb-1.5">{title}</p>
+        <p className="text-sm leading-snug opacity-90 text-[var(--text-secondary)]">{message}</p>
       </div>
-      {action && <div className="ml-2 shrink-0">{action}</div>}
+      {action && <div className="ml-3 shrink-0 flex items-center h-full">{action}</div>}
     </div>
   );
 }

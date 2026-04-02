@@ -67,17 +67,19 @@ Watch debug on GPIO2 (`Serial1`) for a line like:
 
 ### 3. Later uploads over Wi-Fi (espota)
 
-With the device on the same network as your computer:
+With the device on the same network as your computer, prefer the numeric IP for the most reliable upload path:
 
 ```bash
 pio run -e nodemcuv2_ota -t upload --upload-port 192.168.1.42
 ```
 
-If mDNS works on your OS, you can try:
+If mDNS works on your OS, you can also use:
 
 ```bash
 pio run -e nodemcuv2_ota -t upload --upload-port swpc-sensor-node.local
 ```
+
+If an upload is interrupted, retry once with the numeric IP (not `.local`) before changing firmware.
 
 **If you set `OTA_UPLOAD_PASSWORD`**, pass the password to PlatformIO (example — replace `secret`):
 

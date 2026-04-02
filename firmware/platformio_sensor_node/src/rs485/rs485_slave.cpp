@@ -7,6 +7,26 @@
 static char rxLine[32];
 static uint8_t rxPos = 0;
 
+static bool isReqCommand(const char* cmd) {
+  if (!cmd || *cmd == '\0') return false;
+  return (strcmp(cmd, "REQ") == 0) || (strncmp(cmd, "REQ:", 4) == 0);
+}
+
+static bool parsePingSeq(const char* cmd, uint32_t& seqOut) {
+  if (!cmd) return false;
+  if (strncmp(cmd, "PING", 4) != 0) return false;
+  if (cmd[4] == '\0') {
+    seqOut = 0;
+    return true;
+  }
+  if (cmd[4] != ':') return false;
+  char* end = nullptr;
+  unsigned long v = strtoul(cmd + 5, &end, 10);
+  if (end == (cmd + 5)) return false;
+  seqOut = (uint32_t)v;
+  return true;
+}
+
 static void rs485SetTx(bool tx) {
   digitalWrite(PIN_RS485_DE_RE, tx ? HIGH : LOW);
   delayMicroseconds(RS485_TX_TURNAROUND_US);
@@ -48,6 +68,23 @@ static void sendFrame() {
 #endif
 }
 
+static void sendPingAckFrame(uint32_t seq) {
+  char payload[64];
+  int n = snprintf(payload, sizeof(payload), "HELLO;SEQ:%lu;NODE_OK:1;", (unsigned long)seq);
+  if (n <= 0 || (size_t)n >= sizeof(payload)) return;
+  uint16_t crc = crc16_modbus((const uint8_t*)payload, (size_t)n);
+
+  char frame[96];
+  int m = snprintf(frame, sizeof(frame), "\x02%sCRC:%04X\x03", payload, (unsigned)crc);
+  if (m <= 0 || (size_t)m >= sizeof(frame)) return;
+
+  rs485SetTx(true);
+  Serial.write((const uint8_t*)frame, (size_t)m);
+  Serial.flush();
+  delay(2);
+  rs485SetTx(false);
+}
+
 void rs485_slave_init() {
   pinMode(PIN_RS485_DE_RE, OUTPUT);
   rs485SetTx(false);
@@ -70,9 +107,14 @@ void rs485_slave_poll() {
       rxLine[rxPos] = '\0';
       rxPos = 0;
 
-      if (strcmp(rxLine, "REQ") == 0) {
+      if (isReqCommand(rxLine)) {
         sendFrame();
       } else {
+        uint32_t pingSeq = 0;
+        if (parsePingSeq(rxLine, pingSeq)) {
+          sendPingAckFrame(pingSeq);
+          return;
+        }
 #if SENSOR_DEBUG_ENABLED
         SENSOR_DBGF("[SN][INFO] RX unknown cmd: '%s'\n", rxLine);
 #endif
