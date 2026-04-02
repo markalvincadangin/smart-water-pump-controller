@@ -813,20 +813,19 @@ Since hardware is assumed good, sensor values are simulated by adjusting the phy
 
 ---
 
-### FW-MAN-005 [P1] — MANUAL Mode: Overflow Protection Issues Warning, Does NOT Stop Pump
+### FW-MAN-005 [P1] — MANUAL Mode: Overflow — 90% Warning, Then Hard Stop at Max Runtime
 
-**Requirement:** Bug H-05 fix. In MANUAL, overflow protection is informational only.
+**Requirement:** **Option B (2026-04-02):** MANUAL uses the same max-runtime policy as AUTO and COUNTDOWN: `manual_runtime_warning` from ~90% of the limit, then `is_overflow_error` and pump OFF at 100%. Operator supervision does not bypass the configured max runtime.
 
 **Setup:** Set `max_pump_runtime_min = 2` (for test speed). `[MANUAL-ON]`.
-**Observable:** `manual_runtime_warning`, `is_running`, `is_overflow_error` at t=0, t=1m, t=2m10s.
+**Observable:** `manual_runtime_warning`, `is_running`, `is_overflow_error` at t≈1m48s (90% of 2m) and t=2m10s.
 
-**Expected result at t=2m10s:**
-- `manual_runtime_warning = true` ← warning flag set
-- `is_overflow_error = false` ← overflow error NOT set
-- `is_running = true` ← pump STILL RUNNING
+**Expected result:**
+- At ~90% of max runtime: `manual_runtime_warning = true`, pump still running.
+- At max runtime (t≈2m10s): `is_overflow_error = true`, `is_running = false`.
 
-**Pass criteria:** Warning flag set, pump still running, no overflow error.
-**Fail criteria:** Pump stopped by overflow in MANUAL mode. Defect category: SAFETY (H-05 regression).
+**Pass criteria:** Warning before cutoff; overflow error and pump stop at max runtime.
+**Fail criteria:** No warning before cutoff, or pump still running after max runtime with no overflow error. Defect category: SAFETY.
 
 ---
 
@@ -1027,16 +1026,16 @@ Since hardware is assumed good, sensor values are simulated by adjusting the phy
 
 ---
 
-### FW-SAF-007 [P1] — OVERFLOW: Does NOT Fire in MANUAL Mode
+### FW-SAF-007 [P1] — OVERFLOW: Fires at Max Runtime in MANUAL Mode (Same as AUTO/COUNTDOWN)
 
-**Requirement:** Bug H-05 fix verification under fault injection.
+**Requirement:** **Option B:** Max-runtime overflow is not suppressed in MANUAL; behavior matches `checkOverflowProtection()` (warning phase, then hard stop).
 
 **Setup:** `max_pump_runtime_min = 2`. `[MANUAL-ON]`.
 **Observable:** `is_overflow_error`, `is_running` at t=2m10s.
 
-**Expected result:** `is_overflow_error = false` and `is_running = true` at t=2m10s.
-**Pass criteria:** No overflow error in MANUAL after max_runtime exceeded.
-**Fail criteria:** `is_overflow_error = true` or pump stops. Defect category: SAFETY (H-05 regression).
+**Expected result:** `is_overflow_error = true` and `is_running = false` at t=2m10s (± poll jitter).
+**Pass criteria:** Overflow error set and pump stopped after max continuous runtime in MANUAL.
+**Fail criteria:** Pump still running with `is_overflow_error = false` after max runtime. Defect category: SAFETY.
 
 ---
 
@@ -1799,7 +1798,7 @@ For each row: verify the transition has been explicitly tested.
 | MANUAL_OFF | mode: AUTO | AUTO_STANDBY | — | FW-SM-002 |
 | MANUAL_ON | manual_desired: false | MANUAL_COOLDOWN | off_timer starts | FW-MAN-002 |
 | MANUAL_ON | dry_run_timeout | MANUAL_ON (pump OFF) + is_error | — | FW-MAN-004 |
-| MANUAL_ON | overflow_timeout | MANUAL_ON (pump continues) + warning | MANUAL: warn only | FW-MAN-005 |
+| MANUAL_ON | overflow_timeout | pump OFF + is_overflow_error | max_runtime; 90% warning then stop | FW-MAN-005 |
 | MANUAL_ON | mode: AUTO | AUTO (run or standby by level) | — | FW-SM-002 |
 | MANUAL_COOLDOWN | off_timer_expires | MANUAL_OFF | — | FW-MAN-006 |
 | COUNTDOWN | countdown_expires | AUTO_COOLDOWN | — | FW-COUNT-003 |
@@ -1898,13 +1897,13 @@ Run this minimal set after every firmware change to confirm no regression.
 | FW-MAN-002 | MANUAL: stop on manual_desired false | MANUAL logic | P1 |
 | FW-MAN-003 | MANUAL: level has no effect | MANUAL logic | P1 |
 | FW-MAN-004 | MANUAL: DRY_RUN still fires | MANUAL logic | P1 |
-| FW-MAN-005 | MANUAL: overflow = warning, not stop | MANUAL logic | P1 |
+| FW-MAN-005 | MANUAL: overflow = 90% warn then hard stop | MANUAL logic | P1 |
 | FW-SAF-001 | DRY_RUN fires at exact timeout | Safety | P1 |
 | FW-SAF-002 | DRY_RUN timer resets on recovery | Safety | P1 |
 | FW-SAF-003 | DRY_RUN: relay OFF immediately | Safety | P1 |
 | FW-SAF-004 | DRY_RUN not cleared by mode change | Safety | P1 |
 | FW-SAF-005 | DRY_RUN clears via clear_error only | Safety | P1 |
-| FW-SAF-007 | OVERFLOW: does not stop in MANUAL | Safety | P1 |
+| FW-SAF-007 | OVERFLOW: max runtime stops MANUAL | Safety | P1 |
 | FW-SAF-009 | Sensor failure stops pump | Safety | P1 |
 | FW-RS-001 | CRC16-Modbus matches test vector | Protocol | P1 |
 | FW-RS-002 | CRC failure: frame data not used | Protocol | P1 |
@@ -1922,7 +1921,7 @@ Run this minimal set after every firmware change to confirm no regression.
 |---|---|---|
 | runMode initialized to AUTO_STANDBY | Bug M-05 | FW-BOOT-001, FW-LD-005 |
 | water_level_percent absent before valid data | Bug C-02 | FW-BOOT-002, FW-BOOT-004 |
-| Overflow warning-only in MANUAL | Bug H-05 | FW-MAN-005, FW-SAF-007 |
+| Overflow max-runtime in MANUAL (Option B) | Product decision 2026-04-02 | FW-MAN-005, FW-SAF-007 |
 | Crash counter: success-based clear | Bug H-06 | FW-BOOT-007 |
 | AUTO_COOLDOWN run mode | Bug H-07 | FW-AUTO-002, FW-AUTO-004, FW-AUTO-005 |
 | Level plausibility filter observability | Bug H-02 | FW-SN-002, FW-SN-003 |

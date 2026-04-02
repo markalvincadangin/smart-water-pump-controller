@@ -2,11 +2,13 @@
 
 #include <addons/TokenHelper.h>
 #include <addons/RTDBHelper.h>
+#include <esp_task_wdt.h>
 
 #include "../state/state.h"
 #include "../persistence/persistence.h"
 #include "../safety/safety_pump.h"
 #include "../config/config.h"
+#include "../utils/time_utils.h"
 
 void readDeviceConfigFromFirebase() {
   if (!Firebase.RTDB.getJSON(&fbdo, "/pump_system/config/device")) return;
@@ -162,7 +164,8 @@ void readDeviceConfigFromFirebase() {
 
 void checkCountdownExpiry() {
   if (!isCountdownActive || pumpMode != "COUNTDOWN") return;
-  if (millis() >= countdownEndMs) {
+  uint32_t now = millis();
+  if (countdownEndMs != 0 && millisDeadlineReached(now, countdownEndMs)) {
     LOG(LOG_LEVEL_INFO, "COUNTDOWN", "Timer expired. Pump stopped. Mode stays COUNTDOWN.");
     isCountdownActive = false;
     countdownEndMs    = 0;
@@ -170,9 +173,8 @@ void checkCountdownExpiry() {
   }
 }
 
-void readFirebaseControl() {
-  static bool lastManualStart = false;
-  static bool lastManualStop  = false;
+bool readFirebaseControl() {
+  unsigned long t0 = millis();
   static bool countdownConsumed = false;
   static bool lastAddTime = false;
   static bool lastEmergencyStop = false;
@@ -193,26 +195,32 @@ void readFirebaseControl() {
   if (!Firebase.RTDB.getJSON(&fbdo, "/pump_system/control")) {
     String err = fbdo.errorReason();
     firebaseConsecutiveFailCount++;
+    cloudControlFailCount++;
     firebaseLastError = err;
     LOG(LOG_LEVEL_ERROR, "FIREBASE", "Control read failed: %s", err.c_str());
     if (err.indexOf("token is not ready") >= 0 || err.indexOf("revoked") >= 0 || err.indexOf("expired") >= 0) {
+      firebaseAuthErrorCount++;
       unsigned long now = millis();
-      firebaseCooldownUntilMs = max(firebaseCooldownUntilMs, now + FIREBASE_AUTH_COOLDOWN_MS);
+      firebaseCooldownUntilMs = max(firebaseCooldownUntilMs, (unsigned long)addMillisSaturated(now, FIREBASE_AUTH_COOLDOWN_MS));
       Firebase.refreshToken(&config);
       LOG(LOG_LEVEL_INFO, "FIREBASE", "Auth not ready/expired; backing off and requesting token refresh.");
     } else if (err.indexOf("payload read timed out") >= 0 || err.indexOf("read timed out") >= 0) {
+      firebaseTimeoutCount++;
+      fbdo.stopWiFiClient(); // Force teardown of dead TCP socket to escape the failure loop
       if (firebaseConsecutiveFailCount >= STATUS_PUSH_RETRY_MAX) {
         unsigned long now = millis();
-        firebaseCooldownUntilMs = max(firebaseCooldownUntilMs, now + 30000UL);
+        firebaseCooldownUntilMs = max(firebaseCooldownUntilMs, (unsigned long)addMillisSaturated(now, 30000UL));
         LOG(LOG_LEVEL_ERROR, "FIREBASE", "Control read timeout; cooling down 30s.");
       } else {
         LOG(LOG_LEVEL_ERROR, "FIREBASE", "Control read timeout; retrying (%d/%d).", (int)firebaseConsecutiveFailCount, STATUS_PUSH_RETRY_MAX);
       }
     }
-    return;
+    cloudLastControlCallMs = (uint32_t)(millis() - t0);
+    return false;
   }
 
   firebaseConsecutiveFailCount = 0;
+  cloudControlOkCount++;
   FirebaseJson controlJson = fbdo.to<FirebaseJson>();
   FirebaseJsonData jd;
 
@@ -223,34 +231,39 @@ void readFirebaseControl() {
     newMode.trim();
     newMode.toUpperCase();
     firebaseReadMode = newMode;
-    // Only AUTO / MANUAL / COUNTDOWN are valid policy modes.
-    if (newMode == "AUTO" || newMode == "COUNTDOWN" || newMode == "MANUAL") {
-      if (pendingModeWriteback) {
-        if (newMode == pumpMode) {
-          pendingModeWriteback = false;
-          pendingModeWritebackSentMs = 0;
-          if (pumpMode == "AUTO") countdownConsumed = false;
-          LOG(LOG_LEVEL_INFO, "FIREBASE", "Mode write-back confirmed.");
-        } else if (pendingModeWritebackSentMs == 0 ||
-                   millis() - pendingModeWritebackSentMs >= 5000UL) {
-          Firebase.RTDB.setString(&fbdo, "/pump_system/control/mode", pumpMode);
-          pendingModeWritebackSentMs = millis();
-          LOG(LOG_LEVEL_INFO, "FIREBASE", "Mode write-back: %s (dashboard sync).", pumpMode.c_str());
-        }
-      } else {
-        if (pumpMode != newMode) {
-          LOG(LOG_LEVEL_INFO, "FIREBASE", "Mode changed: %s -> %s", pumpMode.c_str(), newMode.c_str());
-        }
-        pumpMode = newMode;
-      }
-    } else if (newMode == "FORCE_ON" || newMode == "FORCE_OFF") {
-      // Backward compatibility: map deprecated FORCE modes to AUTO and write back.
-      LOG(LOG_LEVEL_INFO, "FIREBASE", "Deprecated mode '%s' received. Mapping to AUTO.", newMode.c_str());
-      pumpMode = "AUTO";
-      pendingModeWriteback = true;
-      pendingModeWritebackSentMs = 0;
+    // SAFETY: Block mode *application* while latched; still process reset_stop / clear_error below (M-27).
+    if (emergencyStopLatched) {
+      LOG(LOG_LEVEL_WARN, "E-STOP", "Mode change blocked by emergency stop latch. Current mode: %s", pumpMode.c_str());
     } else {
-      LOG(LOG_LEVEL_INFO, "FIREBASE", "Unknown mode received: '%s'. Ignoring.", newMode.c_str());
+      // Only AUTO / MANUAL / COUNTDOWN are valid policy modes.
+      if (newMode == "AUTO" || newMode == "COUNTDOWN" || newMode == "MANUAL") {
+        if (pendingModeWriteback) {
+          if (newMode == pumpMode) {
+            pendingModeWriteback = false;
+            pendingModeWritebackSentMs = 0;
+            if (pumpMode == "AUTO") countdownConsumed = false;
+            LOG(LOG_LEVEL_INFO, "FIREBASE", "Mode write-back confirmed.");
+          } else if (pendingModeWritebackSentMs == 0 ||
+                     elapsedMillis32(millis(), pendingModeWritebackSentMs) >= 5000UL) {
+            Firebase.RTDB.setString(&fbdo, "/pump_system/control/mode", pumpMode);
+            pendingModeWritebackSentMs = millis();
+            LOG(LOG_LEVEL_INFO, "FIREBASE", "Mode write-back: %s (dashboard sync).", pumpMode.c_str());
+          }
+        } else {
+          if (pumpMode != newMode) {
+            LOG(LOG_LEVEL_INFO, "FIREBASE", "Mode changed: %s -> %s", pumpMode.c_str(), newMode.c_str());
+          }
+          pumpMode = newMode;
+        }
+      } else if (newMode == "FORCE_ON" || newMode == "FORCE_OFF") {
+        // Backward compatibility: map deprecated FORCE modes to AUTO and write back.
+        LOG(LOG_LEVEL_INFO, "FIREBASE", "Deprecated mode '%s' received. Mapping to AUTO.", newMode.c_str());
+        pumpMode = "AUTO";
+        pendingModeWriteback = true;
+        pendingModeWritebackSentMs = 0;
+      } else {
+        LOG(LOG_LEVEL_INFO, "FIREBASE", "Unknown mode received: '%s'. Ignoring.", newMode.c_str());
+      }
     }
   }
 
@@ -265,8 +278,9 @@ void readFirebaseControl() {
   if (jd.success) {
     bool v = jd.boolValue;
     if (v && !lastEmergencyStop) {
-      LOG(LOG_LEVEL_INFO, "E-STOP", "Emergency stop requested.");
+      LOG(LOG_LEVEL_INFO, "E-STOP", "Emergency stop requested. Saving mode: %s", pumpMode.c_str());
       emergencyStopLatched = true;
+      emergencyStopSavedMode = pumpMode;  // Preserve current mode
       manualDesired = false;
       setPump(false);
       if (isCountdownActive) { isCountdownActive = false; countdownEndMs = 0; }
@@ -283,28 +297,17 @@ void readFirebaseControl() {
       if (isDryRunError || isOverflowError) {
         LOG(LOG_LEVEL_INFO, "E-STOP", "Reset requested but hard lockout active; ignoring.");
       } else {
-        LOG(LOG_LEVEL_INFO, "E-STOP", "Reset stop requested. Clearing latch.");
+        LOG(LOG_LEVEL_INFO, "E-STOP", "Reset stop requested. Restoring mode: %s", emergencyStopSavedMode.c_str());
         emergencyStopLatched = false;
+        pumpMode = emergencyStopSavedMode;  // Restore saved mode
+        countdownConsumed = false;  // Allow countdown to be restarted if it was the saved mode
       }
       Firebase.RTDB.setBool(&fbdo, "/pump_system/control/reset_stop", false);
     }
     lastResetStop = v;
   }
 
-  controlJson.get(jd, "manual_stop");
-  if (jd.success) {
-    bool v = jd.boolValue;
-    if (v && !lastManualStop) {
-      // Backward compatibility: legacy manual_stop => manual_desired=false
-      LOG(LOG_LEVEL_INFO, "FIREBASE", "manual_stop (legacy) received. Setting manual_desired=false.");
-      manualDesired = false;
-      setPump(false);
-      Firebase.RTDB.setBool(&fbdo, "/pump_system/control/manual_stop", false);
-    }
-    lastManualStop = v;
-  }
-
-  if (firebaseReadMode.length() > 0 && firebaseReadMode != "COUNTDOWN") {
+  if (!emergencyStopLatched && firebaseReadMode.length() > 0 && firebaseReadMode != "COUNTDOWN") {
     countdownConsumed = false;
   }
 
@@ -334,7 +337,7 @@ void readFirebaseControl() {
     } else {
       durationMin = constrain(durationMin, 1, COUNTDOWN_MAX_DURATION_MIN);
     }
-    countdownEndMs = millis() + (unsigned long)durationMin * 60000UL;
+    countdownEndMs = addMillisSaturated(millis(), (uint32_t)durationMin * 60000UL);
     isCountdownActive = true;
     countdownConsumed = true;
     lastAddTime = false;
@@ -353,10 +356,12 @@ void readFirebaseControl() {
           int n = (jd.typeNum == FirebaseJson::JSON_INT) ? jd.intValue : (int)jd.doubleValue;
           if (n >= 1 && n <= COUNTDOWN_MAX_DURATION_MIN) addMin = n;
         }
-        unsigned long nowMs = millis();
-        if (isCountdownActive && countdownEndMs > nowMs) {
-          unsigned long maxEnd = nowMs + (unsigned long)COUNTDOWN_MAX_DURATION_MIN * 60000UL;
-          countdownEndMs = min(countdownEndMs + (unsigned long)addMin * 60000UL, maxEnd);
+        uint32_t nowMs = millis();
+        if (isCountdownActive && countdownEndMs != 0 && !millisDeadlineReached(nowMs, countdownEndMs)) {
+          uint32_t maxEnd = addMillisSaturated(nowMs, (uint32_t)COUNTDOWN_MAX_DURATION_MIN * 60000UL);
+          uint32_t addMs = (uint32_t)addMin * 60000UL;
+          uint32_t candidate = addMillisSaturated(countdownEndMs, addMs);
+          countdownEndMs = min(candidate, maxEnd);
           LOG(LOG_LEVEL_INFO, "COUNTDOWN", "+%d min added.", addMin);
         }
         Firebase.RTDB.setBool(&fbdo, "/pump_system/control/countdown_add_time", false);
@@ -390,27 +395,6 @@ void readFirebaseControl() {
       cfgBypassFlowSensor = v;
       LOG(LOG_LEVEL_INFO, "FIREBASE", "Bypass flow sensor: %s", v ? "ON" : "OFF");
     }
-  }
-
-  controlJson.get(jd, "manual_start");
-  if (jd.success) {
-    bool v = jd.boolValue;
-    if (v && !lastManualStart) {
-      if (isDryRunError || isOverflowError) {
-        LOG(LOG_LEVEL_WARN, "FIREBASE", "Manual run rejected: error lockout active.");
-      } else if (pumpOffStartMs > 0 && (millis() - pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
-        LOG(LOG_LEVEL_WARN, "FIREBASE", "Manual run rejected: minimum off-time not elapsed.");
-      } else {
-        // Backward compatibility: legacy manual_start => set MANUAL + manual_desired=true
-        pumpMode = "MANUAL";
-        manualDesired = true;
-        runStartMs = millis();
-        LOG(LOG_LEVEL_INFO, "FIREBASE", "manual_start (legacy) received. Setting MANUAL + manual_desired=true.");
-      }
-      // Always clear one-shot command so future requests are edge-detectable.
-      Firebase.RTDB.setBool(&fbdo, "/pump_system/control/manual_start", false);
-    }
-    lastManualStart = v;
   }
 
   controlJson.get(jd, "bypass_level_sensor");
@@ -460,12 +444,23 @@ void readFirebaseControl() {
       ESP.restart();
     }
   }
+
+  static unsigned long lastHeartbeatMs = 0;
+  if (elapsedMillis32(millis(), lastHeartbeatMs) >= 15000UL) {
+    LOG(LOG_LEVEL_INFO, "FIREBASE", "Poll OK | Mode: %s | Relay: %s", pumpMode.c_str(), isRunning ? "ON" : "OFF");
+    lastHeartbeatMs = millis();
+  }
+
+  cloudLastControlCallMs = (uint32_t)(millis() - t0);
+  return true;
 }
 
-void pushFirebaseStatus() {
+bool pushFirebaseStatus() {
+  unsigned long t0 = millis();
   FirebaseJson statusJson;
   uint32_t uptimeMinutes = (uint32_t)(esp_timer_get_time() / 60000000ULL);
-  bool levelFresh = (levelLastUpdateMs > 0) && ((millis() - levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
+  bool levelFresh = (levelLastUpdateMs > 0) &&
+                    (elapsedMillis32(millis(), levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
 
   // REFACTOR [C-02]: omit level until first valid frame.
   if (waterLevelPct >= 0) {
@@ -495,6 +490,18 @@ void pushFirebaseStatus() {
   statusJson.set("min_free_heap_observed_bytes", (int)minFreeHeapObserved);
   statusJson.set("firebase_consecutive_failures", (int)firebaseConsecutiveFailCount);
   statusJson.set("firebase_last_error", firebaseLastError);
+  statusJson.set("firebase_timeout_count", (int)firebaseTimeoutCount);
+  statusJson.set("firebase_auth_error_count", (int)firebaseAuthErrorCount);
+  statusJson.set("firebase_not_ready_skip_count", (int)firebaseNotReadySkipCount);
+  statusJson.set("cloud_control_ok_count", (int)cloudControlOkCount);
+  statusJson.set("cloud_control_fail_count", (int)cloudControlFailCount);
+  statusJson.set("cloud_status_ok_count", (int)cloudStatusOkCount);
+  statusJson.set("cloud_status_fail_count", (int)cloudStatusFailCount);
+  statusJson.set("cloud_last_control_call_ms", (int)cloudLastControlCallMs);
+  statusJson.set("cloud_last_status_call_ms", (int)cloudLastStatusCallMs);
+  statusJson.set("cloud_last_cycle_ms", (int)cloudLastCycleMs);
+  statusJson.set("rs485_last_call_ms", (int)rs485LastCallMs);
+  statusJson.set("loop_max_ms", (int)loopMaxMs);
   statusJson.set("ultrasonic_cycles_ok",         (int)ultrasonicCycleOkCount);
   statusJson.set("ultrasonic_cycles_timeout",    (int)ultrasonicCycleTimeoutCount);
   statusJson.set("ultrasonic_last_good_cm",      (float)ultrasonicLastGoodCmX10 / 10.0f);
@@ -510,11 +517,11 @@ void pushFirebaseStatus() {
 
   statusJson.set("run_mode", runMode);
   int32_t countdownRemainSec = 0;
-  if (isCountdownActive && pumpMode == "COUNTDOWN") {
-    unsigned long nowMs = millis();
-    countdownRemainSec = (countdownEndMs > nowMs)
-      ? (int32_t)((countdownEndMs - nowMs) / 1000UL)
-      : 0;
+  if (isCountdownActive && pumpMode == "COUNTDOWN" && countdownEndMs != 0) {
+    uint32_t nowMs = millis();
+    countdownRemainSec = millisDeadlineReached(nowMs, countdownEndMs)
+      ? 0
+      : (int32_t)((uint32_t)(countdownEndMs - nowMs) / 1000UL);
   }
   statusJson.set("countdown_remaining_sec", countdownRemainSec);
   statusJson.set("pump_cooldown_remaining_sec", pumpCooldownRemainingSec);
@@ -526,11 +533,11 @@ void pushFirebaseStatus() {
   }
   statusJson.set("level_estimate_active", (estimatedLevelPct >= 0.0f && cfgBypassLevelSensor));
   statusJson.set("flow_volume_added_l", flowVolumeAddedL);
-  uint32_t levelAgeS = (levelLastValidMs > 0) ? (uint32_t)((millis() - levelLastValidMs) / 1000UL) : 0;
+  uint32_t levelAgeS = (levelLastValidMs > 0) ? (elapsedMillis32(millis(), levelLastValidMs) / 1000UL) : 0;
   statusJson.set("level_last_valid_age_sec", (int)levelAgeS);
   int levelSensorHealthPct = 100;
   levelSensorHealthPct -= min(levelSensorFailCount * 20, 80);
-  if (levelLastValidMs > 0 && (millis() - levelLastValidMs) > 30000UL) levelSensorHealthPct -= 20;
+  if (levelLastValidMs > 0 && elapsedMillis32(millis(), levelLastValidMs) > 30000UL) levelSensorHealthPct -= 20;
   levelSensorHealthPct = constrain(levelSensorHealthPct, 0, 100);
   statusJson.set("level_sensor_health_pct", levelSensorHealthPct);
   statusJson.set("total_pump_cycles", (int)totalPumpCycles);
@@ -539,33 +546,42 @@ void pushFirebaseStatus() {
   if (Firebase.RTDB.setJSON(&fbdo, "/pump_system/status", &statusJson)) {
     lastSuccessfulFirebaseMs = millis();
     firebaseConsecutiveFailCount = 0;
+    cloudStatusOkCount++;
     statusPushRetryCount = 0;
     LOG(LOG_LEVEL_INFO, "FIREBASE", "Status -> Level:%d%% | Flow:%.2f | Run:%s | Err:%s | RSSI:%d | Uptime:%um", waterLevelPct, flowRateLpm,
                   isRunning       ? "Y" : "N",
                   isDryRunError   ? "Y" : "N",
                   wifiRssi,
                   uptimeMinutes);
+    cloudLastStatusCallMs = (uint32_t)(millis() - t0);
+    return true;
   } else {
     String err = fbdo.errorReason();
     firebaseConsecutiveFailCount++;
+    cloudStatusFailCount++;
     firebaseLastError = err;
     statusPushRetryCount++;
     statusPushRetryMs = millis();
     LOG(LOG_LEVEL_ERROR, "FIREBASE", "Push failed: %s", err.c_str());
     if (err.indexOf("token is not ready") >= 0 || err.indexOf("revoked") >= 0 || err.indexOf("expired") >= 0) {
+      firebaseAuthErrorCount++;
       unsigned long now = millis();
-      firebaseCooldownUntilMs = max(firebaseCooldownUntilMs, now + FIREBASE_AUTH_COOLDOWN_MS);
+      firebaseCooldownUntilMs = max(firebaseCooldownUntilMs, (unsigned long)addMillisSaturated(now, FIREBASE_AUTH_COOLDOWN_MS));
       Firebase.refreshToken(&config);
       LOG(LOG_LEVEL_INFO, "FIREBASE", "Auth not ready/expired; backing off and requesting token refresh.");
     } else if (err.indexOf("payload read timed out") >= 0 || err.indexOf("read timed out") >= 0) {
+      firebaseTimeoutCount++;
+      fbdo.stopWiFiClient(); // Force teardown of dead TCP socket
       if (firebaseConsecutiveFailCount >= STATUS_PUSH_RETRY_MAX) {
         unsigned long now = millis();
-        firebaseCooldownUntilMs = max(firebaseCooldownUntilMs, now + 30000UL);
+        firebaseCooldownUntilMs = max(firebaseCooldownUntilMs, (unsigned long)addMillisSaturated(now, 30000UL));
         LOG(LOG_LEVEL_ERROR, "FIREBASE", "Network timeout; cooling down 30s.");
       } else {
         LOG(LOG_LEVEL_ERROR, "FIREBASE", "Network timeout; retrying (%d/%d).", (int)firebaseConsecutiveFailCount, STATUS_PUSH_RETRY_MAX);
       }
     }
+    cloudLastStatusCallMs = (uint32_t)(millis() - t0);
+    return false;
   }
 }
 
@@ -578,6 +594,7 @@ void connectWiFi() {
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 40) {
     delay(500);
+    esp_task_wdt_reset();
     Serial.print(".");
     attempts++;
   }
@@ -599,14 +616,16 @@ void initFirebase() {
 
   config.token_status_callback = tokenStatusCallback;
 
-  fbdo.setBSSLBufferSize(4096, 1024);
+  // Maximize buffers to handle JSON payloads without fragmentation timeouts
+  fbdo.setBSSLBufferSize(4096, 2048);
+  fbdo.setResponseSize(4096);
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  Firebase.RTDB.setReadTimeout(&fbdo, 10000);
-  Firebase.RTDB.setwriteSizeLimit(&fbdo, "medium");
-  fbdo.setResponseSize(1024);
+  Firebase.RTDB.setReadTimeout(&fbdo, 15000);
+  Firebase.RTDB.setwriteSizeLimit(&fbdo, "medium");  // library spelling (typo in upstream API)
+  fbdo.keepAlive(30, 30, 2);
 
   firebaseInitialized = true;
   firebaseConsecutiveFailCount = 0;

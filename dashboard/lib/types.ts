@@ -54,7 +54,7 @@ export interface PumpStatus {
   manual_desired: boolean;
   bypass_level_sensor: boolean;
   bypass_flow_sensor: boolean;
-  manual_runtime_warning: boolean;       // non-latching, info only
+  manual_runtime_warning: boolean;       // ~90% of max runtime in MANUAL; pump still on until hard cutoff at limit
 
   // Sensor health
   remote_sensor_stable: boolean;         // 3 consecutive valid frames
@@ -225,7 +225,7 @@ export interface HistoryEvent {
 
 export const DEFAULT_DEVICE_CONFIG: DeviceConfig = {
   tank_empty_cm: 200,
-  tank_full_cm: 10,
+  tank_full_cm: 25,
   pump_start_level: 20,
   pump_stop_level: 90,
   dry_run_threshold_lpm: 1.0,

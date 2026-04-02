@@ -278,7 +278,7 @@ void executePumpLogic() {
     } else if (pumpMode == "COUNTDOWN" && isCountdownActive) {
       runMode = "COUNTDOWN";
     } else if (pumpMode == "COUNTDOWN" && !isCountdownActive) {
-      runMode = "AUTO_STANDBY";
+      runMode = "COUNTDOWN";
     } else if (pumpMode == "AUTO" && isRunning) {
       runMode = "AUTO";
     } else if (pumpMode == "AUTO" && !isRunning) {

@@ -8,11 +8,11 @@
 // NodeMCU V2 (ESP8266)
 // - RS-485 UART: TX=GPIO1, RX=GPIO3 (Serial)
 // - RS-485 DE/RE (tied): D5 = GPIO14
-// - Flow input: D7 = GPIO13 (interrupt capable)
+// - Flow input: D6 = GPIO12 (interrupt capable) [temporary diagnostic reroute]
 // - Ultrasonic: TRIG D1=GPIO5, ECHO D0=GPIO16 (ECHO MUST be level shifted to 3.3V)
 
 #define PIN_RS485_DE_RE   14   // D5
-#define PIN_FLOW_INPUT    13   // D7
+#define PIN_FLOW_INPUT    12   // D6
 #define PIN_US_TRIG        5   // D1
 #define PIN_US_ECHO       16   // D0
 
@@ -33,8 +33,23 @@
 #define US_SAMPLE_DELAY_MS  60
 
 // Tank level: distance (cm) — two-point calibration.
-#define TANK_US_DIST_EMPTY_CM  122.0f
-#define TANK_US_DIST_FULL_CM    8.0f
+// Calibrated to current field geometry (2026-04-01):
+// - sensor to tank bottom (empty reference): 118 cm
+// - full reference used by ops: 0 cm
+#define TANK_US_DIST_EMPTY_CM  120.0f
+#define TANK_US_DIST_FULL_CM    0.0f
+
+// Additive trim for installation-specific ultrasonic reference offset.
+// Positive values increase reported distance.
+#define TANK_US_DISTANCE_OFFSET_CM 10.5f
+
+// JSN-SR04T capability guardrail with safety margin.
+// Readings outside this reliability band are treated as invalid samples.
+#define US_SENSOR_MIN_CM 20.0f
+#define US_SENSOR_MAX_CM 450.0f
+#define US_SENSOR_MARGIN_CM 5.0f
+#define US_RELIABLE_MIN_CM (US_SENSOR_MIN_CM + US_SENSOR_MARGIN_CM)
+#define US_RELIABLE_MAX_CM (US_SENSOR_MAX_CM - US_SENSOR_MARGIN_CM)
 
 // Flow calibration (YF-G1 typical).
 // flow_lpm = pulse_hz / FLOW_HZ_PER_LPM  (must be bucket-calibrated)
@@ -43,7 +58,7 @@
 // Hardening parameters
 #define US_MEAS_INTERVAL_MS        1000UL
 #define US_SAMPLE_SPACING_MS         40UL
-#define FLOW_MIN_PULSE_INTERVAL_US 2000UL
+#define FLOW_MIN_PULSE_INTERVAL_US 800UL  // temporary diagnostic tuning
 #define FLOW_MAX_SANE_LPM          100.0f
 #define FLOW_TIMEOUT_MS            5000UL
 #define LEVEL_MAX_DELTA_PCT        20

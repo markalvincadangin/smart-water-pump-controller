@@ -706,20 +706,18 @@ Annotations:
 
 ---
 
-### SF-FW-012 [HIGH] [SAFETY] — Overflow Protection in MANUAL Mode: Warning Only
+### SF-FW-012 [HIGH] [SAFETY] — Overflow Protection in MANUAL Mode: 90% Warning, Hard Stop at Max Runtime (Option B)
 
-**Objective:** Verify overflow protection in MANUAL mode issues a WARNING but does NOT stop the pump (Bug H-05 fix).
+**Objective:** Verify MANUAL mode uses the same max-runtime cutoff as AUTO/COUNTDOWN: warning near 90% of limit, then `is_overflow_error` and pump OFF at 100% (product decision 2026-04-02).
 
 **Steps:**
 1. Set `max_pump_runtime_min = 2` (for testing). Set mode to MANUAL.
 2. Write manual_desired: true. Let pump run.
-3. After 2 minutes:
-4. Confirm `manual_runtime_warning: true` in Firebase.
-5. Confirm pump is STILL RUNNING (`is_running: true`).
-6. Confirm `is_overflow_error: false`.
-7. Stop pump manually.
+3. Before 2 minutes: confirm `manual_runtime_warning: true` appears (~90% of limit).
+4. After 2 minutes (±10s): confirm `is_overflow_error: true`, `is_running: false`.
+5. Clear error if needed for cleanup.
 
-**Expected result:** Warning flag set, pump continues running in MANUAL mode.
+**Expected result:** Warning before cutoff; overflow fault and pump stop at configured max runtime.
 
 ---
 

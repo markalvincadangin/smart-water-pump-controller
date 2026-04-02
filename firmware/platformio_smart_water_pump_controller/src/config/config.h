@@ -81,7 +81,7 @@
 #define RS485_REQ_INTERVAL_MS      1000
 #define RS485_FRAME_TIMEOUT_MS     250
 #define RS485_MAX_RETRIES          3
-#define RS485_RX_LINE_MAX          96
+#define RS485_RX_LINE_MAX          160
 #define REMOTE_SENSOR_OFFLINE_MS   5000UL
 #define RS485_TX_TURNAROUND_US     80   // DE/RE settle time; tune for cable/transceiver
 
@@ -176,7 +176,8 @@
 #define LOG_LEVEL_DEBUG   3
 #define LOG_LEVEL_VERBOSE 4
 
-#define LOG_COMPILE_FLOOR LOG_LEVEL_INFO
+// DEBUG+ enabled in binary so Firebase debug_log_level can raise runtime verbosity (M-30).
+#define LOG_COMPILE_FLOOR LOG_LEVEL_DEBUG
 
 extern uint8_t gLogLevel;
 

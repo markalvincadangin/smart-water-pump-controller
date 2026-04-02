@@ -59,34 +59,38 @@ export default function TankLevelCard({
         : "text-[var(--text-primary)]";
 
   return (
-    <div className="card p-6 flex flex-col items-center gap-6 relative overflow-hidden transition-all duration-300">
-      <h3 className="card-header self-start">Water Level</h3>
+    <div className="card p-6 flex flex-col items-center gap-6 relative overflow-hidden transition-all duration-300 min-h-[320px]">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)] self-start">Water Level</h3>
 
-      <div className="flex w-full items-center justify-center gap-8 md:gap-12">
+      <div className="flex w-full items-center justify-center gap-8 md:gap-12 flex-1 mt-2">
         {/* SVG Tank */}
         <div className="relative h-[200px] w-[100px]" role="img" aria-label={`Water level: ${level}%`}>
           <svg
             viewBox="0 0 80 160"
-            className="h-full w-full drop-shadow-sm"
+            className="h-full w-full"
             preserveAspectRatio="xMidYMid meet"
           >
-            {/* Outer Shell */}
+            <clipPath id="tank-clip">
+              <rect x="4" y="4" width="72" height="152" rx="36" />
+            </clipPath>
+
+            {/* Inner Track */}
             <rect
-              x="2"
-              y="2"
-              width="76"
-              height="156"
-              rx="12"
-              className="fill-none stroke-[var(--card-border)] stroke-[1.5]"
+              x="4"
+              y="4"
+              width="72"
+              height="152"
+              rx="36"
+              className="fill-sf-gray-50 dark:fill-sf-gray-900"
             />
             
             {/* Water Fill */}
             <rect
               x="4"
-              y={158 - (1.54 * level)} // Adjust for bottom margin + stroke
+              y={156 - (1.52 * level)}
               width="72"
-              height={1.54 * level}
-              rx="10"
+              height={1.52 * level}
+              clipPath="url(#tank-clip)"
               className={clsx(
                 "transition-[height,y] duration-700 ease-in-out",
                 getFillColor()
@@ -96,75 +100,83 @@ export default function TankLevelCard({
             {/* Threshold Markers */}
             {stopLevel !== undefined && (
               <line
-                x1="2"
-                y1={158 - (1.54 * stopLevel)}
-                x2="78"
-                y2={158 - (1.54 * stopLevel)}
-                className="stroke-sf-teal/30 stroke-1 stroke-dash-2"
+                x1="4"
+                y1={156 - (1.52 * stopLevel)}
+                x2="76"
+                y2={156 - (1.52 * stopLevel)}
+                className="stroke-sf-teal/50 stroke-[1.5] stroke-dash-2"
                 strokeDasharray="4 2"
               />
             )}
             {startLevel !== undefined && (
               <line
-                x1="2"
-                y1={158 - (1.54 * startLevel)}
-                x2="78"
-                y2={158 - (1.54 * startLevel)}
-                className="stroke-sf-amber/40 stroke-1 stroke-dash-2"
+                x1="4"
+                y1={156 - (1.52 * startLevel)}
+                x2="76"
+                y2={156 - (1.52 * startLevel)}
+                className="stroke-sf-amber/50 stroke-[1.5] stroke-dash-2"
                 strokeDasharray="4 2"
               />
             )}
+
+            {/* Outer Shell */}
+            <rect
+              x="4"
+              y="4"
+              width="72"
+              height="152"
+              rx="36"
+              className="fill-none stroke-[var(--card-border)] stroke-1"
+            />
           </svg>
-          
-          {/* Internal level label overlays if desired, or kept external for clarity */}
         </div>
 
         {/* Data Column */}
         <div className="flex flex-col items-start justify-center">
           <div className="flex items-baseline gap-1">
-            {isEstimate && <span className={clsx("text-2xl font-bold italic mr-1", textColorClass)}>~</span>}
-            <span className={clsx("text-5xl font-bold tracking-tight", textColorClass)}>
+            {isEstimate && <span className={clsx("text-3xl font-bold italic mr-1", textColorClass)}>~</span>}
+            <span className={clsx("text-6xl font-semibold tracking-tighter tabular-nums", textColorClass)}>
               {level}
             </span>
-            <span className="text-xl font-semibold opacity-40">%</span>
+            <span className="text-2xl font-medium text-[var(--text-muted)]">%</span>
           </div>
           
-          <div className="mt-1 font-mono text-sm text-[var(--text-secondary)] font-medium">
+          <div className="mt-2 text-sm text-[var(--text-secondary)] font-medium">
             {isEstimate && addedVolumeL !== undefined ? (
-              <span className="text-sf-amber">Flow estimate · +{addedVolumeL.toFixed(1)} L</span>
+              <span className="text-sf-amber">Flow estimate: +{addedVolumeL.toFixed(1)}L</span>
             ) : distanceCm !== undefined ? (
-              <span>{distanceCm.toFixed(1)} cm from sensor</span>
+              <span>{distanceCm.toFixed(1)} cm clearance</span>
             ) : (
-              <span className="opacity-50">Checking distance...</span>
+              <span className="opacity-50 text-[var(--text-muted)]">Checking distance...</span>
             )}
           </div>
 
           {/* Marker Labels */}
-          <div className="mt-4 flex flex-col gap-1.5 font-mono text-[10px] uppercase tracking-wider font-semibold opacity-60">
+          <div className="mt-5 flex flex-col gap-2 font-mono text-xs uppercase tracking-widest font-semibold opacity-80">
              <div className="flex items-center gap-2">
-                <div className="h-0.5 w-6 border-t border-dashed border-sf-teal" />
-                <span>Stop {stopLevel}%</span>
+                <div className="h-[1px] w-4 border-t border-dashed border-sf-teal" />
+                <span className="text-sf-teal">Stop {stopLevel}%</span>
              </div>
              <div className="flex items-center gap-2">
-                <div className="h-0.5 w-6 border-t border-dashed border-sf-amber" />
-                <span>Start {startLevel}%</span>
+                <div className="h-[1px] w-4 border-t border-dashed border-sf-amber" />
+                <span className="text-sf-amber">Start {startLevel}%</span>
              </div>
           </div>
         </div>
       </div>
 
       {/* Footer: Health Highlights */}
-      <div className="w-full mt-4 pt-4 border-t border-[var(--card-border)]/50 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <div className={clsx("h-2 w-2 rounded-full", isFresh ? "bg-sf-teal shadow-sf-teal/30 shadow-sm" : "bg-sf-amber")} />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
-              {isFresh ? "Fresh" : "Stale"}
+      <div className="w-full mt-auto pt-4 border-t border-[var(--card-border)] flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className={clsx("h-2 w-2 rounded-full", isFresh ? "bg-sf-teal" : "bg-sf-amber")} />
+            <span className="text-xs font-semibold text-[var(--text-secondary)]">
+              {isFresh ? "Live Data" : "Stale Data"}
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className={clsx("h-2 w-2 rounded-full", !isSensorError ? "bg-sf-teal shadow-sf-teal/30 shadow-sm" : "bg-sf-red animate-pulse")} />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+          <div className="flex items-center gap-2">
+            <div className={clsx("h-2 w-2 rounded-full", !isSensorError ? "bg-sf-teal" : "bg-sf-red animate-pulse")} />
+            <span className="text-xs font-semibold text-[var(--text-secondary)]">
               {isSensorError ? "Sensor Error" : "Sensor OK"}
             </span>
           </div>

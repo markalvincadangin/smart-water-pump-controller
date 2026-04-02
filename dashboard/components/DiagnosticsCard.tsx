@@ -69,11 +69,16 @@ export default function DiagnosticsCard({
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between p-6 group"
       >
-        <div className="flex items-center gap-3">
-          <Terminal size={18} className="text-sf-blue opacity-70 group-hover:opacity-100 transition-opacity" />
-          <h3 className="card-header m-0">Diagnostics</h3>
+        <div className="flex flex-col items-start gap-1">
+          <div className="flex items-center gap-3">
+            <Terminal size={18} className="text-sf-blue opacity-70 group-hover:opacity-100 transition-opacity" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)] m-0">System Health & Telemetry</h3>
+          </div>
+          <p className="text-[10px] text-[var(--text-muted)] opacity-70 ml-[30px] text-left leading-relaxed">
+            Raw diagnostic data from the controller. Intended for hardware debugging.
+          </p>
         </div>
-        <div className="text-[var(--text-muted)]">
+        <div className="text-[var(--text-muted)] shrink-0 ml-4">
           {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </div>
       </button>
@@ -126,15 +131,15 @@ export default function DiagnosticsCard({
                 <Terminal size={14} className="text-[var(--text-muted)]" />
                 <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">Remote Log Level</span>
              </div>
-             <div className="flex bg-sf-gray-50 rounded-chip p-0.5 border border-[var(--card-border)]/30">
+             <div className="flex bg-[var(--card-bg)] rounded-md p-1 border border-[var(--card-border)]">
                 {LOG_LEVEL_LABELS.map((label, i) => (
                   <button
                     key={label}
                     onClick={() => onSetLogLevel(i)}
                     className={clsx(
-                      "flex-1 py-1 text-[8px] font-bold tracking-tighter rounded-chip transition-all uppercase",
+                      "flex-1 py-1.5 text-[9px] font-bold tracking-tight rounded-md transition-all uppercase",
                       currentLogLevel === i 
-                        ? "bg-white shadow-sm text-sf-blue border border-[var(--card-border)]/20" 
+                        ? "bg-[var(--text-primary)] text-[var(--card-bg)] shadow-sm" 
                         : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                     )}
                   >
