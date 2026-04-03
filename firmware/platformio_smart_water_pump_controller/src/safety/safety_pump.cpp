@@ -152,14 +152,25 @@ void checkOverflowProtection() {
 }
 
 void checkDryRunProtection() {
+  // If flow sensor bypass is on, clear any existing dry-run lockout and skip the check.
+  // Bypass must recover the controller as well as prevent new dry-run trips.
+  if (cfgBypassFlowSensor) {
+    dryRunTimerActive = false;
+    dryRunStartMs = 0;
+    if (isDryRunError) {
+      isDryRunError = false;
+      lastFaultCode = "";
+      lastFaultMessage = "";
+      LOG(LOG_LEVEL_INFO, "SAFETY", "Flow bypass active. Clearing dry-run lockout.");
+    }
+    return;
+  }
+
   if (!isRunning) {
     dryRunTimerActive = false;
     dryRunStartMs = 0;
     return;
   }
-
-  // If flow sensor bypass is on, skip dry-run entirely.
-  if (cfgBypassFlowSensor) { dryRunTimerActive = false; dryRunStartMs = 0; return; }
 
   // If remote sensor data is stale/unstable, do not advance a dry-run timer.
   // Comm loss must fail-safe by stopping the pump via freshness/stability gates,

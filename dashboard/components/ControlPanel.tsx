@@ -9,6 +9,7 @@ interface ControlPanelProps {
   currentMode: ControlMode; // AUTO, MANUAL, COUNTDOWN
   manualDesired: boolean;
   isEmergencyStopLatched: boolean;
+  safetyHold?: boolean;
   isPending?: boolean;
   countdownRemainingSec?: number;
   onSetMode: (mode: "AUTO" | "MANUAL" | "COUNTDOWN") => void;
@@ -34,6 +35,7 @@ export default function ControlPanel({
   currentMode,
   manualDesired,
   isEmergencyStopLatched,
+  safetyHold = false,
   isPending = false,
   countdownRemainingSec = 0,
   onSetMode,
@@ -110,21 +112,21 @@ export default function ControlPanel({
           label="Auto" 
           active={currentMode === "AUTO"} 
           onClick={() => handleModeChange("AUTO")} 
-          disabled={isPending || isEmergencyStopLatched}
+          disabled={isPending || isEmergencyStopLatched || safetyHold}
         />
         <ModeButton 
           id="MANUAL" 
           label="Manual" 
           active={currentMode === "MANUAL"} 
           onClick={() => handleModeChange("MANUAL")} 
-          disabled={isPending || isEmergencyStopLatched}
+          disabled={isPending || isEmergencyStopLatched || safetyHold}
         />
         <ModeButton 
           id="TIMER" 
           label="Timer" 
           active={currentMode === "COUNTDOWN"} 
           onClick={() => handleModeChange("COUNTDOWN")} 
-          disabled={isPending || isEmergencyStopLatched}
+          disabled={isPending || isEmergencyStopLatched || safetyHold}
         />
       </div>
 
@@ -136,7 +138,7 @@ export default function ControlPanel({
           <div className="flex flex-col gap-3 animate-fade-in">
              <button
                 onClick={() => onSetManualDesired(!manualDesired)}
-                disabled={isPending}
+                disabled={isPending || safetyHold}
                 aria-label={manualDesired ? "Stop pump (manual mode)" : "Start pump (manual mode)"}
                 className={clsx(
                   "w-full flex items-center justify-center gap-2 py-3 rounded-md font-medium transition-all transform active:scale-[0.98] border shadow-sm",
@@ -185,6 +187,7 @@ export default function ControlPanel({
                    <div className="flex gap-2">
                        <button 
                           onClick={() => onAddCountdownTime(5)}
+                          disabled={isPending || safetyHold}
                           className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md border border-[var(--card-border)] hover:bg-sf-gray-50 dark:hover:bg-sf-gray-900 text-sm font-medium transition-colors"
                           aria-label="Add 5 minutes to countdown"
                        >
@@ -193,6 +196,7 @@ export default function ControlPanel({
                        </button>
                        <button 
                           onClick={() => onStopCountdown?.()}
+                          disabled={isPending || safetyHold}
                           className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md border border-sf-amber/30 bg-sf-amber/10 text-sf-amber-dark dark:text-sf-amber hover:bg-sf-amber/20 text-sm font-medium transition-colors"
                           aria-label="Stop countdown timer"
                        >
@@ -217,7 +221,7 @@ export default function ControlPanel({
                     </div>
                     <button 
                        onClick={() => onStartCountdown(timerDuration)}
-                       disabled={isPending}
+                       disabled={isPending || safetyHold}
                        className="bg-[var(--text-primary)] text-[var(--page-bg)] py-2.5 rounded-md flex items-center justify-center gap-2 font-medium hover:opacity-90 transition-opacity active:scale-[0.98]"
                        aria-label="Start countdown timer"
                     >
@@ -250,9 +254,9 @@ export default function ControlPanel({
              {!confirmingEStop ? (
                <button 
                   onClick={() => setConfirmingEStop(true)}
-                  className="w-full flex items-center justify-center gap-2 py-3 border border-sf-red/30 bg-sf-red/5 text-sf-red font-semibold rounded-md hover:bg-sf-red hover:text-white transition-all transform active:scale-[0.98]"
+                className="hidden md:flex w-full items-center justify-center gap-2 py-3 border border-sf-red/30 bg-sf-red/5 text-sf-red font-semibold rounded-md hover:bg-sf-red hover:text-white transition-all transform active:scale-[0.98]"
                   aria-label="Emergency stop — open confirmation"
-                  disabled={isPending}
+                disabled={isPending}
                >
                   <ShieldAlert size={16} />
                   Emergency Stop
@@ -326,7 +330,7 @@ export default function ControlPanel({
       </div>
 
       {/* Mobile-only sticky E-stop bar (always reachable) */}
-      {!isEmergencyStopLatched && (
+      {!isEmergencyStopLatched && !confirmingEStop && (
         <div className="fixed bottom-0 left-0 right-0 p-3 bg-[var(--card-bg)] border-t border-[var(--card-border)] md:hidden z-40">
           <button
             className="w-full flex items-center justify-center gap-2 py-3 bg-sf-red text-white font-semibold rounded-md hover:bg-sf-red-dark active:scale-[0.98] transition-all"
