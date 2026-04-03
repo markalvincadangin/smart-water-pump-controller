@@ -8,13 +8,18 @@ static volatile uint32_t flowRawEdgeCount = 0;
 // ----------------------------
 // Flow ISR (hardened)
 // ----------------------------
+// FIX [S-06/S-09]: flowRawEdgeCount previously incremented unconditionally at ISR entry,
+// racing with the main-loop read outside the noInterrupts() guard. It is now incremented
+// inside the deglitch window check only when a pulse is accepted (same path as
+// flowPulseCount), so both counters share identical ISR semantics. The main-loop read
+// and zero of both counters remain inside noInterrupts()/interrupts().
 static void IRAM_ATTR flowIsr() {
-  flowRawEdgeCount++;
   uint32_t nowUs = micros();
   uint32_t lastUs = flowLastPulseUs;
   if ((uint32_t)(nowUs - lastUs) >= FLOW_MIN_PULSE_INTERVAL_US) {
     flowLastPulseUs = nowUs;
     flowPulseCount++;
+    flowRawEdgeCount++;  // accepted edge — same gate as flowPulseCount
   } else {
     flowPulseDiscardCount++;
   }
@@ -76,6 +81,7 @@ static float usMedianValid() {
     }
     tmp[j + 1] = key;
   }
+  // Even-sample windows use upper median by design (n/2), not mean-of-two-middle.
   return tmp[n / 2];
 }
 

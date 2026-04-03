@@ -66,6 +66,7 @@ export interface PumpStatus {
   remote_level_discard_count: number;
 
   // Timers
+  countdown_active?: boolean;
   countdown_remaining_sec: number;
 
   // Flow stats
@@ -91,6 +92,8 @@ export interface PumpStatus {
   max_alloc_heap_bytes?: number;
   firebase_consecutive_failures: number;
   firebase_last_error: string;
+  cloud_last_control_ok_age_sec?: number;
+  cloud_control_poll_stale?: boolean;
 }
 
 /**
@@ -103,6 +106,7 @@ export interface PumpControl {
   reset_stop: boolean;                  // one-shot
   clear_error: boolean;                 // one-shot
   countdown_start: boolean;             // one-shot
+  countdown_stop: boolean;              // one-shot
   countdown_duration_min: number;
   countdown_add_time: boolean;          // one-shot
   countdown_add_min: number;
@@ -178,6 +182,7 @@ export const DEFAULT_STATUS: PumpStatus = {
   level_sensor_health_pct: 0,
   level_estimate_active: false,
   remote_level_discard_count: 0,
+  countdown_active: false,
   countdown_remaining_sec: 0,
   flow_volume_added_l: 0,
   wifi_rssi: 0,
@@ -194,6 +199,8 @@ export const DEFAULT_STATUS: PumpStatus = {
   min_free_heap_observed_bytes: 0,
   firebase_consecutive_failures: 0,
   firebase_last_error: '',
+  cloud_last_control_ok_age_sec: 0,
+  cloud_control_poll_stale: false,
 };
 export interface PumpSnapshot {
   status: PumpStatus;
@@ -225,7 +232,7 @@ export interface HistoryEvent {
 
 export const DEFAULT_DEVICE_CONFIG: DeviceConfig = {
   tank_empty_cm: 200,
-  tank_full_cm: 25,
+  tank_full_cm: 30,
   pump_start_level: 20,
   pump_stop_level: 90,
   dry_run_threshold_lpm: 1.0,

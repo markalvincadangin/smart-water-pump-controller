@@ -1,0 +1,163 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.wrap{padding:1rem 0}
+.verdict{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;margin-bottom:1.5rem;border:1px solid}
+.verdict.warn{background:#FAEEDA;border-color:#BA7517;color:#633806}
+.verdict.ok{background:#E1F5EE;border-color:#0F6E56;color:#085041}
+.verdict.block{background:#FCEBEB;border-color:#A32D2D;color:#791F1F}
+.verdict-icon{font-size:22px;flex-shrink:0}
+.verdict-title{font-size:16px;font-weight:500}
+.verdict-sub{font-size:12px;margin-top:2px;opacity:.85}
+h2{font-size:16px;font-weight:500;color:var(--color-text-primary);margin:1.5rem 0 0.6rem}
+h3{font-size:13px;font-weight:500;color:var(--color-text-secondary);margin:1rem 0 0.4rem;text-transform:uppercase;letter-spacing:.04em}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:1rem}
+thead th{text-align:left;padding:5px 8px;background:var(--color-background-secondary);color:var(--color-text-secondary);font-weight:500;font-size:11px;border-bottom:1px solid var(--color-border-tertiary)}
+tbody tr{border-bottom:1px solid var(--color-border-tertiary)}
+tbody tr:hover{background:var(--color-background-secondary)}
+td{padding:5px 8px;vertical-align:top;color:var(--color-text-primary);line-height:1.5}
+td.id{font-family:var(--font-mono);font-size:11px;white-space:nowrap;color:var(--color-text-secondary)}
+td.loc{font-size:11px;color:var(--color-text-secondary)}
+code{font-family:var(--font-mono);font-size:11px;background:var(--color-background-secondary);padding:1px 3px;border-radius:3px}
+.pill{display:inline-block;font-size:10px;font-weight:600;border-radius:3px;padding:1px 6px;white-space:nowrap}
+.p-ok{background:#E1F5EE;color:#085041}
+.p-warn{background:#FAEEDA;color:#633806}
+.p-block{background:#FCEBEB;color:#791F1F}
+.p-info{background:#E6F1FB;color:#0C447C}
+.p-gray{background:#F1EFE8;color:#5F5E5A}
+.section-rule{border:none;border-top:1px solid var(--color-border-tertiary);margin:1.5rem 0}
+.note-box{padding:10px 12px;background:var(--color-background-secondary);border-radius:8px;border-left:3px solid var(--color-border-primary);font-size:12px;color:var(--color-text-secondary);line-height:1.7;margin-bottom:1rem}
+.note-box.warn{border-left-color:#BA7517;background:#FAEEDA;color:#633806}
+.note-box.block{border-left-color:#A32D2D;background:#FCEBEB;color:#791F1F}
+.checklist{list-style:none;font-size:12.5px;color:var(--color-text-primary)}
+.checklist li{padding:4px 0;display:flex;gap:8px;align-items:flex-start}
+.checklist li .icon{flex-shrink:0;width:16px;text-align:center;font-size:13px}
+</style>
+
+<div class="wrap">
+
+<div class="verdict warn">
+  <div class="verdict-icon">⚠</div>
+  <div>
+    <div class="verdict-title">Conditional — do not flash yet</div>
+    <div class="verdict-sub">Firmware is safe to flash for sensor node. Master node has 3 pre-flash items that need resolution or conscious decision. RTDB has 3 issues requiring manual cleanup before first boot.</div>
+  </div>
+</div>
+
+<h2>Firmware scan — sensor node (NodeMCU)</h2>
+
+<table>
+<thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead>
+<tbody>
+<tr><td>S-06/S-09 ISR fix</td><td><span class="pill p-ok">✓ Fixed</span></td><td><code>flowRawEdgeCount++</code> inside deglitch gate. Confirmed line 22.</td></tr>
+<tr><td>RS-485 frame build</td><td><span class="pill p-ok">✓ OK</span></td><td>CRC over canonical payload. Overflow guards on <code>snprintf</code>. Frame size 128 bytes — safe.</td></tr>
+<tr><td>Response turnaround</td><td><span class="pill p-warn">S-02 open</span></td><td>Immediate reply after <code>Serial.flush()</code> + 2ms delay. Known risk; DE/RE turnaround is 60µs — adequate for most transceivers.</td></tr>
+<tr><td>20ms stall reset</td><td><span class="pill p-warn">S-08 open</span></td><td>Hardcoded magic number. At 115200 baud ≈ 230 byte-times. Conservative for 40m CAT6. Acceptable for deployment.</td></tr>
+<tr><td>noInterrupts() coverage</td><td><span class="pill p-ok">✓ OK</span></td><td>All three flow counters (<code>flowPulseCount</code>, <code>flowPulseDiscardCount</code>, <code>flowRawEdgeCount</code>) read and zeroed inside the guard.</td></tr>
+<tr><td>usMedianValid upper-median</td><td><span class="pill p-gray">S-12 doc needed</span></td><td>US_SAMPLES=5 (odd), so n/2=2 is the true median — no bias. S-12 only matters for even-count windows which don't occur in production config.</td></tr>
+<tr><td>FLOW_MIN_PULSE_INTERVAL_US</td><td><span class="pill p-warn">S-04 — field validation</span></td><td>800µs marked "temporary diagnostic tuning". At 7.5 Hz/LPM, max 60 LPM → min period 111µs. 800µs blocks pulses above ~8.3 LPM. Safe for your 1–10 LPM typical range but confirm with YF-G1 field data.</td></tr>
+<tr><td>DEBUG_USB_MODE</td><td><span class="pill p-ok">✓ OK</span></td><td>Set to 0 in production config. #warning fires if 1 is compiled in.</td></tr>
+<tr><td>SENSOR_DEBUG_ENABLED</td><td><span class="pill p-gray">Set to 1</span></td><td>Debug output on Serial1/GPIO2. No impact on RS-485 (UART0). Acceptable for production if GPIO2 TX is floating/disconnected.</td></tr>
+</tbody>
+</table>
+
+<div class="note-box">Sensor node: <strong>ready to flash</strong>. All critical issues resolved. Open items (S-02, S-04, S-08, S-12) are known, accepted, and do not block deployment.</div>
+
+<hr class="section-rule">
+
+<h2>Firmware scan — master node (ESP32)</h2>
+
+<table>
+<thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead>
+<tbody>
+<tr><td>M-13 countdown wraparound</td><td><span class="pill p-ok">✓ Fixed</span></td><td><code>millisDeadlineReached(now, countdownEndMs)</code> with null guard. Confirmed.</td></tr>
+<tr><td>M-14 unsafe subtractions</td><td><span class="pill p-ok">✓ Fixed</span></td><td>All safety-path timers use <code>elapsedMillis32()</code>. Remaining raw subtractions classified safe (telemetry/NVS throttles only).</td></tr>
+<tr><td>M-20 cooldown overflow</td><td><span class="pill p-ok">✓ Fixed</span></td><td><code>addMillisSaturated()</code> on all four cooldown deadlines. Confirmed.</td></tr>
+<tr><td>M-21 RS-485 frame timeout</td><td><span class="pill p-ok">✓ Fixed</span></td><td><code>elapsedMillis32(millis(), start)</code> in frame read loop. Confirmed.</td></tr>
+<tr><td>M-32 offline branch</td><td><span class="pill p-ok">✓ Fixed</span></td><td>Last unsafe subtraction resolved. All millis() patterns in rs485_comm.cpp clean.</td></tr>
+<tr><td>M-15/M-23 boot freshness</td><td><span class="pill p-ok">✓ Fixed</span></td><td>All 3 freshness sites have <code>levelLastUpdateMs > 0</code> guard. Confirmed.</td></tr>
+<tr><td>M-26 freshness snapshot</td><td><span class="pill p-ok">✓ Fixed</span></td><td>Single <code>nowMsPump</code> + <code>levelFreshOk</code> per loop. All inner branches use same value. Confirmed.</td></tr>
+<tr><td>M-27 e-stop lockout</td><td><span class="pill p-ok">✓ Fixed</span></td><td>Early return removed. <code>reset_stop</code> and <code>clear_error</code> always reachable. Confirmed.</td></tr>
+<tr><td>M-16 emergency_stop</td><td><span class="pill p-ok">✓ Fixed</span></td><td>Firebase self-clear is idempotency guard. <code>!emergencyStopLatched</code> prevents double-latch.</td></tr>
+<tr><td>M-16 countdown_start</td><td><span class="pill p-ok">✓ Fixed</span></td><td>Self-clear fires on every <code>true</code>; <code>!lastCountdownStart</code> only suppresses within-cycle duplicates.</td></tr>
+<tr><td>M-19 countdown_active field</td><td><span class="pill p-ok">✓ Fixed</span></td><td><code>statusJson.set("countdown_active", isCountdownActive)</code> present. Confirmed.</td></tr>
+<tr><td>M-18 add-time arithmetic</td><td><span class="pill p-ok">✓ Fixed</span></td><td><code>addMin >= 1</code> gate + <code>addMillisSaturated()</code> + <code>min(candidate, maxEnd)</code> cap.</td></tr>
+<tr><td>M-28 error log timestamp</td><td><span class="pill p-ok">✓ Fixed</span></td><td>NTP epoch used when synced. Confirmed.</td></tr>
+<tr><td>M-29 runtime rounding</td><td><span class="pill p-ok">✓ Fixed</span></td><td><code>(totalPumpRunSec + 30UL) / 60UL</code>. Confirmed.</td></tr>
+<tr><td>M-31 WDT before WiFi</td><td><span class="pill p-ok">✓ Fixed</span></td><td>WDT registered before <code>connectWiFi()</code>; <code>esp_task_wdt_reset()</code> inside retry loop. Confirmed.</td></tr>
+<tr><td>M-24 parse failure logging</td><td><span class="pill p-ok">✓ Fixed</span></td><td><code>LOG(LOG_LEVEL_ERROR, "RS485-ERR", ...)</code> replaces raw <code>Serial.print()</code>. Confirmed.</td></tr>
+<tr><td>Relay active-LOW logic</td><td><span class="pill p-ok">✓ OK</span></td><td><code>on ? LOW : HIGH</code>. Boot forces HIGH (relay off) before state machine starts.</td></tr>
+<tr><td>All safety paths setPump(false)</td><td><span class="pill p-ok">✓ OK</span></td><td>14 confirmed <code>setPump(false)</code> callsites covering e-stop, dry-run, overflow, comm-loss, sensor-error, level-full paths.</td></tr>
+<tr><td class="id">M-30 LOG_COMPILE_FLOOR</td><td><span class="pill p-warn">⚠ Unverified</span></td><td>Master <code>config.h</code> not in uploaded project files. Cannot confirm <code>LOG_COMPILE_FLOOR = LOG_LEVEL_VERBOSE</code>. Non-blocking for safety.</td></tr>
+<tr><td>M-01 RS-485 time budget</td><td><span class="pill p-ok">✓ Mitigated</span></td><td>150ms cap when Firebase work is due. Budget-aware per-attempt timeout. Confirmed.</td></tr>
+</tbody>
+</table>
+
+<h3>Pre-flash blockers — master node</h3>
+<div class="note-box block">These 3 items require a decision or action before flashing the master.</div>
+
+<table>
+<thead><tr><th>#</th><th>Item</th><th>Action needed</th></tr></thead>
+<tbody>
+<tr><td class="id">1</td><td><span class="pill p-block">BLOCKER</span> RTDB control node has <code>emergency_stop: true</code> and <code>countdown_stop: true</code> stuck high</td><td>Clear these in Firebase Console before boot. On first poll the firmware will latch the e-stop and self-clear <code>countdown_stop</code>, but with <code>emergency_stop: true</code> the pump will be locked out immediately. Set both to <code>false</code> before flashing.</td></tr>
+<tr><td class="id">2</td><td><span class="pill p-block">BLOCKER</span> RTDB control node has <code>bypass_flow_sensor: true</code> and <code>bypass_level_sensor: true</code> stuck</td><td>Both bypasses are latched ON from testing sessions. With both bypasses active, dry-run protection and level-based stop are disabled on first boot. Set both to <code>false</code> in Firebase before flashing.</td></tr>
+<tr><td class="id">3</td><td><span class="pill p-warn">DECISION</span> RTDB control <code>mode: "AUTO"</code> but last audit entry shows mode cycling through COUNTDOWN/MANUAL/FORCE_OFF/FORCE_ON repeatedly during testing</td><td>Confirm the intended startup mode. <code>"AUTO"</code> is the safe choice. The NVS will restore whatever was last persisted, so the Firebase <code>mode</code> field will be applied on the next poll cycle. Make sure Firebase and intended NVS state agree.</td></tr>
+</tbody>
+</table>
+
+<hr class="section-rule">
+
+<h2>RTDB audit</h2>
+
+<h3>Structure alignment with firmware</h3>
+<table>
+<thead><tr><th>Path</th><th>Status</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td class="loc">/pump_system/control</td><td><span class="pill p-warn">Needs cleanup</span></td><td>See blockers above. All expected fields present and correctly typed.</td></tr>
+<tr><td class="loc">/pump_system/config/device</td><td><span class="pill p-ok">✓ Aligned</span></td><td>All fields firmware reads are present: <code>tank_empty_cm=120</code>, <code>tank_full_cm=25</code>, <code>pump_start_level=30</code>, <code>pump_stop_level=85</code>, <code>dry_run_threshold_lpm=0.5</code>, <code>dry_run_timeout_sec=30</code>, <code>max_pump_runtime_min=40</code>, <code>sleep_enabled=true</code>, <code>debug_log_level=0</code>.</td></tr>
+<tr><td class="loc">/pump_system/status</td><td><span class="pill p-warn">Stale snapshot</span></td><td>Last status push shows <code>last_boot_reason: "Exception/panic"</code> — indicates previous crash. <code>remote_sensor_stable: false</code>, <code>level_fresh: false</code>, <code>bypass_level_sensor/flow_sensor: true</code> (stale). Will be overwritten on first successful push after flash. No action needed.</td></tr>
+<tr><td class="loc">/pump_system/audit/events</td><td><span class="pill p-warn">FORCE_ON/OFF in history</span></td><td>All historical events use <code>FORCE_ON</code>/<code>FORCE_OFF</code> modes. These are deprecated — firmware maps them to AUTO on receipt. Audit trail is append-only, no cleanup needed. Dashboard should stop sending these modes.</td></tr>
+<tr><td class="loc">/pump_system/config/admins</td><td><span class="pill p-ok">✓ OK</span></td><td>Two admin UIDs present. Aligns with expected access control.</td></tr>
+<tr><td class="loc">/pump_system/config/notifications</td><td><span class="pill p-ok">✓ OK</span></td><td>All notification policy fields present. FCM tokens present for two users.</td></tr>
+<tr><td class="loc">/pump_system/presence</td><td><span class="pill p-gray">Stale entries</span></td><td>Multiple device sessions from testing (5+ device IDs). Presence entries are cosmetic only — no firmware dependency. Can leave or prune.</td></tr>
+</tbody>
+</table>
+
+<h3>Config alignment with hardware</h3>
+<table>
+<thead><tr><th>Parameter</th><th>RTDB value</th><th>Assessment</th></tr></thead>
+<tbody>
+<tr><td><code>tank_empty_cm</code></td><td>120</td><td><span class="pill p-ok">✓</span> Matches sensor node calibration constant (TANK_US_DIST_EMPTY_CM = 120.0f)</td></tr>
+<tr><td><code>tank_full_cm</code></td><td>25</td><td><span class="pill p-warn">⚠ Check</span> Sensor node TANK_US_DIST_FULL_CM = 0.0f but master config uses this as the cm threshold. Ensure this is calibrated to your actual full water level.</td></tr>
+<tr><td><code>dry_run_threshold_lpm</code></td><td>0.5</td><td><span class="pill p-ok">✓</span> Below typical YF-G1 minimum reliable reading. Reasonable for dry-run detection.</td></tr>
+<tr><td><code>flow_calibration_factor</code></td><td>1</td><td><span class="pill p-warn">⚠ Check</span> Firmware default is 7.5 (FLOW_CALIBRATION_FACTOR). A value of 1 means flow readings will show ~7.5× actual LPM. Needs field calibration before dry-run protection is accurate.</td></tr>
+<tr><td><code>pump_stop_level</code></td><td>85%</td><td><span class="pill p-ok">✓</span> Conservative stop before overflow. Good.</td></tr>
+<tr><td><code>max_pump_runtime_min</code></td><td>40</td><td><span class="pill p-ok">✓</span> For 660L tank at ~10–20 LPM, 40 min is adequate safety margin.</td></tr>
+<tr><td><code>sleep_enabled</code></td><td>true, 23:00–05:00</td><td><span class="pill p-ok">✓</span> Matches PHT schedule. Emergency level 5% means pump can run in sleep if critically low.</td></tr>
+</tbody>
+</table>
+
+<h3>Missing status fields (new firmware adds these)</h3>
+<table>
+<thead><tr><th>Field</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td><code>countdown_active</code></td><td><span class="pill p-info">New — M-19 fix</span> Will appear after first status push. Dashboard should be updated to read this.</td></tr>
+<tr><td><code>reset_stop</code> in control</td><td><span class="pill p-ok">✓ Already in schema</span></td></tr>
+<tr><td><code>bypass_flow_sensor</code> in control</td><td><span class="pill p-ok">✓ Already present</span> Currently stuck <code>true</code> — clear before flash.</td></tr>
+</tbody>
+</table>
+
+<h3>Critical pre-flash RTDB checklist</h3>
+<ul class="checklist">
+  <li><span class="icon">✗</span><span>Set <code>/pump_system/control/emergency_stop</code> → <code>false</code></span></li>
+  <li><span class="icon">✗</span><span>Set <code>/pump_system/control/countdown_stop</code> → <code>false</code></span></li>
+  <li><span class="icon">✗</span><span>Set <code>/pump_system/control/bypass_level_sensor</code> → <code>false</code></span></li>
+  <li><span class="icon">✗</span><span>Set <code>/pump_system/control/bypass_flow_sensor</code> → <code>false</code></span></li>
+  <li><span class="icon">✗</span><span>Verify <code>/pump_system/control/mode</code> = <code>"AUTO"</code></span></li>
+  <li><span class="icon">✗</span><span>Calibrate <code>flow_calibration_factor</code> (currently 1 — should be ~7.5 for YF-G1)</span></li>
+  <li><span class="icon">○</span><span>Verify <code>tank_full_cm: 25</code> matches physical full-tank ultrasonic reading</span></li>
+  <li><span class="icon">○</span><span>Confirm M-30: check <code>LOG_COMPILE_FLOOR = LOG_LEVEL_VERBOSE</code> in master config.h</span></li>
+</ul>
+<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:8px">✗ = must fix before flash &nbsp; ○ = recommended before flash</div>
+
+</div>

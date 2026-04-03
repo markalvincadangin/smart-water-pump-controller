@@ -110,9 +110,13 @@ export default function DiagnosticsCard({
               { label: "Level Fresh", value: isLevelFresh ? "✓ Yes" : "✗ No", isWarning: !isLevelFresh },
               { label: "Health %", value: `${sensorHealth}%`, isWarning: sensorHealth < 90 },
               { label: "Last Good", value: `${lastGoodDistanceCm.toFixed(1)} cm` },
-              { label: "Discards / cyc", value: levelDiscardCount.toString(), isWarning: levelDiscardCount > 0 },
+              { label: "Discards / window", value: levelDiscardCount.toString(), isWarning: levelDiscardCount > 0 },
             ]}
           />
+
+          <div className="text-[9px] text-[var(--text-muted)] opacity-80 ml-3 -mt-1 leading-relaxed">
+            LDSC is a per-measurement-window snapshot (resets frequently, roughly once per ultrasonic window). It is not cumulative tank health.
+          </div>
 
           {/* Section: Firebase */}
           <DiagSection 

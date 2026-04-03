@@ -36,6 +36,7 @@ const DEFAULT_STATUS: PumpStatus = {
   level_sensor_health_pct: 0,
   level_estimate_active: false,
   remote_level_discard_count: 0,
+  countdown_active: false,
   countdown_remaining_sec: 0,
   flow_volume_added_l: 0,
   wifi_rssi: 0,
@@ -60,6 +61,7 @@ const DEFAULT_CONTROL: PumpControl = {
   reset_stop: false,
   clear_error: false,
   countdown_start: false,
+  countdown_stop: false,
   countdown_duration_min: 10,
   countdown_add_time: false,
   countdown_add_min: 5,
@@ -78,6 +80,11 @@ export function usePumpData() {
   const [error, setError] = useState<string | null>(null);
   const [isAddingCountdownTime, setIsAddingCountdownTime] = useState(false);
   const [lastUpdateAtMs, setLastUpdateAtMs] = useState<number | null>(null);
+  const [controlDesync, setControlDesync] = useState(false);
+  const [controlDesyncReason, setControlDesyncReason] = useState<string>("");
+  const [desyncTick, setDesyncTick] = useState(0);
+  const desyncSinceRef = useRef<number | null>(null);
+  const desyncTimerRef = useRef<number | null>(null);
 
   // Keep refs so callbacks don't close over stale state
   const statusRef = useRef<PumpStatus>(DEFAULT_STATUS);
@@ -248,6 +255,14 @@ export function usePumpData() {
       }
       // Leaving COUNTDOWN: reset all one-shot countdown flags
       if (prevMode === "COUNTDOWN" && newMode !== "COUNTDOWN") {
+        updates.countdown_start = false;
+        updates.countdown_add_time = false;
+        updates.countdown_stop = false;
+        updates.countdown_add_min = 0;
+      }
+      // Entering COUNTDOWN via mode selection should never arm the timer by itself.
+      // The explicit startCountdown() action is the only path that should start it.
+      if (newMode === "COUNTDOWN") {
         updates.countdown_start = false;
         updates.countdown_add_time = false;
         updates.countdown_stop = false;
@@ -487,6 +502,73 @@ export function usePumpData() {
   const degraded: boolean =
     !!lastUpdateAtMs && Date.now() - lastUpdateAtMs > 30000 && Date.now() - lastUpdateAtMs <= 60000;
 
+  useEffect(() => {
+    if (!status || !control) {
+      setControlDesync(false);
+      setControlDesyncReason("");
+      desyncSinceRef.current = null;
+      if (desyncTimerRef.current != null) {
+        window.clearTimeout(desyncTimerRef.current);
+        desyncTimerRef.current = null;
+      }
+      return;
+    }
+
+    const pollStale = status.cloud_control_poll_stale === true || (status.cloud_last_control_ok_age_sec ?? 0) > 20;
+    const oneShotPending =
+      control.emergency_stop ||
+      control.reset_stop ||
+      control.clear_error ||
+      control.countdown_start ||
+      control.countdown_stop ||
+      control.countdown_add_time;
+    const eStopMismatch = control.emergency_stop && !status.emergency_stop_latched;
+
+    const suspect = pollStale || oneShotPending || eStopMismatch;
+    if (!suspect) {
+      setControlDesync(false);
+      setControlDesyncReason("");
+      desyncSinceRef.current = null;
+      if (desyncTimerRef.current != null) {
+        window.clearTimeout(desyncTimerRef.current);
+        desyncTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (desyncSinceRef.current == null) {
+      desyncSinceRef.current = Date.now();
+      if (desyncTimerRef.current == null) {
+        desyncTimerRef.current = window.setTimeout(() => {
+          setDesyncTick((n) => n + 1);
+          desyncTimerRef.current = null;
+        }, 7100);
+      }
+      return;
+    }
+
+    if (Date.now() - desyncSinceRef.current < 7000) {
+      return;
+    }
+
+    setControlDesync(true);
+    if (pollStale) {
+      setControlDesyncReason("Controller control-poll heartbeat is stale.");
+    } else if (eStopMismatch) {
+      setControlDesyncReason("Emergency stop command is pending without latch confirmation.");
+    } else {
+      setControlDesyncReason("One-shot control command is pending beyond expected window.");
+    }
+  }, [status, control, desyncTick]);
+
+  useEffect(() => {
+    return () => {
+      if (desyncTimerRef.current != null) {
+        window.clearTimeout(desyncTimerRef.current);
+      }
+    };
+  }, []);
+
   return {
     // Preferred public fields
     status,
@@ -494,6 +576,8 @@ export function usePumpData() {
     history,
     historyEvents,
     connected,
+    controlDesync,
+    controlDesyncReason,
     degraded,
     authReady,
     authChecked,

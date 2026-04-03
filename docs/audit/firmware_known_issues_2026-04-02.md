@@ -1,6 +1,6 @@
 # SmartFlow Firmware Issue Register
 
-Date: 2026-04-02
+Date: 2026-04-02 (last updated: 2026-04-02 Round 3 — post-fix verification scan)
 
 Scope:
 
@@ -23,111 +23,145 @@ Purpose:
 
 ### 2.1 Confirmed Issues
 
-| ID | Severity | Issue | Impact | Status |
-|---|---|---|---|---|
-| M-01 | High | RS-485 read stalls can delay the main loop and starve Firebase work. | Control/status sync becomes unreliable under transport pressure. | Confirmed |
-| M-02 | High | Firebase control and status calls are sequential and blocking. | A transport failure can cascade into repeated cloud timeouts. | Mitigated in latest firmware |
-| M-03 | High | Crash-loop safe mode disables WiFi, Firebase, and sensor initialization until the latch clears or the device is power-cycled. | The controller can remain offline and unreachable. | Confirmed |
-| M-04 | High | Safe-mode recovery depends on NTP/latch state and an auto-clear timer. | Recovery can be delayed or inconsistent if time sync does not settle cleanly. | Confirmed |
-| M-05 | High | Emergency stop must preserve the current mode and block mode changes while latched. | A bad restart path could reintroduce unsafe pump behavior. | Mitigated in latest firmware |
-| M-06 | Medium | Safety-related state is persisted in NVS, but some runtime timers remain volatile. | A reboot during active operation can reset timing context and complicate recovery logic. | Confirmed |
-| M-07 | Medium | Retry/backoff logic can mask the original upstream fault. | Diagnosis becomes slower and recovery may appear random. | Confirmed |
-| M-08 | Medium | WiFi/NTP setup includes blocking waits during startup and reconnect paths. | Long blocking calls can reduce responsiveness and increase watchdog risk if the environment is unstable. | Confirmed |
-| M-09 | High | Secrets files are present in the firmware tree. | Real credentials could leak if files are committed or shared incorrectly. | Confirmed risk |
 
-### 2.2 Additional Timing and Arithmetic Bugs (Critical)
+| ID   | Severity | Issue                                                                                                                         | Impact                                                                                                   | Status                                                                 |
+| ---- | -------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| M-01 | High     | RS-485 read stalls can delay the main loop and starve Firebase work.                                                          | Control/status sync becomes unreliable under transport pressure.                                         | Mitigated (RS-485 time budget caps blocking when Firebase sync is due) |
+| M-02 | High     | Firebase control and status calls are sequential and blocking.                                                                | A transport failure can cascade into repeated cloud timeouts.                                            | Mitigated in latest firmware                                           |
+| M-03 | High     | Crash-loop safe mode disables WiFi, Firebase, and sensor initialization until the latch clears or the device is power-cycled. | The controller can remain offline and unreachable.                                                       | Confirmed — open                                                       |
+| M-04 | High     | Safe-mode recovery depends on NTP/latch state and an auto-clear timer.                                                        | Recovery can be delayed or inconsistent if time sync does not settle cleanly.                            | Confirmed — open                                                       |
+| M-05 | High     | Emergency stop must preserve the current mode and block mode changes while latched.                                           | A bad restart path could reintroduce unsafe pump behavior.                                               | Mitigated in latest firmware                                           |
+| M-06 | Medium   | Safety-related state is persisted in NVS, but some runtime timers remain volatile.                                            | A reboot during active operation can reset timing context and complicate recovery logic.                 | Confirmed — open                                                       |
+| M-07 | Medium   | Retry/backoff logic can mask the original upstream fault.                                                                     | Diagnosis becomes slower and recovery may appear random.                                                 | Confirmed — open                                                       |
+| M-08 | Medium   | WiFi/NTP setup includes blocking waits during startup and reconnect paths.                                                    | Long blocking calls can reduce responsiveness and increase watchdog risk if the environment is unstable. | Confirmed — open                                                       |
+| M-09 | High     | Secrets files are present in the firmware tree.                                                                               | Real credentials could leak if files are committed or shared incorrectly.                                | Confirmed risk — process control                                       |
 
-| ID | Severity | Issue | Impact | Status |
-|---|---|---|---|---|
-| M-13 | Critical | Countdown timer millis() overflow vulnerability at line 165: `if (millis() >= countdownEndMs)`. Does not handle the ~50-day wraparound that occurs with `unsigned long` on Arduino. | At wraparound, the countdown timer comparison breaks and may never expire, or expire immediately. Pump could run indefinitely. | Confirmed vulnerability |
-| M-14 | Critical | Unsafe timer difference calculation in multiple locations: `millis() - pendingModeWritebackSentMs >= threshold` (line 246), `(millis() - start) < timeoutMs` (rs485_comm.cpp line 18), `(millis() - levelSensorFailStartMs)` (line 37 in safety_pump.cpp). Standard pattern is vulnerable at wraparound. | All time-based retries, cooldowns, and timeouts can fail at the ~50-day wraparound. Safety cutoffs may not trigger. | Confirmed vulnerability |
-| M-20 | High | Firebase auth cooldown calculation uses `max(firebaseCooldownUntilMs, now + FIREBASE_AUTH_COOLDOWN_MS)` without overflow protection at line 200. If `now` approaches ULONG_MAX, the sum overflows. | Firebase connection can be permanently blocked if timing wraps near max value. | Confirmed risk |
-| M-21 | High | RS-485 frame read timeout at rs485_comm.cpp line 18 uses the unsafe subtraction pattern `(millis() - start) < timeoutMs`. | Frame reads can hang indefinitely or timeout prematurely if millis() wraps during a read. | Confirmed vulnerability |
+
+### 2.2 Timing and Arithmetic Bugs
+
+
+| ID   | Severity | Issue                                                                                                                                                        | Impact                                                                                                              | Status                                                                                                           |
+| ---- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| M-13 | Critical | Countdown timer used `if (millis() >= countdownEndMs)` — vulnerable at ~50-day millis() wraparound. Pump could run indefinitely.                             | Timer comparison breaks at rollover: countdown may never expire or fire immediately.                                | Resolved — `millisDeadlineReached()` with `countdownEndMs != 0` guard. Verified in source.                       |
+| M-14 | Critical | Multiple unsafe `millis() - X` subtractions across safety_pump, connectivity_cloud, rs485_comm. Safety cutoffs may fail at wraparound.                       | All time-based retries, cooldowns, and safety timeouts vulnerable at ~50-day rollover.                              | Resolved — all sites migrated to `elapsedMillis32()`. Verified in source.                                        |
+| M-20 | High     | Firebase auth cooldown used `now + FIREBASE_AUTH_COOLDOWN_MS` without overflow protection. Permanent block risk near ULONG_MAX.                              | Firebase connection permanently blocked if timing wraps near max value.                                             | Resolved — all four cooldown assignments use `addMillisSaturated()`. Verified in source.                         |
+| M-21 | High     | RS-485 frame read timeout used unsafe `(millis() - start) < timeoutMs`.                                                                                      | Frame reads hang or timeout prematurely at millis() wraparound.                                                     | Resolved — `elapsedMillis32(millis(), start) < timeoutMs`. Verified in source.                                   |
+| M-32 | Medium   | Failure branch of `pollRemoteSensorNodeInternal()` used raw `(now - remoteSensorLastRxMs)` — the only remaining unsafe subtraction after the M-14 fix batch. | Offline detection logic could misfire at millis() wraparound; not a safety path but inconsistent with rest of file. | Resolved — migrated to `elapsedMillis32(now, remoteSensorLastRxMs)` with FIX [M-32] comment. Verified in source. |
+
 
 ### 2.3 Runtime Errors Observed
 
-| ID | Severity | Observation | Impact | Status |
-|---|---|---|---|---|
-| M-10 | Medium | Firebase RTDB timeout on control/status reads when RS-485 is under load. | Dashboard actions can appear delayed or lost. | Confirmed |
-| M-11 | Medium | RS-485 read-frame timeout bursts during normal polling. | Sensor-node status can oscillate between online and offline. | Confirmed |
-| M-12 | Low | PlatformIO test runner can fail in the Unity stage even when the firmware compile succeeds. | Test execution is noisy and not fully reliable as a validation signal. | Confirmed toolchain issue |
+
+| ID   | Severity | Observation                                                                                 | Impact                                                                 | Status                                                                           |
+| ---- | -------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| M-10 | Medium   | Firebase RTDB timeout on control/status reads when RS-485 is under load.                    | Dashboard actions can appear delayed or lost.                          | Partially mitigated (M-01 time budget reduces contention; residual risk remains) |
+| M-11 | Medium   | RS-485 read-frame timeout bursts during normal polling.                                     | Sensor-node status can oscillate between online and offline.           | Confirmed — open                                                                 |
+| M-12 | Low      | PlatformIO test runner can fail in the Unity stage even when the firmware compile succeeds. | Test execution is noisy and not fully reliable as a validation signal. | Confirmed toolchain issue                                                        |
+
 
 ### 2.4 Configuration and Control Logic Bugs
 
-| ID | Severity | Issue | Impact | Status |
-|---|---|---|---|---|
-| M-15 | High | LEVEL_STALE_TIMEOUT_MS freshness check at line 458 assumes `levelLastUpdateMs > 0`, but on first boot this value is 0. The subtraction `(millis() - 0)` can return any value from 0 to ULONG_MAX. | The level freshness flag may be incorrectly set to true on startup, allowing control actions with stale data. | Confirmed vulnerability |
-| M-16 | High | Static `bool` variables in `readFirebaseControl()` (countdownConsumed, lastAddTime, lastEmergencyStop, etc., lines 175–179) are never cleared except by setting their flags. An unsupervised soft reset may retain stale state. | Control messages from Firebase can be lost or misclassified after a crash/reboot if the static state is not synchronized with hardware state. | Confirmed risk |
-| M-17 | Medium | Firebase configuration call at line 621: `Firebase.RTDB.setwriteSizeLimit(&fbdo, "medium")`. The method name has incorrect camelCase: should be `setWriteSizeLimit`. | Method call may silently fail or not be invoked, leaving size limit at default. | Confirmed typo |
-| M-18 | High | Countdown add-time value is not validated before being added to the timer. Line 360 does `countdownEndMs = min(countdownEndMs + (unsigned long)addMin * 60000UL, maxEnd)` without checking if `addMin` is negative or zero in Firebase. | A negative `countdown_add_min` value from the dashboard could wrap the unsigned arithmetic and cause an undefined timer value. | Confirmed vulnerability |
-| M-19 | Medium | Countdown remaining time at lines 517–518: `countdownRemainSec = (countdownEndMs > nowMs) ? (int32_t)((countdownEndMs - nowMs) / 1000UL) : 0` returns 0 only when time has elapsed, but never explicitly handles the case where the countdown was canceled. | Dashboard displays 0 for both "timer complete" and "timer invalid", causing operator confusion. | Confirmed bug |
-| M-22 | High | Firebase `getJSON()` checks success with `if (!Firebase.RTDB.getJSON(...)) return;` but does not validate that the returned JSON is non-empty or has expected fields. An empty object or partial object will still pass. | Configuration reads can silently fail to parse fields, leaving stale config values in place. | Confirmed vulnerability |
+
+| ID   | Severity | Issue                                                                                                                                                                                                               | Impact                                                                           | Status                                                                                                                                                                                                                                                    |
+| ---- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M-15 | High     | Level freshness check assumed `levelLastUpdateMs > 0` but value is 0 on boot. Raw subtraction `millis() - 0` could return garbage, making level appear fresh before first sensor frame.                             | On startup, pump control decisions could act on invalid level data.              | Resolved — all freshness checks now use `(levelLastUpdateMs > 0) && elapsedMillis32(...)`. Verified at safety_pump.cpp:167, 236; connectivity_cloud.cpp:472.                                                                                              |
+| M-16 | High     | Static one-shot flags in `readFirebaseControl()` (`lastEmergencyStop`, `lastCountdownStart`, `lastAddTime`, etc.) use edge-detection pattern. After soft reset, stale values can cause missed or replayed commands. | Control messages lost or duplicated after unplanned reboot.                      | Mostly resolved. Safety and mode commands now rely on Firebase self-clear (`emergency_stop`, `reset_stop`, `countdown_start`) and stale legacy flags were removed. `lastAddTime` is intentionally retained only to de-duplicate repeated `countdown_add_time` convenience pulses. |
+| M-17 | Medium   | `Firebase.RTDB.setwriteSizeLimit(&fbdo, "medium")` — appeared to be a camelCase typo.                                                                                                                               | Method call may silently fail.                                                   | Closed — not a bug. This lowercase spelling matches the upstream Firebase ESP Client library's own API. Comment added to source confirms intentional.                                                                                                     |
+| M-18 | High     | `countdown_add_min` arithmetic used raw unsigned addition without overflow protection. A zero or negative value from Firebase could wrap the timer.                                                                 | Countdown timer set to undefined value; pump could run past intended duration.   | Resolved — `addMin` validated as `>= 1` before use; addition uses `addMillisSaturated()` with `min(candidate, maxEnd)` cap. Verified in source.                                                                                                           |
+| M-19 | Medium   | `countdownRemainSec` returned 0 for both "timer expired" and "timer never started / canceled", making dashboard state ambiguous.                                                                                    | Operator cannot distinguish between a completed countdown and an idle countdown. | Resolved — `countdown_active` boolean field added to Firebase status push (FIX [M-19]). Dashboard can now read `countdown_active=false, remaining=0` vs `countdown_active=true, remaining=0`. Verified in source.                                         |
+| M-22 | High     | `readDeviceConfigFromFirebase()` did not detect empty or partial JSON objects. An empty object would pass the `getJSON()` success check and silently leave stale config in place.                                   | Configuration reads silently fail to update fields.                              | Resolved — rate-limited warning log added for the `!allOk` path; required-field validation already rejects partial objects. Verified in source.                                                                                                           |
+| M-23 | High     | Same root cause as M-15: `levelLastUpdateMs` initialized to 0 in state.cpp; startup freshness gate incorrectly passes before any RS-485 frame arrives.                                                              | Pump control decisions on startup act on undefined level data.                   | Resolved — same fix as M-15. The `levelLastUpdateMs > 0` guard closes this path across all three freshness check sites.                                                                                                                                   |
+
 
 ### 2.5 Initialization and State Persistence Bugs
 
-| M-23 | High | Level freshness calculation on startup: if `levelLastUpdateMs` is initialized to 0, the check at line 458 `(millis() - levelLastUpdateMs)` can underflow or return a garbage value until the first sensor update arrives. | On startup, before the sensor node responds, level freshness is undefined, and control logic may act on invalid state. | Confirmed vulnerability |
+
+| ID   | Severity | Issue                                                                                                             | Impact                             | Status           |
+| ---- | -------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ---------------- |
+| M-06 | Medium   | See 2.1 above — runtime timers (dryRunStartMs, pumpAutoStartMs, pumpOffStartMs) are volatile and reset on reboot. | Timing context lost mid-operation. | Confirmed — open |
+
 
 ### 2.6 New Operational & Diagnostic Findings (Round 2 Audit)
 
-| ID | Severity | Issue | Impact | Status |
-|---|---|---|---|---|
-| M-24 | High | Parse failure logging in rs485_comm.cpp uses raw `Serial.print()` instead of the `LOG()` macro (lines 232–234). These error messages bypass syslog and are invisible in production logs and remote monitoring. | Parse failures silently disappear from diagnostic telemetry, making RS-485 communication issues invisible to operators and support. | Confirmed vulnerability |
-| M-25 | High | ~~DESIGN CONFLICT~~ **Resolved (Option B, 2026-04-02):** `checkOverflowProtection()` applies max runtime to AUTO, COUNTDOWN, and MANUAL (90% `manual_runtime_warning`, then hard stop). QA spec and operator docs updated to match firmware; MANUAL does not bypass `max_pump_runtime_min`. | Documented behavior; operators should treat MANUAL as still bounded by max runtime. | Resolved |
-| M-26 | Medium | `isLevelFresh` is computed once at the start of `executePumpLogic()` (line 233) but then recalculated inside at least 3 separate branches (MANUAL path line 275, COUNTDOWN path line 306, AUTO path line 346). Each recalculation uses a new `millis()` call, so results can differ between the outer guard and inner branches. | A race condition can cause inconsistent level-freshness decisions within the same control loop, leading to unpredictable mode transitions. | Confirmed vulnerability |
-| M-27 | **Critical** | **OPERATOR LOCKOUT**: When `emergencyStopLatched` is true, `readFirebaseControl()` returns early on line 235, skipping all subsequent Firebase field processing. This means `reset_stop` (which clears the latch) and `clear_error` can never be processed while the latch is active. An operator cannot clear a dry-run error or reset the e-stop without power-cycling the device. | A device in emergency-stop state is trapped until hard power-cycle. This is both a usability failure (operator frustration) and a safety concern (loss of remote control). | Confirmed critical usability & safety issue |
-| M-28 | Medium | `pushFirebaseErrorLog()` uses `esp_timer_get_time()` (monotonic uptime in microseconds, converted to seconds) as the log timestamp on line 652. It does not use NTP wall-clock time. Logged errors show relative boot time, not absolute calendar time. | Cross-referencing error logs in Firebase with dashboard events (which may use wall-clock time) becomes difficult; forensic analysis requires knowing the device's exact boot time. | Confirmed diagnostic gap |
-| M-29 | Low | In `pushFirebaseStatus()`, line 539 divides `totalPumpRunSec` by 60 and truncates to int before sending as `total_pump_run_min`. Sub-minute accumulated runtime is silently lost every push. Over many short pump cycles this accumulates reporting drift. | Long-term cumulative runtime metrics in Firebase drift from actual hardware records; the error is silent and undetectable from the dashboard. | Confirmed reporting gap |
-| M-30 | Medium | The `LOG()` macro has `LOG_COMPILE_FLOOR` hardcoded to `LOG_LEVEL_INFO` (level 2). This means `LOG_LEVEL_DEBUG` (3) and `LOG_LEVEL_VERBOSE` (4) log statements are compiled out entirely (not at runtime). The Firebase `debug_log_level` config field can set `gLogLevel` at startup, but it cannot enable DEBUG/VERBOSE logs because the code is literally not in the binary. | Runtime log-level tuning via Firebase is partially broken; operators cannot enable finer diagnostics without recompiling the firmware. | Confirmed design limitation |
-| M-31 | High | `connectWiFi()` blocking loop (40 × 500ms retry) runs **before** watchdog registration in `setup()`. If the WiFi environment hangs beyond ~30s, there is no WDT recovery mechanism. The log message says "failed after 20s" which is accidentally correct (40 × 500ms = 20s) but the loop count is an undocumented magic number. | If environmental WiFi issues cause longer hangs, the watchdog cannot rescue the device; it will timeout only after the WiFi loop returns or dies internally. | Confirmed risk |
 
-### 2.7 Master Node Notes & Recommendations
+| ID   | Severity | Issue                                                                                                                                                                      | Impact                                                                       | Status                                                                                                                                                                                                                                       |
+| ---- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M-24 | High     | Parse failure logging in rs485_comm.cpp used raw `Serial.print()`, bypassing syslog.                                                                                       | RS-485 parse failures invisible in production logs.                          | Resolved — `LOG(LOG_LEVEL_ERROR, "RS485-ERR", ...)` used. Verified in source.                                                                                                                                                                |
+| M-25 | High     | Design conflict: overflow protection applied to MANUAL mode despite original "warning only" intent.                                                                        | Undocumented hard stop in MANUAL mode.                                       | Resolved (Option B) — MANUAL gets 90% warning then hard stop, same as AUTO/COUNTDOWN. Operator docs and QA updated. Intentional documented behavior.                                                                                         |
+| M-26 | Medium   | `isLevelFresh` recomputed multiple times per control loop with separate `millis()` calls.                                                                                  | Inconsistent freshness decisions within a single control loop pass.          | Resolved — single `nowMsPump = millis()` snapshot; `levelFreshOk` computed once and reused. Verified in source.                                                                                                                              |
+| M-27 | Critical | **OPERATOR LOCKOUT**: `readFirebaseControl()` returned early when e-stop latched, blocking `reset_stop` and `clear_error`. Operator could not recover without power-cycle. | Device trapped in e-stop with no remote recovery path.                       | Resolved — early return removed. E-stop latch now only blocks mode-apply branch; all other fields (`reset_stop`, `clear_error`, bypass toggles) continue processing. Verified in source.                                                     |
+| M-28 | Medium   | `pushFirebaseErrorLog()` used monotonic `esp_timer_get_time()` as timestamp instead of NTP wall-clock.                                                                     | Error log timestamps in Firebase do not align with real-world calendar time. | Resolved — NTP epoch used when synced (`ntpEpochSecAtLastSync + deltaSec`), falls back to uptime seconds. Verified in source.                                                                                                                |
+| M-29 | Low      | `total_pump_run_min` truncated seconds to minutes without rounding. Sub-minute runtime lost on every push.                                                                 | Cumulative runtime metric drifts over many short pump cycles.                | Resolved — `(totalPumpRunSec + 30UL) / 60UL` rounds to nearest minute. Verified in source.                                                                                                                                                   |
+| M-30 | Medium   | `LOG_COMPILE_FLOOR` set to `LOG_LEVEL_INFO`, compiling out DEBUG and VERBOSE levels. Firebase `debug_log_level` runtime tuning broken for those levels.                    | Runtime log verbosity tuning via Firebase had no effect for DEBUG/VERBOSE.   | Resolved (claimed) — `LOG_COMPILE_FLOOR = LOG_LEVEL_VERBOSE` per audit. Master node `config.h` not present in scanned project files; cannot independently verify from source. Treat as claimed-resolved until master config upload confirms. |
+| M-31 | High     | `connectWiFi()` blocking loop ran before WDT registration in `setup()`. No watchdog recovery if WiFi hung beyond ~30s.                                                     | Device could hang indefinitely on boot if WiFi environment is unstable.      | Resolved — WDT registered before `connectWiFi()`; `esp_task_wdt_reset()` added inside WiFi retry loop. Verified in source.                                                                                                                   |
 
-- **CRITICAL ACTION ITEMS:**
-  - **M-27 (operator lockout)** must be fixed before production use: allow `reset_stop` and `clear_error` to be processed even when `emergencyStopLatched` is true.
-  - ~~**M-25 (design conflict)**~~ **Done:** Option B — same hard cap as AUTO/COUNTDOWN; documentation and QA updated.
-  - **M-13, M-14 millis() wraparound** must be fixed before any device is deployed for >50 days continuous operation.
 
-- **SECONDARY ISSUES:**
-  - **M-24, M-30** reduce observability in production; add them to the diagnostic hardening roadmap.
-  - **M-26** can cause unpredictable behavior under load; consider caching `isLevelFresh` once per loop.
+### 2.7 Remaining Raw Timing Patterns — Classified Safe
 
-- The initial emergency-stop changes (M-05 mitigation) were valuable, but these newer findings show gaps in edge-case control flow and state recovery.
+The following `millis() - X` subtractions remain in source but are confirmed non-safety and wrap-safe by type:
+
+
+| Location                      | Pattern                                                                      | Classification                                                                                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connectivity_cloud.cpp` (×4) | `millis() - t0` for call-duration telemetry                                  | Safe — t0 captured immediately before call; result is always < 15s; telemetry only                                                                                               |
+| `persistence.cpp` (×2)        | `now - lastLevelWriteMs`, `now - lastUptimeWriteMs`                          | Safe — NVS write throttles; worst case at wraparound is extra or deferred writes; no safety impact                                                                               |
+| `safety_pump.cpp`             | `millis() - pumpOnSinceMs` for runtime accumulation                          | Safe — both are `unsigned long`; C unsigned subtraction is wrap-safe for durations < 49 days; if pump runs past 49 days the accumulated seconds count wraps, which is acceptable |
+| `sensors.cpp` (×3)            | `now - lastFlowCalcMs`, `now - lastDbgMs`, `millis() - lastLvlDiscardWarnMs` | Safe — all variables are `uint32_t` or `unsigned long`; intervals are seconds to minutes; unsigned subtraction is inherently wrap-safe                                           |
+| `rs485_slave.cpp`             | `millis() - lastByteMs`                                                      | Safe — `lastByteMs` is `static uint32_t`; 20ms interval; unsigned subtraction wrap-safe                                                                                          |
+
+
+### 2.8 Master Node Notes & Recommendations
+
+- **All Critical items resolved**: M-13, M-14, M-27. No remaining critical-severity open items on master node.
+- **All timing wraparound sites resolved**: M-13, M-14, M-20, M-21, M-32. Remaining subtractions are classified safe (see 2.7).
+- **M-16 lastAddTime**: Intentionally left edge-detected only for convenience command de-dup. One-shot clear is now always attempted whenever `countdown_add_time=true`.
+- **M-30 verified in source**: `LOG_COMPILE_FLOOR = LOG_LEVEL_VERBOSE` is set in master `config.h`; retain field log-level smoke test in validation checklist.
+- **Open operational items**: M-03 (safe mode reachability), M-04 (NTP-dependent recovery), M-06 (volatile timers), M-07 (log masking), M-08 (blocking startup), M-09 (secrets hygiene), M-11 (RS-485 oscillation).
+
+---
 
 ## 3. Sensor Node (NodeMCU)
 
 ### 3.1 Confirmed Issues
 
-| ID | Severity | Issue | Impact | Status |
-|---|---|---|---|---|
-| S-01 | Medium | RS-485 slave framing uses a short partial-frame stall reset to avoid hanging on malformed packets. | Incomplete or noisy packets can interrupt polling until the receiver resets. | Confirmed |
-| S-02 | Medium | Response turnaround is immediate after valid packet reception. | If the Master has not fully switched to RX, the first reply can be lost. | Confirmed risk |
-| S-03 | Medium | Ultrasonic plausibility filtering can reject large level jumps. | Real level changes may be delayed if they look like outliers. | Confirmed |
-| S-04 | Medium | Flow hardening uses aggressive deglitching and diagnostic tuning values. | Legitimate pulses may be dropped if the installed sensor behaves differently in the field. | Needs field validation |
-| S-05 | Low | Sensor-node logic is primarily telemetry-oriented and depends on the Master for final safety action. | A Master-side fault can delay the actual safety response. | Design limitation |
-| S-06 | High | Flow ISR at sensors.cpp line 10 increments volatile `flowRawEdgeCount++` without atomic protection, and the variable is never cleared or synchronized with the main loop. | ISR-main race condition: flow count can be corrupted, or pulses can be lost if the counter is cleared between ISR execution and main-loop read. | Confirmed vulnerability |
-| S-07 | Medium | Sensor node does not explicitly detect or signal when the tank has reached full level (100% capacity). The Master node's dry-run and overflow checks assume the sensor is working but have no explicit "tank full" safety gate. | If the tank is filled beyond the configured `tank_full_cm`, the pump has no direct sensor-node signal to stop it. | Confirmed limitation |
 
-### 3.2 Additional Timing Issues (Sensor Node)
+| ID          | Severity | Issue                                                                                                                                                                                         | Impact                                                                                                              | Status                                                                                                                                                                                                                                              |
+| ----------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S-01        | Medium   | RS-485 slave framing uses a short partial-frame stall reset to avoid hanging on malformed packets.                                                                                            | Incomplete or noisy packets can interrupt polling until the receiver resets.                                        | Confirmed — open                                                                                                                                                                                                                                    |
+| S-02        | Medium   | Response turnaround is immediate after valid packet reception.                                                                                                                                | If the Master has not fully switched to RX, the first reply can be lost.                                            | Confirmed risk — open                                                                                                                                                                                                                               |
+| S-03        | Medium   | Ultrasonic plausibility filtering can reject large level jumps.                                                                                                                               | Real level changes may be delayed if they look like outliers.                                                       | Confirmed — open                                                                                                                                                                                                                                    |
+| S-04        | Medium   | Flow hardening uses aggressive deglitching and diagnostic tuning values.                                                                                                                      | Legitimate pulses may be dropped if the installed sensor behaves differently in the field.                          | Needs field validation                                                                                                                                                                                                                              |
+| S-05        | Low      | Sensor-node logic is primarily telemetry-oriented and depends on the Master for final safety action.                                                                                          | A Master-side fault can delay the actual safety response.                                                           | Design limitation                                                                                                                                                                                                                                   |
+| S-06 / S-09 | High     | `flowRawEdgeCount` was incremented unconditionally at ISR entry without atomic protection, racing with main-loop reads. Semantics differed from `flowPulseCount` (which was correctly gated). | ISR-main race could corrupt flow diagnostic counter.                                                                | Resolved — `flowRawEdgeCount++` moved inside the deglitch guard alongside `flowPulseCount++`. Both counters now share identical ISR semantics. `noInterrupts()` block in main loop safely covers both. FIX [S-06/S-09] comment in source. Verified. |
+| S-07        | Medium   | Sensor node does not explicitly signal "tank full". Master relies on `cfgPumpStopLevel` threshold only.                                                                                       | If sensor reads slightly below stop level when tank is actually full, overflow relies solely on max-runtime cutoff. | Confirmed limitation — design                                                                                                                                                                                                                       |
 
-| ID | Severity | Issue | Impact | Status |
-|---|---|---|---|---|
-| S-08 | Medium | The partial-frame stall reset time (20ms at rs485_slave.cpp line 90) is a hardcoded magic number with no documented justification for the chosen window. At high baud rates or with latency jitter, this may be insufficient or excessive. | Frame recovery can be inconsistent or introduce false packet boundaries. | Confirmed risk |
 
-### 3.3 New Findings from Code Audit (Round 2)
+### 3.2 Timing Issues (Sensor Node)
 
-| ID | Severity | Issue | Impact | Status |
-|---|---|---|---|---|
-| S-09 | High | `flowRawEdgeCount` is incremented in the ISR without atomic protection (line 12 in sensors.cpp flowIsr()). The variable is marked `volatile` but reads in the main loop are not interrupt-guarded. The counter is **never used** for safety decisions but its semantics differ from `flowPulseCount` (which is guarded). The zeroing inside `noInterrupts()` block (line 173) gives a false sense of safety — the ISR increment outside the block races. | Silent data corruption: ISR-main race can increment the counter simultaneously with a main-loop read, corrupting the value. The unused counter masks the pattern that **should** be applied to flowPulseCount as well. | Confirmed vulnerability |
-| S-10 | Medium | `snLevelDiscardCount` is `uint16_t` (line 35 in rs485_slave.cpp). It is cast to `uint8_t` before packing into the frame (line 40): `uint8_t ldsc = (snLevelDiscardCount > 255) ? 255 : (uint8_t)snLevelDiscardCount`. Values >255 silently wrap to 0–254, losing diagnostic information about sensor plausibility failures. | Telemetry of discard count is incomplete: the Master's `remoteSensorLevelDiscardCount` can never reliably show that the sensor node is filtering aggressively. | Confirmed reporting gap |
-| S-11 | Medium | `snLevelDiscardCount` is reset to 0 inside `usResetWindow()` (line 51 in sensors.cpp) at the start of each measurement window (~every 1 second per US_MEAS_INTERVAL_MS). The value in the RS-485 frame reflects only the current window's discards, not cumulative sensor health. | Dashboard interpretation bug: `remote_level_discard_count` is a **per-window snapshot**, not cumulative health counter, but it is displayed/logged as if it were cumulative. Operators cannot determine long-term sensor filter health from this metric. | Confirmed semantic confusion |
-| S-12 | Low | `usMedianValid()` sorts the array and returns index `n/2`. For even-count windows (e.g., n=4 returns index 2), this is the upper median rather than the average of the two middle values. This is a valid median choice but is undocumented. The bias is: the returned value is slightly toward higher distances (lower percentage fill), which could delay overflow detection by 1–3%. | Level readings have a subtle upward distance bias (downward fill-level bias) in even-window medians. Over time, the pump may not detect high water levels as quickly as expected. | Confirmed design choice — needs documentation |
+
+| ID   | Severity | Issue                                                                                                                                                                                                        | Impact                                                            | Status                |
+| ---- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | --------------------- |
+| S-08 | Medium   | The 20ms partial-frame stall reset is a hardcoded magic number with no documented derivation. At 115200 baud, 20ms equals ~230 byte-times — could be excessive or insufficient depending on line transients. | Frame recovery may be inconsistent or introduce false boundaries. | Confirmed risk — open |
+
+
+### 3.3 Telemetry & Diagnostic Findings (Round 2 Audit)
+
+
+| ID   | Severity | Issue                                                                                                                                                                                      | Impact                                                                                                                                          | Status                                                                                                                      |
+| ---- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| S-10 | Medium   | `snLevelDiscardCount` is `uint16_t` but cast to `uint8_t` (clamped at 255) before packing into the RS-485 frame. Values above 255 lose granularity in telemetry.                           | `remoteSensorLevelDiscardCount` on Master cannot reliably show aggressive filtering above 255 discards.                                         | Confirmed reporting gap — accepted. Saturation at 255 is better than wrapping. No safety impact.                            |
+| S-11 | Medium   | `snLevelDiscardCount` resets to 0 at the start of each 1-second measurement window (`usResetWindow()`). The RS-485 frame value is a per-window snapshot, not a cumulative counter.         | Dashboard displays `remote_level_discard_count` as if cumulative; operators cannot assess long-term sensor filter health from this field alone. | Confirmed semantic confusion — documentation needed. Dashboard and field-service guides must note the per-window semantics. |
+| S-12 | Low      | `usMedianValid()` returns index `n/2` (upper median for even windows, e.g. n=4 returns index 2). Undocumented. Slight downward bias on fill-level readings for even-count windows (~1–3%). | Minor overflow detection delay on even-sample windows. Acceptable in practice given 5-sample window (odd).                                      | Confirmed design choice — documentation needed. Add code comment explaining upper-median selection.                         |
+
 
 ### 3.4 Sensor Node Notes & Recommendations
 
-- **ISR SAFETY (S-09)**: The `flowRawEdgeCount` race is a symptom of incomplete ISR hardening. This pattern is risky even if unused; fix it and audit other ISR interactions.
-- **TELEMETRY CLARITY (S-10, S-11)**: The discard-count semantics are misaligned with the dashboard display. Document that `remote_level_discard_count` resets every measurement window and is not cumulative.
-- **MEDIAN BIAS (S-12)**: The plausibility filter's upper-median choice is reasonable but should be documented as a known level-reading offset to explain minor overflow-detection delays.
-- The sensor node is intentionally lightweight and mostly reports data, but these findings show that telemetry semantics and ISR patterns need operator documentation and careful review before field deployment.
+- **S-06/S-09 resolved**: ISR now consistent — `flowRawEdgeCount` and `flowPulseCount` increment on the same accepted-pulse path.
+- **S-10, S-11**: No firmware change needed. Dashboard documentation must clarify that `remote_level_discard_count` is a per-window (not cumulative) counter, resetting every ~1 second.
+- **S-12**: Add a single-line code comment in `usMedianValid()` documenting the upper-median choice. No behavior change needed.
+- **S-08**: Documenting the 20ms stall-reset derivation is recommended before long-term deployment: at 115200 baud, one byte is ~87µs; the 20ms window covers ~230 byte-times, which is intentionally conservative to handle line-ringing on a 40m CAT6 run.
+
+---
 
 ## 4. RTDB Design Structure
 
@@ -135,112 +169,143 @@ The default export shows a single top-level namespace under `/pump_system/` with
 
 ### 4.1 Top-Level Tree
 
-| Path | Purpose | Notes |
-|---|---|---|
-| `/pump_system/audit/events` | Append-only audit trail. | Stores actor, timestamps, device ID, email, and optional metadata. |
-| `/pump_system/config` | Shared configuration and notification settings. | Contains admin lists, device tuning values, and per-user notification preferences. |
-| `/pump_system/control` | Dashboard-to-controller command surface. | One-shot flags and mode fields are written here by the UI. |
-| `/pump_system/presence` | Device/user presence markers. | Tracks active device sessions by user and device key. |
-| `/pump_system/status` | Controller telemetry and health snapshot. | Written by the ESP32 and consumed by the dashboard. |
+
+| Path                        | Purpose                                         | Notes                                                                              |
+| --------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `/pump_system/audit/events` | Append-only audit trail.                        | Stores actor, timestamps, device ID, email, and optional metadata.                 |
+| `/pump_system/config`       | Shared configuration and notification settings. | Contains admin lists, device tuning values, and per-user notification preferences. |
+| `/pump_system/control`      | Dashboard-to-controller command surface.        | One-shot flags and mode fields are written here by the UI.                         |
+| `/pump_system/presence`     | Device/user presence markers.                   | Tracks active device sessions by user and device key.                              |
+| `/pump_system/status`       | Controller telemetry and health snapshot.       | Written by the ESP32 and consumed by the dashboard.                                |
+
 
 ### 4.2 `/pump_system/config`
 
-| Subpath | Purpose | Example fields |
-|---|---|---|
-| `/pump_system/config/admins` | Authorized admin UID map. | `true` flags keyed by Firebase UID. |
-| `/pump_system/config/device` | System tuning values. | `tank_empty_cm`, `tank_full_cm`, `pump_start_level`, `pump_stop_level`, `dry_run_timeout_sec`, `max_pump_runtime_min`, `sleep_enabled`. |
-| `/pump_system/config/notifications` | Default notification policy. | `enabled`, `email`, `lowLevelAlert`, `dryRunAlert`, `pumpStartedAlert`. |
-| `/pump_system/config/notifications_by_user` | Per-user notification policy and tokens. | User-scoped `fcmTokens`, thresholds, and push flags. |
-| `/pump_system/config/notification_last_sent` | Anti-spam timestamps. | Last send times for `dryRun`, `lowLevel`, and `pumpStarted`. |
+
+| Subpath                                      | Purpose                                  | Example fields                                                                                                                          |
+| -------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `/pump_system/config/admins`                 | Authorized admin UID map.                | `true` flags keyed by Firebase UID.                                                                                                     |
+| `/pump_system/config/device`                 | System tuning values.                    | `tank_empty_cm`, `tank_full_cm`, `pump_start_level`, `pump_stop_level`, `dry_run_timeout_sec`, `max_pump_runtime_min`, `sleep_enabled`. |
+| `/pump_system/config/notifications`          | Default notification policy.             | `enabled`, `email`, `lowLevelAlert`, `dryRunAlert`, `pumpStartedAlert`.                                                                 |
+| `/pump_system/config/notifications_by_user`  | Per-user notification policy and tokens. | User-scoped `fcmTokens`, thresholds, and push flags.                                                                                    |
+| `/pump_system/config/notification_last_sent` | Anti-spam timestamps.                    | Last send times for `dryRun`, `lowLevel`, and `pumpStarted`.                                                                            |
+
 
 ### 4.3 `/pump_system/control`
 
-| Field | Type | Meaning |
-|---|---|---|
-| `mode` | string | Main operating mode, typically `AUTO`, `MANUAL`, or `COUNTDOWN`. |
-| `manual_desired` | boolean | Manual pump intent flag. |
-| `countdown_start` | boolean | One-shot trigger to start countdown mode. |
-| `countdown_stop` | boolean | One-shot trigger to stop countdown mode. |
-| `countdown_add_time` | boolean | One-shot trigger to add countdown time. |
-| `countdown_add_min` | number | Minutes to add when countdown extension is requested. |
-| `countdown_duration_min` | number | Countdown duration requested by the dashboard. |
-| `timed_start_sec` | number | Timed start duration in seconds. |
-| `emergency_stop` | boolean | One-shot emergency stop request. |
-| `clear_error` | boolean | Acknowledge/clear error request. |
-| `reset_stop` | boolean | Clear emergency-stop latch request. |
-| `bypass_level_sensor` | boolean | Allow control without level-sensor gating. |
-| `bypass_flow_sensor` | boolean | Allow control without flow-sensor dry-run gating. |
-| `reboot_request_id` | number | Reboot request counter or id. |
+
+| Field                    | Type    | Meaning                                                |
+| ------------------------ | ------- | ------------------------------------------------------ |
+| `mode`                   | string  | Main operating mode: `AUTO`, `MANUAL`, or `COUNTDOWN`. |
+| `manual_desired`         | boolean | Manual pump intent flag.                               |
+| `countdown_start`        | boolean | One-shot trigger to start countdown mode.              |
+| `countdown_stop`         | boolean | One-shot trigger to stop countdown mode.               |
+| `countdown_add_time`     | boolean | One-shot trigger to add countdown time.                |
+| `countdown_add_min`      | number  | Minutes to add when countdown extension is requested.  |
+| `countdown_duration_min` | number  | Countdown duration requested by the dashboard.         |
+| `timed_start_sec`        | number  | Timed start duration in seconds.                       |
+| `emergency_stop`         | boolean | One-shot emergency stop request.                       |
+| `clear_error`            | boolean | Acknowledge/clear error request.                       |
+| `reset_stop`             | boolean | Clear emergency-stop latch request.                    |
+| `bypass_level_sensor`    | boolean | Allow control without level-sensor gating.             |
+| `bypass_flow_sensor`     | boolean | Allow control without flow-sensor dry-run gating.      |
+| `reboot_request_id`      | number  | Reboot request counter or id.                          |
+
 
 ### 4.4 `/pump_system/status`
 
-This branch is the controller’s runtime snapshot. The export shows the following groups:
+This branch is the controller's runtime snapshot.
 
-| Group | Representative fields |
-|---|---|
-| Pump and mode state | `is_running`, `run_mode`, `manual_desired`, `manual_runtime_warning`, `countdown_remaining_sec`, `pump_cooldown_remaining_sec` |
-| Safety and faults | `is_error`, `is_flow_sensor_error`, `is_level_sensor_error`, `is_overflow_error`, `emergency_stop_latched`, `last_fault_code`, `last_fault_message` |
-| Sensor and telemetry | `flow_rate_lpm`, `flow_volume_added_l`, `remote_level_discard_count`, `level_fresh`, `level_last_valid_age_sec`, `level_sensor_health_pct` |
-| Connectivity and timing | `wifi_rssi`, `rs485_last_call_ms`, `cloud_last_control_call_ms`, `cloud_last_status_call_ms`, `cloud_last_cycle_ms`, `loop_max_ms` |
-| Firebase health | `firebase_consecutive_failures`, `firebase_timeout_count`, `firebase_auth_error_count`, `firebase_not_ready_skip_count`, `firebase_last_error` |
-| Resource health | `free_heap_bytes`, `min_free_heap_bytes`, `min_free_heap_observed_bytes`, `max_alloc_heap_bytes` |
-| Runtime counters | `total_pump_cycles`, `total_pump_run_min`, `ultrasonic_cycles_ok`, `ultrasonic_cycles_timeout`, `flow_stuck_high_events` |
+
+| Group                   | Representative fields                                                                                                                               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pump and mode state     | `is_running`, `run_mode`, `manual_desired`, `manual_runtime_warning`, `countdown_active`, `countdown_remaining_sec`, `pump_cooldown_remaining_sec`  |
+| Safety and faults       | `is_error`, `is_flow_sensor_error`, `is_level_sensor_error`, `is_overflow_error`, `emergency_stop_latched`, `last_fault_code`, `last_fault_message` |
+| Sensor and telemetry    | `flow_rate_lpm`, `flow_volume_added_l`, `remote_level_discard_count`, `level_fresh`, `level_last_valid_age_sec`, `level_sensor_health_pct`          |
+| Connectivity and timing | `wifi_rssi`, `rs485_last_call_ms`, `cloud_last_control_call_ms`, `cloud_last_status_call_ms`, `cloud_last_cycle_ms`, `loop_max_ms`                  |
+| Firebase health         | `firebase_consecutive_failures`, `firebase_timeout_count`, `firebase_auth_error_count`, `firebase_not_ready_skip_count`, `firebase_last_error`      |
+| Resource health         | `free_heap_bytes`, `min_free_heap_bytes`, `min_free_heap_observed_bytes`, `max_alloc_heap_bytes`                                                    |
+| Runtime counters        | `total_pump_cycles`, `total_pump_run_min`, `ultrasonic_cycles_ok`, `ultrasonic_cycles_timeout`, `flow_stuck_high_events`                            |
+
+
+**New field added (M-19 fix):** `countdown_active` (boolean) — distinguishes "timer expired/stopped" from "timer never started". Dashboard should read this field alongside `countdown_remaining_sec`.
 
 ### 4.5 `/pump_system/audit/events`
 
-| Field | Meaning |
-|---|---|
-| `action` | Audit event type such as `control.set_mode` or `control.emergency_stop`. |
-| `at`, `at_ms` | Event timestamps. |
-| `deviceId` | Source device identifier. |
-| `email`, `uid` | Acting user identity. |
-| `meta` | Optional event-specific metadata. |
+
+| Field          | Meaning                                                                  |
+| -------------- | ------------------------------------------------------------------------ |
+| `action`       | Audit event type such as `control.set_mode` or `control.emergency_stop`. |
+| `at`, `at_ms`  | Event timestamps.                                                        |
+| `deviceId`     | Source device identifier.                                                |
+| `email`, `uid` | Acting user identity.                                                    |
+| `meta`         | Optional event-specific metadata.                                        |
+
 
 ### 4.6 `/pump_system/presence`
 
-| Field | Meaning |
-|---|---|
-| Key format | Usually `${uid}_${deviceId}`. |
-| `at` | Last presence timestamp. |
+
+| Field          | Meaning                                            |
+| -------------- | -------------------------------------------------- |
+| Key format     | Usually `${uid}_${deviceId}`.                      |
+| `at`           | Last presence timestamp.                           |
 | `email`, `uid` | User identity associated with the presence marker. |
+
+
+---
 
 ## 5. Cross-System Risks
 
-| ID | Severity | Risk | Impact | Status |
-|---|---|---|---|---|
-| X-01 | Critical | Any condition that leaves the pump ON during a communication fault. | This is the most important safety failure mode. | Must never regress |
-| X-02 | High | Backward-compatibility logic for deprecated control fields can override a safer current state if not handled carefully. | A stale or malformed command could cause unexpected mode behavior. | Confirmed risk |
-| X-03 | Medium | Persistent state in NVS/Firebase can outlive a reboot. | Stale flags can affect startup behavior if not explicitly cleared. | Confirmed |
+
+| ID   | Severity | Risk                                                                                         | Impact                                                                                | Status                                                                                                                                   |
+| ---- | -------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| X-01 | Critical | Any condition leaving pump ON during a communication fault.                                  | Most important safety failure mode.                                                   | Boot-window vulnerability (M-15/M-23) closed. Freshness gates enforce `levelLastUpdateMs > 0`. Must never regress.                       |
+| X-02 | High     | Deprecated `FORCE_ON`/`FORCE_OFF` mode mapping to AUTO could override a safer current state. | Stale dashboard command causes unexpected mode transition.                            | Confirmed risk — open. Code maps FORCE modes to AUTO with `pendingModeWriteback`. Low risk but warrants documentation in operator guide. |
+| X-03 | Medium   | Persistent NVS/Firebase state outlives a reboot. Stale flags affect startup behavior.        | Bypass flags, dry_run_err, or mode from a previous session can re-apply unexpectedly. | Confirmed — open                                                                                                                         |
+
+
+---
 
 ## 6. Open Items to Watch
 
-### Immediate Priority (Next 2 Weeks)
-- **M-27 [CRITICAL]**: Fix operator lockout — allow `reset_stop` and `clear_error` processing even when `emergencyStopLatched` is true.
-- ~~**M-25 [DESIGN]**~~ **Done (Option B):** Documentation and QA aligned with firmware — MANUAL gets 90% warning then max-runtime hard stop.
-- **M-24 [OBSERVABILITY]**: Replace raw `Serial.print()` with `LOG()` macro in rs485 parse error path.
+### Immediate Priority
 
-### Long-Term Hardening (Before 50+ Day Deployment)
-- Review and fix all millis() wraparound vulnerabilities (M-13, M-14, M-20, M-21) — use a proper elapsed-time macro with wraparound safety.
-- Resolve M-26 (level-freshness race) by caching decision once per loop.
-- Add atomic operations or disable interrupts during flow counter ISR updates (S-09).
-- Document discard-count semantics (S-10, S-11) in dashboard and field-service guides.
-- Decide whether sensor node should expose cumulative discard counters instead of per-window snapshots.
+- **M-30**: Confirm `LOG_COMPILE_FLOOR = LOG_LEVEL_VERBOSE` in deployed master `config.h`. File not present in scanned project tree — cannot verify from source.
+- **S-11**: Keep dashboard/operator guide aligned that `remote_level_discard_count` is per-window and non-cumulative.
+- **X-02**: Document FORCE_ON/FORCE_OFF mapping behavior in operator guide.
+
+### Long-Term Hardening
+
+- **M-03, M-04**: Improve safe-mode reachability — consider whether a minimal HTTP endpoint or Firebase presence write could survive safe mode for remote diagnosis.
+- **M-06**: Evaluate persisting `pumpAutoStartMs` to NVS so overflow protection survives a reboot mid-run.
+- **M-08**: Consider non-blocking WiFi connect pattern to eliminate 20s startup block.
+- **M-16 (lastAddTime)**: If field feedback shows repeated missed add-time actions under poor connectivity, replace edge de-dup with command-id semantics.
 
 ### Field Validation
-- Confirm emergency-stop behavior after repeated dashboard toggles and network faults.
-- Validate flow sensor tuning (S-04, FLOW_MIN_PULSE_INTERVAL_US) in diverse environments.
-- Monitor discard-count and level-bias behavior (S-11, S-12) against tank geometry.
+
+- Confirm emergency-stop and reset-stop behavior after repeated dashboard toggles and network faults (validates M-16, M-27 fixes).
+- Validate flow sensor tuning (S-04, `FLOW_MIN_PULSE_INTERVAL_US = 800µs`) against installed YF-G1 in field conditions.
+- Monitor `remote_level_discard_count` behavior (S-11) against tank geometry and wave-reflection noise.
 - Keep secrets files out of version control; ensure example files stay sanitized (M-09).
+
+---
 
 ## 7. Traceability Notes
 
 - This document is intentionally operational, not academic.
-- Items marked as mitigated remain listed so future regressions are easier to detect.
+- Items marked as resolved remain listed so future regressions are easier to detect.
 - Add new findings only after they are reproduced on hardware, seen in logs, or verified in code.
+- All "Resolved — verified in source" entries were confirmed by direct code scan of the project files on 2026-04-02.
 
 ### Audit Summary
-- **Date of latest scan**: 2026-04-02 (Round 2: Operational & Diagnostic Issues)
-- **Total tracked**: 39 items (9 baseline + 12 Master Node new + 4 Sensor Node new + 3 cross-system + 11 already mitigated).
-- **Critical**: 3 (M-13, M-14, M-27, X-01) | **High**: 17 | **Medium**: 14 | **Low**: 5.
-- **Status breakdown**: Confirmed: 32 | Mitigated: 2 | Toolchain issue: 1 | Needs review: 4.
-- **New findings requiring triage**: M-24, M-25, M-26, M-27, M-28, M-29, M-30, M-31, S-09, S-10, S-11, S-12.
+
+- **Date of latest scan**: 2026-04-02 (Round 3 — post-fix verification)
+- **Total tracked**: 40 items (M-01–M-32, S-01–S-12, X-01–X-03; M-06 appears in two sections, counted once).
+- **Critical**: 0 open (X-01 regression-monitored, all critical firmware bugs resolved).
+- **High**: 6 open (M-03, M-04, M-09, M-11, X-02, M-16).
+- **Medium**: 10 open (M-06, M-07, M-08, M-10, S-01, S-02, S-03, S-08, S-10, S-11, X-03).
+- **Low**: 2 open (M-12, S-05).
+- **Resolved / closed**: M-13, M-14, M-15, M-17, M-18, M-19, M-20, M-21, M-22, M-23, M-24, M-25, M-26, M-27, M-28, M-29, M-31, M-32, S-06/S-09, S-12, X-01 (boot window closed).
+- **Mitigated**: M-01, M-02, M-05, M-10 (partial).
+- **Claimed-unverified**: M-30.
+

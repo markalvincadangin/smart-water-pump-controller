@@ -8,11 +8,8 @@ interface RemoteDiscardProps {
 /**
  * RemoteDiscard: Displays LDSC (Level Discard Count) from the sensor node.
  * 
- * Phase 5: Shows the counter of discarded ultrasonic readings that failed validation.
+ * LDSC is a per-measurement-window snapshot and resets frequently (not cumulative lifetime health).
  * Useful for diagnosing sensor noise or environmental interference.
- * 
- * Low values (<5) = healthy sensor.
- * High values (>50) = potential sensor degradation or noise issues.
  */
 export function RemoteDiscard({
   discardCount = 0,
@@ -38,7 +35,7 @@ export function RemoteDiscard({
       className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs rounded border ${bgColor} ${textColor}`}
       title={
         showTooltip
-          ? `Level Discard Count: ${discardCount} discarded sensor readings`
+          ? `Level Discard Count (LDSC): ${discardCount} discarded readings in the current measurement window (resets frequently; not cumulative).`
           : undefined
       }
     >

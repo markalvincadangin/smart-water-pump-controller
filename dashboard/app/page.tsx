@@ -36,6 +36,8 @@ export default function DashboardPage() {
     history,
     historyEvents,
     connected,
+    controlDesync,
+    controlDesyncReason,
     authChecked,
     authUser,
     setMode,
@@ -102,6 +104,7 @@ export default function DashboardPage() {
 
   const { pendingMode, setPendingMode } = usePendingControl(mode);
   const controlsDisabled = !connected;
+  const safetyHold = controlDesync;
 
   // Accessibility: announce state changes (WCAG 4.1.3)
   useEffect(() => {
@@ -175,6 +178,15 @@ export default function DashboardPage() {
              </div>
           )}
 
+          {safetyHold && (
+            <div className="card p-3 bg-sf-amber/10 border-sf-amber/30 flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-sf-amber animate-pulse" />
+              <span className="text-xs font-mono font-medium text-sf-amber-dark dark:text-sf-amber">
+                Control hold active: {controlDesyncReason || "controller command/status sync pending"}
+              </span>
+            </div>
+          )}
+
           {/* Alert Section */}
           <ErrorBoundary componentName="AlertsCard">
             <AlertsCard 
@@ -230,11 +242,16 @@ export default function DashboardPage() {
                   currentMode={pendingMode ?? mode}
                   manualDesired={manualDesired}
                   isEmergencyStopLatched={emergencyStopLatched}
+                  safetyHold={safetyHold}
                   isPending={!!pendingMode || controlsDisabled}
-                  countdownRemainingSec={status?.countdown_remaining_sec}
+                  countdownRemainingSec={status?.countdown_active ? status?.countdown_remaining_sec : 0}
                   onSetMode={async (m) => {
                     if (controlsDisabled) {
                       toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
+                      return;
+                    }
+                    if (safetyHold) {
+                      toast({ kind: "error", title: "Control hold active", detail: controlDesyncReason || "Please wait for controller sync." });
                       return;
                     }
                     setPendingMode(m);
@@ -245,11 +262,19 @@ export default function DashboardPage() {
                       toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
                       return;
                     }
+                    if (safetyHold) {
+                      toast({ kind: "error", title: "Control hold active", detail: controlDesyncReason || "Please wait for controller sync." });
+                      return;
+                    }
                     try { await setManualDesired(on); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
                   }}
                   onStartCountdown={async (min) => {
                     if (controlsDisabled) {
                       toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
+                      return;
+                    }
+                    if (safetyHold) {
+                      toast({ kind: "error", title: "Control hold active", detail: controlDesyncReason || "Please wait for controller sync." });
                       return;
                     }
                     try { await startCountdown(min); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
@@ -259,11 +284,19 @@ export default function DashboardPage() {
                       toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
                       return;
                     }
+                    if (safetyHold) {
+                      toast({ kind: "error", title: "Control hold active", detail: controlDesyncReason || "Please wait for controller sync." });
+                      return;
+                    }
                     try { await addCountdownTime(min); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }
                   }}
                   onStopCountdown={async () => {
                     if (controlsDisabled) {
                       toast({ kind: "error", title: "Offline — reconnecting", detail: "Controls are disabled while Firebase is disconnected." });
+                      return;
+                    }
+                    if (safetyHold) {
+                      toast({ kind: "error", title: "Control hold active", detail: controlDesyncReason || "Please wait for controller sync." });
                       return;
                     }
                     try { await stopCountdown(); } catch (err) { toast({ kind: "error", title: "Failed", detail: (err instanceof Error ? err.message : String(err)) || "Permission denied" }); }

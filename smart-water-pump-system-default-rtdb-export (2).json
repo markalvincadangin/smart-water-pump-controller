@@ -5457,7 +5457,7 @@
       "cloud_status_fail_count": 0,
       "cloud_status_ok_count": 0,
       "countdown_active": false,
-      "countdown_remaining_sec": 59,
+      "countdown_remaining_sec": 0,
       "debug_log_level": 0,
       "emergency_stop_latched": false,
       "firebase_auth_error_count": 0,
