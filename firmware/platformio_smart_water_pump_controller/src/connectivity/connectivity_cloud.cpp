@@ -1,5 +1,4 @@
 #include "connectivity_cloud.h"
-
 #include <addons/TokenHelper.h>
 #include <addons/RTDBHelper.h>
 #include <esp_task_wdt.h>
@@ -19,6 +18,7 @@ void readDeviceConfigFromFirebase() {
   int te = 0, tf = 0, ps = 0, po = 0, drSec = 0, maxRun = 0;
   float drLpm = 0.0f, flowCal = 0.0f;
   bool allOk = true;
+  static uint32_t lastBadDeviceConfigLogMs = 0;
 
   json.get(jsonData, "tank_empty_cm");
   if (jsonData.success) {
@@ -126,7 +126,15 @@ void readDeviceConfigFromFirebase() {
     }
   }
 
-  if (!allOk) return;
+  if (!allOk) {
+    uint32_t now = millis();
+    // Avoid spamming logs if the dashboard is sending partial/invalid config.
+    if (elapsedMillis32(now, lastBadDeviceConfigLogMs) >= 60000UL) {
+      lastBadDeviceConfigLogMs = now;
+      LOG(LOG_LEVEL_WARN, "FIREBASE", "Device config JSON missing/invalid required fields; keeping existing config.");
+    }
+    return;
+  }
 
   bool floatsChanged = (fabsf(drLpm - cfgDryRunThresholdLpm) > 0.01f) ||
                        (fabsf(flowCal - cfgFlowCalibration) > 0.01f);
@@ -175,22 +183,8 @@ void checkCountdownExpiry() {
 
 bool readFirebaseControl() {
   unsigned long t0 = millis();
-  static bool countdownConsumed = false;
   static bool lastAddTime = false;
-  static bool lastEmergencyStop = false;
-  static bool lastResetStop = false;
   static bool lastCountdownStart = false;
-
-  // Option B boot guard: on first call after reboot, if mode is COUNTDOWN mark timer
-  // as already consumed so the firmware doesn't auto-rearm without an explicit countdown_start.
-  static bool bootConsumedInit = false;
-  if (!bootConsumedInit) {
-    bootConsumedInit = true;
-    if (pumpMode == "COUNTDOWN") {
-      countdownConsumed = true;
-      LOG(LOG_LEVEL_INFO, "COUNTDOWN", "Boot guard: countdownConsumed set. Waiting for explicit start.");
-    }
-  }
 
   if (!Firebase.RTDB.getJSON(&fbdo, "/pump_system/control")) {
     String err = fbdo.errorReason();
@@ -221,6 +215,7 @@ bool readFirebaseControl() {
 
   firebaseConsecutiveFailCount = 0;
   cloudControlOkCount++;
+  cloudLastControlOkMs = millis();
   FirebaseJson controlJson = fbdo.to<FirebaseJson>();
   FirebaseJsonData jd;
 
@@ -241,7 +236,6 @@ bool readFirebaseControl() {
           if (newMode == pumpMode) {
             pendingModeWriteback = false;
             pendingModeWritebackSentMs = 0;
-            if (pumpMode == "AUTO") countdownConsumed = false;
             LOG(LOG_LEVEL_INFO, "FIREBASE", "Mode write-back confirmed.");
           } else if (pendingModeWritebackSentMs == 0 ||
                      elapsedMillis32(millis(), pendingModeWritebackSentMs) >= 5000UL) {
@@ -273,55 +267,58 @@ bool readFirebaseControl() {
     manualDesired = jd.boolValue;
   }
 
-  // Emergency stop (one-shot)
+  // Emergency stop (one-shot).
+  // FIX [M-16]: Use Firebase self-clear as idempotency guard instead of the static
+  // edge-detection flag. The flag is kept for the falling-edge no-op path only.
+  // This ensures a soft-reset that sees emergency_stop=true still latches correctly
+  // rather than silently skipping it because lastEmergencyStop was stale-true.
   controlJson.get(jd, "emergency_stop");
   if (jd.success) {
     bool v = jd.boolValue;
-    if (v && !lastEmergencyStop) {
-      LOG(LOG_LEVEL_INFO, "E-STOP", "Emergency stop requested. Saving mode: %s", pumpMode.c_str());
-      emergencyStopLatched = true;
-      emergencyStopSavedMode = pumpMode;  // Preserve current mode
-      manualDesired = false;
-      setPump(false);
-      if (isCountdownActive) { isCountdownActive = false; countdownEndMs = 0; }
+    if (v) {
+      // Process the latch every time the flag is true (Firebase clear is the one-shot guard).
+      if (!emergencyStopLatched) {
+        LOG(LOG_LEVEL_INFO, "E-STOP", "Emergency stop requested. Saving mode: %s", pumpMode.c_str());
+        emergencyStopLatched = true;
+        emergencyStopSavedMode = pumpMode;  // Preserve current mode
+        manualDesired = false;
+        setPump(false);
+        if (isCountdownActive) { isCountdownActive = false; countdownEndMs = 0; }
+      }
       Firebase.RTDB.setBool(&fbdo, "/pump_system/control/emergency_stop", false);
     }
-    lastEmergencyStop = v;
   }
 
   // Reset stop latch (one-shot)
   controlJson.get(jd, "reset_stop");
   if (jd.success) {
     bool v = jd.boolValue;
-    if (v && !lastResetStop) {
+    // M-16 robustness: do not rely on a potentially stale edge-detection flag for operator-critical reset_stop.
+    if (v) {
       if (isDryRunError || isOverflowError) {
         LOG(LOG_LEVEL_INFO, "E-STOP", "Reset requested but hard lockout active; ignoring.");
       } else {
         LOG(LOG_LEVEL_INFO, "E-STOP", "Reset stop requested. Restoring mode: %s", emergencyStopSavedMode.c_str());
         emergencyStopLatched = false;
         pumpMode = emergencyStopSavedMode;  // Restore saved mode
-        countdownConsumed = false;  // Allow countdown to be restarted if it was the saved mode
       }
       Firebase.RTDB.setBool(&fbdo, "/pump_system/control/reset_stop", false);
     }
-    lastResetStop = v;
   }
 
-  if (!emergencyStopLatched && firebaseReadMode.length() > 0 && firebaseReadMode != "COUNTDOWN") {
-    countdownConsumed = false;
-  }
-
-  // COUNTDOWN start: preferred is countdown_start (one-shot). Back-compat: entering COUNTDOWN arms timer.
+  // COUNTDOWN start (one-shot): Firebase self-clear is the idempotency guard.
   bool startCountdown = false;
   controlJson.get(jd, "countdown_start");
   if (jd.success) {
     bool v = jd.boolValue;
-    if (v && !lastCountdownStart) startCountdown = true;
+    if (v && !lastCountdownStart) {
+      startCountdown = true;
+      Firebase.RTDB.setBool(&fbdo, "/pump_system/control/countdown_start", false);
+    }
     lastCountdownStart = v;
-    if (v) Firebase.RTDB.setBool(&fbdo, "/pump_system/control/countdown_start", false);
   }
 
-  if ((pumpMode == "COUNTDOWN" && !isCountdownActive && !countdownConsumed) || (pumpMode == "COUNTDOWN" && !isCountdownActive && startCountdown)) {
+  if (pumpMode == "COUNTDOWN" && !isCountdownActive && startCountdown) {
     int durationMin = cfgLastCountdownDurationMin;
     controlJson.get(jd, "countdown_duration_min");
     if (jd.success) {
@@ -339,7 +336,6 @@ bool readFirebaseControl() {
     }
     countdownEndMs = addMillisSaturated(millis(), (uint32_t)durationMin * 60000UL);
     isCountdownActive = true;
-    countdownConsumed = true;
     lastAddTime = false;
     LOG(LOG_LEVEL_INFO, "COUNTDOWN", "Started: %d min.%s", durationMin,
                   Firebase.ready() ? "" : " (offline — using last known duration)");
@@ -364,8 +360,9 @@ bool readFirebaseControl() {
           countdownEndMs = min(candidate, maxEnd);
           LOG(LOG_LEVEL_INFO, "COUNTDOWN", "+%d min added.", addMin);
         }
-        Firebase.RTDB.setBool(&fbdo, "/pump_system/control/countdown_add_time", false);
       }
+      // One-shot clear is always attempted when true, even if edge-detected as duplicate.
+      if (v) Firebase.RTDB.setBool(&fbdo, "/pump_system/control/countdown_add_time", false);
       lastAddTime = v;
     }
   }
@@ -459,8 +456,10 @@ bool pushFirebaseStatus() {
   unsigned long t0 = millis();
   FirebaseJson statusJson;
   uint32_t uptimeMinutes = (uint32_t)(esp_timer_get_time() / 60000000ULL);
-  bool levelFresh = (levelLastUpdateMs > 0) &&
-                    (elapsedMillis32(millis(), levelLastUpdateMs) <= LEVEL_STALE_TIMEOUT_MS);
+  // Prefer the actual sensor freshness clock for UI reporting so the dashboard reflects
+  // the latest recovered level reading even if the RS-485 transport briefly blips.
+  bool levelFresh = (levelLastValidMs > 0) &&
+                    (elapsedMillis32(millis(), levelLastValidMs) <= LEVEL_STALE_TIMEOUT_MS);
 
   // REFACTOR [C-02]: omit level until first valid frame.
   if (waterLevelPct >= 0) {
@@ -497,6 +496,12 @@ bool pushFirebaseStatus() {
   statusJson.set("cloud_control_fail_count", (int)cloudControlFailCount);
   statusJson.set("cloud_status_ok_count", (int)cloudStatusOkCount);
   statusJson.set("cloud_status_fail_count", (int)cloudStatusFailCount);
+  uint32_t controlOkAgeSec = (cloudLastControlOkMs == 0)
+    ? 0
+    : (elapsedMillis32(millis(), cloudLastControlOkMs) / 1000UL);
+  bool controlPollStale = (cloudLastControlOkMs == 0) || (controlOkAgeSec > 20UL);
+  statusJson.set("cloud_last_control_ok_age_sec", (int)controlOkAgeSec);
+  statusJson.set("cloud_control_poll_stale", controlPollStale);
   statusJson.set("cloud_last_control_call_ms", (int)cloudLastControlCallMs);
   statusJson.set("cloud_last_status_call_ms", (int)cloudLastStatusCallMs);
   statusJson.set("cloud_last_cycle_ms", (int)cloudLastCycleMs);
@@ -516,6 +521,9 @@ bool pushFirebaseStatus() {
   statusJson.set("level_fresh",           levelFresh);
 
   statusJson.set("run_mode", runMode);
+  // FIX [M-19]: push countdown_active so dashboard can distinguish "timer expired/stopped"
+  // (isCountdownActive=false, countdownRemainSec=0) from "timer never started" (same values).
+  statusJson.set("countdown_active", isCountdownActive);
   int32_t countdownRemainSec = 0;
   if (isCountdownActive && pumpMode == "COUNTDOWN" && countdownEndMs != 0) {
     uint32_t nowMs = millis();
@@ -541,7 +549,8 @@ bool pushFirebaseStatus() {
   levelSensorHealthPct = constrain(levelSensorHealthPct, 0, 100);
   statusJson.set("level_sensor_health_pct", levelSensorHealthPct);
   statusJson.set("total_pump_cycles", (int)totalPumpCycles);
-  statusJson.set("total_pump_run_min", (int)(totalPumpRunSec / 60));
+  // Round to nearest minute to reduce silent truncation drift.
+  statusJson.set("total_pump_run_min", (int)((totalPumpRunSec + 30UL) / 60UL));
 
   if (Firebase.RTDB.setJSON(&fbdo, "/pump_system/status", &statusJson)) {
     lastSuccessfulFirebaseMs = millis();
@@ -655,7 +664,13 @@ void pushFirebaseErrorLog(const String& level, const String& component, const St
   if (!Firebase.ready()) return;
   
   FirebaseJson logJson;
-  logJson.set("timestamp", (int)(esp_timer_get_time() / 1000000ULL)); // Or NTP time if available
+  // Prefer wall-clock time (NTP) when available; otherwise fall back to monotonic boot-seconds.
+  uint32_t epochSec = 0;
+  if (ntpSynced && ntpEpochSecAtLastSync != 0 && ntpLastSyncMs != 0) {
+    uint32_t deltaSec = (elapsedMillis32(millis(), ntpLastSyncMs) / 1000UL);
+    epochSec = ntpEpochSecAtLastSync + deltaSec;
+  }
+  logJson.set("timestamp", (int)(epochSec != 0 ? epochSec : (esp_timer_get_time() / 1000000ULL)));
   logJson.set("level", level);
   logJson.set("component", component);
   logJson.set("message", message);

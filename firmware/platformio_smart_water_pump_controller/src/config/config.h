@@ -79,7 +79,7 @@
 
 // RS-485 poll + framing
 #define RS485_REQ_INTERVAL_MS      1000
-#define RS485_FRAME_TIMEOUT_MS     250
+#define RS485_FRAME_TIMEOUT_MS     350
 #define RS485_MAX_RETRIES          3
 #define RS485_RX_LINE_MAX          160
 #define REMOTE_SENSOR_OFFLINE_MS   5000UL
@@ -176,8 +176,8 @@
 #define LOG_LEVEL_DEBUG   3
 #define LOG_LEVEL_VERBOSE 4
 
-// DEBUG+ enabled in binary so Firebase debug_log_level can raise runtime verbosity (M-30).
-#define LOG_COMPILE_FLOOR LOG_LEVEL_DEBUG
+// VERBOSE+ enabled in binary so Firebase debug_log_level can raise runtime verbosity (M-30).
+#define LOG_COMPILE_FLOOR LOG_LEVEL_VERBOSE
 
 extern uint8_t gLogLevel;
 

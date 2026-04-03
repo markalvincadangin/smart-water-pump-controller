@@ -47,7 +47,7 @@ The dashboard TypeScript types in `dashboard/lib/types.ts` are the canonical UI 
 | `remote_sensor_stable` | bool | Safety gate |
 | `level_fresh` | bool | Safety gate |
 | `countdown_remaining_sec` | int | 0 when not in countdown |
-| `remote_level_discard_count` | int | From RS-485 LDSC field — **Phase 3** |
+| `remote_level_discard_count` | int | From RS-485 LDSC field — **Phase 3** (per ultrasonic measurement window snapshot; not cumulative) |
 | `debug_log_level` | int 0–4 | Current gLogLevel — **Phase 1** |
 | `wifi_rssi` | int dBm | |
 | `uptime_minutes` | int | |

@@ -13,7 +13,9 @@ struct Rs485SensorData {
 void rs485_init();
 
 // Send request + parse response (with retry). Updates global state and returns true on fresh frame.
-bool rs485_requestData();
+// If timeBudgetMs > 0, the request will cap how long it may block (helpful to avoid starving Firebase).
+// timeBudgetMs == 0 means "no cap" (default behavior).
+bool rs485_requestData(uint32_t timeBudgetMs = 0);
 
 // Returns the most recently parsed data (may be stale if offline).
 Rs485SensorData rs485_getParsedData();

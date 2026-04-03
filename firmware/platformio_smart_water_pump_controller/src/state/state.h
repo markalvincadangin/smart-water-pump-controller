@@ -152,6 +152,7 @@ extern uint32_t      cloudControlOkCount;
 extern uint32_t      cloudControlFailCount;
 extern uint32_t      cloudStatusOkCount;
 extern uint32_t      cloudStatusFailCount;
+extern unsigned long cloudLastControlOkMs;
 extern uint32_t      cloudLastControlCallMs;
 extern uint32_t      cloudLastStatusCallMs;
 extern uint32_t      cloudLastCycleMs;
@@ -172,6 +173,8 @@ extern int           lastRebootRequestId;
 // Sleep/idle flags
 extern bool          isSleeping;
 extern bool          ntpSynced;
+extern uint32_t      ntpEpochSecAtLastSync;
+extern unsigned long ntpLastSyncMs;
 extern bool          isIdleMode;
 extern unsigned long idleStartMs;
 extern unsigned long lastSleepLogMs;

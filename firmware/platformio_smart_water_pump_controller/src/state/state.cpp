@@ -114,6 +114,7 @@ uint32_t      cloudControlOkCount      = 0;
 uint32_t      cloudControlFailCount    = 0;
 uint32_t      cloudStatusOkCount       = 0;
 uint32_t      cloudStatusFailCount     = 0;
+unsigned long cloudLastControlOkMs     = 0;
 uint32_t      cloudLastControlCallMs   = 0;
 uint32_t      cloudLastStatusCallMs    = 0;
 uint32_t      cloudLastCycleMs         = 0;
@@ -135,6 +136,9 @@ bool          isIdleMode     = false;
 unsigned long idleStartMs    = 0;
 unsigned long lastSleepLogMs = 0;
 int           lastRebootRequestId = 0;
+
+uint32_t       ntpEpochSecAtLastSync = 0;
+unsigned long ntpLastSyncMs          = 0;
 
 unsigned long lastSensorMs       = 0;
 unsigned long lastFirebaseMs     = 0;

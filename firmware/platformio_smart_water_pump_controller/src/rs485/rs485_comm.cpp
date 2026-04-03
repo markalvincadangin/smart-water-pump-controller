@@ -191,8 +191,9 @@ void rs485_init() {
   Serial2.begin(RS485_UART_BAUD, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
 }
 
-static bool pollRemoteSensorNodeInternal() {
+static bool pollRemoteSensorNodeInternal(uint32_t timeBudgetMs) {
   uint32_t now = millis();
+  uint32_t callStartMs = now;
 
   remoteSensorOnline = (remoteSensorLastRxMs > 0) &&
                        (elapsedMillis32(now, remoteSensorLastRxMs) <= REMOTE_SENSOR_OFFLINE_MS);
@@ -212,8 +213,14 @@ static bool pollRemoteSensorNodeInternal() {
   static uint32_t lastSeqSeen = 0xFFFFFFFFu;
   static uint16_t dupSeqCount = 0;
 
+  // Drain once per poll call to clear stale bytes without discarding late replies between retries.
+  rs485DrainInput();
+
   for (int attempt = 0; attempt < RS485_MAX_RETRIES && !gotFrame; attempt++) {
-    rs485DrainInput();
+    if (timeBudgetMs != 0) {
+      uint32_t elapsedCallMs = elapsedMillis32(millis(), callStartMs);
+      if (elapsedCallMs >= timeBudgetMs) break;
+    }
 
     rs485SetTx(true);
     Serial2.print("REQ\n");
@@ -222,16 +229,34 @@ static bool pollRemoteSensorNodeInternal() {
     rs485SetTx(false);
 
     char payload[RS485_RX_LINE_MAX];
-    if (!rs485ReadFrame(payload, sizeof(payload), RS485_FRAME_TIMEOUT_MS)) {
-      LOG(LOG_LEVEL_ERROR, "RS485-ERR", "ReadFrame Timeout/Fail");
+    uint32_t frameTimeoutMs = RS485_FRAME_TIMEOUT_MS;
+    if (timeBudgetMs != 0) {
+      uint32_t elapsedCallMs = elapsedMillis32(millis(), callStartMs);
+      uint32_t remainingBudgetMs = (elapsedCallMs < timeBudgetMs) ? (timeBudgetMs - elapsedCallMs) : 0;
+      frameTimeoutMs = (remainingBudgetMs < (uint32_t)RS485_FRAME_TIMEOUT_MS) ? remainingBudgetMs : (uint32_t)RS485_FRAME_TIMEOUT_MS;
+    }
+
+    if (frameTimeoutMs < 5) break;
+
+    if (!rs485ReadFrame(payload, sizeof(payload), frameTimeoutMs)) {
+      if (attempt == (RS485_MAX_RETRIES - 1)) {
+        LOG(LOG_LEVEL_ERROR, "RS485-ERR", "ReadFrame Timeout/Fail (all retries)");
+      }
+      delay(4);
       continue;
     }
     if (!validateSensorResponseFrame(payload)) {
-      LOG(LOG_LEVEL_WARN, "RS485-ERR", "Frame structure invalid.");
+      if (attempt == (RS485_MAX_RETRIES - 1)) {
+        LOG(LOG_LEVEL_WARN, "RS485-ERR", "Frame structure invalid (all retries).");
+      }
+      delay(4);
       continue;
     }
     if (!parseSensorFrameStrict(payload, lvl, flow, err, seq, ldsc)) {
-      LOG(LOG_LEVEL_ERROR, "RS485-ERR", "Parse strict failed. Payload: %s", payload);
+      if (attempt == (RS485_MAX_RETRIES - 1)) {
+        LOG(LOG_LEVEL_ERROR, "RS485-ERR", "Parse strict failed after retries. Payload: %s", payload);
+      }
+      delay(4);
       continue;
     }
     gotFrame = true;
@@ -277,7 +302,9 @@ static bool pollRemoteSensorNodeInternal() {
     isFlowSensorError = flwErr;
   } else {
     remoteSensorConsecutiveFailCount++;
-    remoteSensorOnline = (remoteSensorLastRxMs > 0) && ((now - remoteSensorLastRxMs) <= REMOTE_SENSOR_OFFLINE_MS);
+    // FIX [M-32]: use wrap-safe elapsed helper (was: now - remoteSensorLastRxMs).
+    remoteSensorOnline = (remoteSensorLastRxMs > 0) &&
+                         (elapsedMillis32(now, remoteSensorLastRxMs) <= REMOTE_SENSOR_OFFLINE_MS);
 
     remoteSensorLastErrCode = 4;  // local: frame timeout/parse failure
     ultrasonicCycleTimeoutCount++;
@@ -295,8 +322,8 @@ static bool pollRemoteSensorNodeInternal() {
   return gotFrame;
 }
 
-bool rs485_requestData() {
-  return pollRemoteSensorNodeInternal();
+bool rs485_requestData(uint32_t timeBudgetMs) {
+  return pollRemoteSensorNodeInternal(timeBudgetMs);
 }
 
 Rs485SensorData rs485_getParsedData() {

@@ -8,6 +8,7 @@ import { usePumpData } from "@/lib/usePumpData";
 const mockUnsub = jest.fn();
 const mockOnValue = jest.fn((..._args: any[]) => mockUnsub) as jest.Mock<any, any>;
 const mockSet = jest.fn<Promise<void>, [unknown, unknown]>(() => Promise.resolve());
+const mockUpdate = jest.fn<Promise<void>, [unknown, Record<string, unknown>]>(() => Promise.resolve());
 const mockRef = jest.fn((db: unknown, p: string) => ({ _path: p }));
 const mockOnAuthStateChanged = jest.fn((auth: unknown, cb: (u: unknown) => void) => {
   setTimeout(() => cb({ uid: "test-uid", email: "test@example.com" }), 0);
@@ -19,6 +20,7 @@ jest.mock("firebase/database", () => ({
   onValue: (r: unknown, onData: (snap: unknown) => void, onError?: (err: unknown) => void) =>
     mockOnValue(r, onData, onError),
   set: (r: unknown, v: unknown) => mockSet(r, v),
+  update: (r: unknown, v: Record<string, unknown>) => mockUpdate(r, v),
 }));
 
 jest.mock("firebase/auth", () => ({
@@ -38,6 +40,7 @@ describe("usePumpData", () => {
   beforeEach(() => {
     mockOnValue.mockClear();
     mockSet.mockClear();
+    mockUpdate.mockClear();
     mockUnsub.mockClear();
     mockOnAuthStateChanged.mockImplementation((auth: unknown, cb: (u: unknown) => void) => {
       setTimeout(() => cb({ uid: "test-uid", email: "test@example.com" }), 0);
@@ -57,7 +60,7 @@ describe("usePumpData", () => {
     );
   });
 
-  it("setMode writes only to control/mode path", async () => {
+  it("setMode clears countdown one-shots when selecting COUNTDOWN", async () => {
     let statusCb: ((snap: { exists: () => boolean; val: () => unknown }) => void) | null = null;
     mockOnValue.mockImplementation((ref: unknown, onData: (snap: unknown) => void) => {
       statusCb = onData as typeof statusCb;
@@ -70,12 +73,18 @@ describe("usePumpData", () => {
     });
 
     await act(async () => {
-      result.current.setMode("AUTO");
+      result.current.setMode("COUNTDOWN");
     });
 
-    expect(mockSet).toHaveBeenCalledWith(
+    expect(mockUpdate).toHaveBeenCalledWith(
       expect.anything(),
-      "AUTO"
+      expect.objectContaining({
+        mode: "COUNTDOWN",
+        countdown_start: false,
+        countdown_add_time: false,
+        countdown_stop: false,
+        countdown_add_min: 0,
+      })
     );
   });
 
@@ -87,13 +96,20 @@ describe("usePumpData", () => {
     });
 
     mockSet.mockClear();
+    mockUpdate.mockClear();
     await act(async () => {
       result.current.startCountdown(200);
     });
 
-    expect(mockSet).toHaveBeenCalledWith(expect.anything(), 120);
-    expect(mockSet).toHaveBeenCalledWith(expect.anything(), "COUNTDOWN");
-    expect(mockSet).toHaveBeenCalledWith(expect.anything(), true);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        countdown_duration_min: 120,
+        mode: "COUNTDOWN",
+        countdown_start: true,
+        countdown_stop: false,
+      })
+    );
   });
 
   it("startCountdown uses 1 when duration is 0 or negative", async () => {
@@ -104,13 +120,13 @@ describe("usePumpData", () => {
     });
 
     mockSet.mockClear();
+    mockUpdate.mockClear();
     await act(async () => {
       result.current.startCountdown(0);
     });
 
-    const setCalls = mockSet.mock.calls as Array<[unknown, unknown]>;
-    const durationCall = setCalls.find((c) => typeof c[1] === "number");
-    expect(durationCall?.[1]).toBe(1);
+    const updateCalls = mockUpdate.mock.calls as Array<[unknown, Record<string, unknown>]>;
+    expect(updateCalls[0]?.[1]?.countdown_duration_min).toBe(1);
   });
 
   it("stopCountdown writes countdown_stop one-shot", async () => {
@@ -121,11 +137,18 @@ describe("usePumpData", () => {
     });
 
     mockSet.mockClear();
+    mockUpdate.mockClear();
     await act(async () => {
       result.current.stopCountdown();
     });
 
-    expect(mockSet).toHaveBeenCalledWith(expect.anything(), true);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        countdown_stop: true,
+        countdown_start: false,
+      })
+    );
   });
 
   it("setBypassFlowSensor writes bypass_flow_sensor field", async () => {
