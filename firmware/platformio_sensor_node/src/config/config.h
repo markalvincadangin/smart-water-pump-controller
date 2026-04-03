@@ -34,20 +34,22 @@
 // - TANK_US_DIST_FULL_CM: reading when the tank is physically FULL (water close to sensor).
 // - TANK_US_DIST_EMPTY_CM: reading when the tank is physically EMPTY (water far from sensor).
 // Level% = 100 * (EMPTY - measured) / (EMPTY - FULL), clamped 0–100.
-// Calibrated to current field geometry (2026-04-01):
-// - sensor to tank bottom (empty reference): 118 cm
-// - full reference used by ops: 0 cm
+// Calibrated to current field geometry (2026-04-01, corrected 2026-04-03):
+// - sensor to tank bottom (empty reference): 120 cm
+// - sensor to water surface at full level: 30 cm (matches Firebase/master config)
+// User measurement 61cm detected as 55.2cm → applying -5.8cm offset for accuracy
 #ifndef TANK_US_DIST_EMPTY_CM
   #define TANK_US_DIST_EMPTY_CM  120.0f
 #endif
 #ifndef TANK_US_DIST_FULL_CM
-  #define TANK_US_DIST_FULL_CM   0.0f
+  #define TANK_US_DIST_FULL_CM   30.0f
 #endif
 
 // Additive trim for installation-specific ultrasonic reference offset.
 // Positive values increase reported distance.
+// Calibrated 2026-04-03: measured 61cm, sensor read 55.2cm → apply -5.8cm offset
 #ifndef TANK_US_DISTANCE_OFFSET_CM
-  #define TANK_US_DISTANCE_OFFSET_CM 10.5f
+  #define TANK_US_DISTANCE_OFFSET_CM -5.8f
 #endif
 
 // JSN-SR04T capability guardrail with safety margin.
@@ -79,13 +81,16 @@
 #define US_SAMPLE_SPACING_MS      40UL
 
 // Flow signal hardening
-// Reject pulses faster than this (deglitch / EMI). 2ms => 500Hz (~66 L/min at 7.5)
-#define FLOW_MIN_PULSE_INTERVAL_US 800UL  // temporary diagnostic tuning
+// Reject pulses faster than this (deglitch / EMI).
+// 5ms => 200Hz (~26.7 L/min at 7.5), which is still above expected field flow
+// while strongly suppressing floating-line interrupt storms.
+#define FLOW_MIN_PULSE_INTERVAL_US 5000UL
 #define FLOW_MAX_SANE_LPM          100.0f
 #define FLOW_TIMEOUT_MS            5000UL
 
 // Ultrasonic plausibility (percent points per update)
-#define LEVEL_MAX_DELTA_PCT        20
+// Set to 80 to allow full tank swings without rejection (e.g., 11cm drop in ~90cm range = ~12%)
+#define LEVEL_MAX_DELTA_PCT        80
 
 // ----------------------------
 // Debug output (does not use UART0/RS-485)

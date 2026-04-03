@@ -106,3 +106,151 @@ app/
 - Implement D0.8 missing GAP fields in UI components (Phase D4 & D5).
 
 **Phase D0 complete. Proceeding to D1.**
+
+---
+
+## Live Validation Update — 2026-04-03
+
+**Status:** COMPLETE
+
+### Scope
+- Performed click-by-click live dashboard validation against active RTDB.
+- Verified control-path reflection after each UI action.
+- Executed edge-case inputs and rapid mode transitions.
+
+### Live Tests Executed
+- Mode transitions: `AUTO -> MANUAL -> AUTO -> COUNTDOWN -> AUTO`
+- Countdown boundaries:
+  - Input `0` then start -> clamped to `1`
+  - Input `999` then start -> clamped to `120`
+- Rapid transition cleanup: `COUNTDOWN -> MANUAL -> AUTO`
+- Emergency stop safety path: open confirm, then cancel (non-actuating)
+- Device Settings open/close no-op check
+
+### RTDB Reflection Results
+- `/pump_system/control/mode` reflected each mode transition correctly.
+- Countdown start writes reflected:
+  - `countdown_duration_min` clamped to `[1, 120]`
+  - `countdown_start=true`, `countdown_stop=false` on start
+- Returning to `AUTO` cleared stale countdown one-shot flags:
+  - `countdown_start=false`
+  - `countdown_stop=false`
+  - `countdown_add_time=false`
+  - `countdown_add_min=0`
+- Emergency stop cancel path left:
+  - `emergency_stop=false`
+  - `mode="AUTO"`
+
+### Issues Found and Fixed
+| ID | Area | Finding | Resolution | Status |
+|----|------|---------|------------|--------|
+| DL-01 | `components/ControlPanel.tsx` | Duplicate Emergency Stop CTA visible on mobile (in-panel + sticky bar). | Kept sticky CTA as primary mobile trigger; made in-panel non-latched E-stop button desktop-only and hid sticky CTA while confirmation panel is open. | ✅ Resolved |
+
+### Post-Fix Validation
+- Dashboard tests: **PASS** (`3/3 suites`, `17/17 tests`)
+- Next.js production build: **PASS**
+- Live RTDB control node restored to safe baseline after test:
+  - `mode="AUTO"`
+  - `manual_desired=false`
+  - `emergency_stop=false`
+  - `countdown_start=false`
+  - `countdown_stop=false`
+  - `bypass_level_sensor=false`
+  - `bypass_flow_sensor=false`
+
+---
+
+## Live Validation Continuation — 2026-04-03 (Second Pass)
+
+**Status:** COMPLETE
+
+### Scope
+- Continued edge-case validation for desync/hold behavior with live RTDB-backed UI.
+- Focused on safety invariant: Emergency Stop must remain operable during control hold.
+
+### Live Tests Executed
+- Reproduced active control hold state from stale one-shot command path.
+- Triggered Emergency Stop while hold banner was active.
+- Confirmed confirmation dialog still opens and accepts action during hold.
+- Verified activity feed recorded a new "Emergency stop requested" event.
+
+### UI and RTDB Response Mapping
+- Hold banner before actuation:
+  - `Control hold active: One-shot control command is pending beyond expected window.`
+- Hold banner after Emergency Stop confirm:
+  - `Control hold active: Emergency stop command is pending without latch confirmation.`
+- Control panel behavior during hold:
+  - Mode and timer controls remain disabled.
+  - Emergency Stop remains enabled (desktop and mobile trigger paths).
+- RTDB/operator reflection:
+  - Emergency stop dispatch accepted during hold (evidenced by new activity event).
+  - Dashboard switched to emergency-stop-specific hold reason immediately after confirm.
+
+### Issues Found and Fixed (Second Pass)
+| ID | Area | Finding | Resolution | Status |
+|----|------|---------|------------|--------|
+| DL-02 | `components/ControlPanel.tsx`, `app/page.tsx` | Emergency Stop became disabled/blocked when safety hold was active, preventing emergency actuation in the exact condition where override is most critical. | Removed hold-based disable predicates from Emergency Stop controls and removed hold guard in `onEmergencyStop`, while keeping hold gates on non-emergency controls. | ✅ Resolved |
+
+### Post-Fix Validation
+- Dashboard tests: **PASS** (`3/3 suites`, `17/17 tests`)
+- Next.js production build: **PASS**
+- Live UI check: Emergency Stop confirmation flow remains reachable and actionable under active hold.
+
+---
+
+## Pre-Flash Readiness Recheck — 2026-04-03 (Second Pass B)
+
+**Status:** CONDITIONAL (Hold)
+
+### Scope
+- Re-ran firmware compile readiness checks for both master and sensor nodes.
+- Performed a non-invasive live dashboard snapshot to confirm present RTDB/control safety state before physical flash.
+
+### Build Verification
+- Master firmware (`platformio_smart_water_pump_controller`, env `esp32dev`): **PASS**
+  - RAM: 15.0% (49,208 / 327,680)
+  - Flash: 36.1% (1,134,449 / 3,145,728)
+- Sensor firmware (`platformio_sensor_node`): **PASS** across configured environments
+  - `nodemcuv2`, `nodemcuv2_debug_usb`, `nodemcuv2_ota`, `nodemcuv2_ota_usb` all succeeded.
+  - OTA env printed an `upload_port` notice but build artifacts still completed successfully.
+
+### Live State Snapshot (No Writes)
+- Dashboard remained online and authenticated.
+- Active hold banner observed:
+  - `Control hold active: Emergency stop command is pending without latch confirmation.`
+- System alerts observed:
+  - `Sensor Comm Loss` and stale data indicators.
+
+### Flash Gate Decision
+- **NO-GO until control hold is cleared**.
+- Rationale:
+  - Pending emergency-stop/desync hold indicates command/status mismatch at this moment.
+  - Pre-flash baseline must return to safe defaults before live hardware run.
+
+### Required Unblock Before Flash
+- Confirm these RTDB control/config values are set before flashing:
+  - `/pump_system/control/emergency_stop = false`
+  - `/pump_system/control/countdown_stop = false`
+  - `/pump_system/control/bypass_level_sensor = false`
+  - `/pump_system/control/bypass_flow_sensor = false`
+  - `/pump_system/control/mode = "AUTO"`
+  - `/pump_system/config/device/flow_calibration_factor = 7.5`
+  - `/pump_system/config/device/tank_full_cm = 30`
+- Note: automatic cleanup script could not be executed in this session because admin credentials (ADC/service-account) were unavailable in local environment.
+
+### Unblock Execution Result (Same Day)
+- Service-account credentials were provided and cleanup script was executed successfully.
+- Dry-run identified pending fixes:
+  - `/pump_system/control/emergency_stop: true -> false`
+  - `/pump_system/control/countdown_stop: true -> false`
+- Apply completed successfully with those updates written.
+- Follow-up dry-run result:
+  - `No changes needed. RTDB already matches target pre-flash values.`
+- Live dashboard verification after cleanup:
+  - Control hold banner cleared.
+  - Mode and timer controls re-enabled.
+  - Firebase remained connected.
+
+### Flash Gate (Updated)
+- **GO for controlled live flashing/testing**, with standard safety observation checklist during first boot.
+

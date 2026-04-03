@@ -79,6 +79,11 @@ void setup() {
     struct tm timeinfo;
     if (getLocalTime(&timeinfo, 5000)) {
       ntpSynced = true;
+      time_t nowEpoch = mktime(&timeinfo);
+      if (nowEpoch > 0) {
+        ntpEpochSecAtLastSync = (uint32_t)nowEpoch;
+        ntpLastSyncMs = millis();
+      }
       LOG(LOG_LEVEL_INFO, "NTP", "Time synced: %04d-%02d-%02d %02d:%02d (PHT)", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                     timeinfo.tm_hour, timeinfo.tm_min);
     } else {
@@ -211,6 +216,11 @@ void loop() {
       struct tm timeinfo;
       if (getLocalTime(&timeinfo, 5000)) {
         ntpSynced = true;
+        time_t nowEpoch = mktime(&timeinfo);
+        if (nowEpoch > 0) {
+          ntpEpochSecAtLastSync = (uint32_t)nowEpoch;
+          ntpLastSyncMs = millis();
+        }
         LOG(LOG_LEVEL_INFO, "NTP", "Re-synced: %02d:%02d (PHT)", timeinfo.tm_hour, timeinfo.tm_min);
       } else {
         LOG(LOG_LEVEL_ERROR, "NTP", "Re-sync failed. Will retry on next reconnect.");
@@ -238,7 +248,15 @@ void loop() {
   struct tm timeinfo;
   if (getLocalTime(&timeinfo, 100)) {
     currentHour = timeinfo.tm_hour;
-    if (!ntpSynced) { ntpSynced = true; LOG(LOG_LEVEL_INFO, "NTP", "Time synced (post-reconnect)."); }
+    if (!ntpSynced) {
+      ntpSynced = true;
+      time_t nowEpoch = mktime(&timeinfo);
+      if (nowEpoch > 0) {
+        ntpEpochSecAtLastSync = (uint32_t)nowEpoch;
+        ntpLastSyncMs = millis();
+      }
+      LOG(LOG_LEVEL_INFO, "NTP", "Time synced (post-reconnect).");
+    }
   }
   bool emergencyOverride = (waterLevelPct <= cfgSleepEmergencyLevel);
   if (emergencyOverride && cfgSleepEnabled && ntpSynced) {
@@ -283,7 +301,12 @@ void loop() {
     lastSensorMs = now;
 
     unsigned long rs485CallStart = millis();
-    bool gotFrame = rs485_requestData();
+    // M-01: prevent RS-485 transport stalls from delaying Firebase work.
+    bool firebaseDueNow = (now - lastFirebaseMs >= firebaseInterval);
+    bool statusRetryDue = (statusPushRetryCount > 0 && statusPushRetryCount < STATUS_PUSH_RETRY_MAX &&
+                            now - statusPushRetryMs >= STATUS_PUSH_RETRY_MS);
+    uint32_t rs485BudgetMs = (firebaseDueNow || statusRetryDue) ? 150UL : 0UL; // cap blocking when cloud work is due
+    bool gotFrame = rs485_requestData(rs485BudgetMs);
     rs485LastCallMs = (uint32_t)(millis() - rs485CallStart);
 
     int levelForFailureLogic = gotFrame ? waterLevelPct : -1;
@@ -331,15 +354,17 @@ void loop() {
       }
 
       bool controlOk = readFirebaseControl();
-      if (controlOk) {
-        pushFirebaseStatus();
-      } else {
+      if (!controlOk) {
         // Prevent back-to-back cloud calls in the same cycle when transport is already failing.
         if (now - firebaseLastErrorLogMs >= 5000UL) {
           firebaseLastErrorLogMs = now;
           LOG(LOG_LEVEL_ERROR, "FIREBASE", "Cloud cycle short-circuit after control failure.");
         }
       }
+
+      // Keep status publishing independent from control polling so a transient control-path
+      // failure does not freeze the water level or other telemetry in RTDB.
+      pushFirebaseStatus();
     } else {
       if (WiFi.status() != WL_CONNECTED) {
         // wait for WiFi recovery

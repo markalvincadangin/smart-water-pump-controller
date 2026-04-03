@@ -9,22 +9,22 @@
       "control": {
         ".read": "auth != null",
         "mode": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || auth.token.firebase.sign_in_provider === 'password')"
         },
         "manual_desired": {
           ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
         },
         "emergency_stop": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
         },
         "reset_stop": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
         },
         "countdown_start": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
         },
         "clear_error": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
         },
         "reboot_request_id": {
           ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
@@ -42,10 +42,10 @@
           ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
         },
         "countdown_add_time": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
         },
         "countdown_stop": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
         },
         "bypass_level_sensor": {
           ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
@@ -92,6 +92,12 @@
             ".write": "auth != null && newData.child('uid').val() === auth.uid",
             ".validate": "newData.hasChildren(['action','uid','deviceId','at'])"
           }
+        }
+      },
+      "logs": {
+        "errors": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password'"
         }
       }
     }
