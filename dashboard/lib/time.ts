@@ -29,3 +29,11 @@ export function formatPhtDateTime(value: number | Date): string {
 export function getPhtTimezoneLabel(): string {
   return "PHT (UTC+8)";
 }
+
+/**
+ * Safely format a timestamp value, returning "—" for invalid inputs.
+ */
+export function formatPhtDateTimeOrDefault(value: unknown): string {
+  if (typeof value !== "number") return "—";
+  return formatPhtDateTime(value);
+}

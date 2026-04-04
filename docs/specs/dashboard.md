@@ -1,6 +1,11 @@
-## Dashboard Specification (Current)
+# Dashboard Specification (Current)
 
-**Refactor version:** 2.0 | Updated 2026-03-31 (Phases 1–3 complete)
+| Field | Value |
+|---|---|
+| Product | SmartFlow |
+| Scope | Dashboard operator interface and RTDB control contract |
+| Status | Current (non-versioned) |
+| Last updated | 2026-03-31 |
 
 This document is the **current** (non-versioned) dashboard specification for the SmartFlow system.
 The dashboard is a safety-critical operator interface. Firmware is the source of truth; the dashboard
@@ -68,8 +73,9 @@ The dashboard TypeScript types in `dashboard/lib/types.ts` are the canonical UI 
 | `MANUAL_ON` | MANUAL, pump running | MANUAL — On |
 | `MANUAL_OFF` | MANUAL, pump off | MANUAL — Off |
 | `MANUAL_COOLDOWN` | MANUAL, off-timer active | MANUAL — Cooldown Xs |
-| `COUNTDOWN` | Countdown running | Countdown |
-| `STOPPED` | Emergency stop latched | Emergency Stop |
+| `COUNTDOWN` | COUNTDOWN mode (active or idle timer state) | Countdown |
+
+`emergency_stop_latched` is the canonical emergency-stop state indicator.
 
 **Fault Code values** (`last_fault_code`):
 
@@ -77,7 +83,7 @@ The dashboard TypeScript types in `dashboard/lib/types.ts` are the canonical UI 
 |------|---------|----------|
 | `DRY_RUN` | Flow < threshold for > timeout | `clear_error: true` + verify water |
 | `OVERFLOW` | Runtime > max in AUTO/COUNTDOWN | `clear_error: true` |
-| `E_STOP` | Emergency stop triggered | `clear_error: true` then `reset_stop: true` |
+| `E_STOP` | Emergency stop triggered | `reset_stop: true` |
 | `COMM_LOSS` | RS-485 link unstable | Auto-clears on link recovery |
 | `STALE_LEVEL` | Level data age > threshold | Auto-clears when fresh data arrives |
 | `LEVEL_SENSOR` | Ultrasonic error | Auto-clears on sensor recovery |

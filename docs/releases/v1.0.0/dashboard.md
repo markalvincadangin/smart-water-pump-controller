@@ -1,4 +1,4 @@
-## Dashboard Documentation — v1.0.0
+# Dashboard Documentation - SmartFlow v1.0.0
 
 ### Scope
 
@@ -27,13 +27,13 @@ Hard constraints:
 
 ## 2) Technology stack
 
-- Next.js (App Router) + TypeScript
+- Next.js 15 (App Router) + TypeScript
 - Tailwind CSS
 - Firebase client SDK:
   - Auth (Google sign-in)
   - Realtime Database (status/control/config/audit)
 - Icons: Lucide
-- Optional PWA + service worker
+- Optional PWA service worker
 
 ---
 
@@ -64,12 +64,12 @@ The dashboard writes to `/pump_system/control` using safe patterns:
   - `emergency_stop`
   - `reset_stop`
   - `countdown_start`
-  - `clear_error` (may be firmware-reset depending on implementation)
+  - `clear_error`
 - Uses persistent intent for MANUAL:
   - `mode="MANUAL"`
   - `manual_desired=true|false`
 
-All control/config writes are **admin-gated** based on:
+All control/config writes are admin-gated based on:
 
 ```text
 /pump_system/config/admins/{uid} = true
@@ -77,7 +77,7 @@ All control/config writes are **admin-gated** based on:
 
 Enforced in both:
 
-- UI gating (disabled buttons + explanatory copy)
+- UI gating (disabled controls + explanatory copy)
 - `database.rules.json`
 
 ---

@@ -1,4 +1,4 @@
-// components/StatCard.tsx — Part 2 (data = Geist Mono), Part 3 spacing (24px card padding)
+// Stat card component for displaying labeled metrics with color coding
 "use client";
 
 import clsx from "clsx";

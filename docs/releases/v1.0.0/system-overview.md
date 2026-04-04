@@ -1,8 +1,8 @@
-## System Overview — v1.0.0
+# System Overview - SmartFlow v1.0.0
 
 ### Purpose
 
-The Smart Water Pump Controller automates a water pump feeding a storage tank by using:
+SmartFlow automates a water pump feeding a storage tank by using:
 
 - **Tank level** (ultrasonic distance → percent)
 - **Flow rate** (pulse-based flow sensor)
@@ -11,7 +11,7 @@ It enforces safety behaviors (dry-run lockout, overflow cutoff, emergency stop l
 
 ---
 
-### Architecture (distributed)
+### Architecture (Distributed)
 
 The system is intentionally split so long sensor cables do not directly drive the main controller IO:
 
@@ -26,13 +26,13 @@ The system is intentionally split so long sensor cables do not directly drive th
     - YF‑G1 flow sensor (pulse frequency)
   - Responds to RS‑485 requests from the master with a framed, CRC-protected payload.
 
-- **Cloud + dashboard**
+- **Cloud and dashboard**
   - Firebase Realtime Database is the only channel between firmware and dashboard.
   - Dashboard is a Next.js PWA that displays status and writes control intents.
 
 ---
 
-### End-to-end data flow (sensor → UI)
+### End-to-End Data Flow (Sensor to UI)
 
 1. **Ultrasonic**: sensor node measures distance (cm) to water surface, filters samples, and keeps the last good distance.
 2. **Flow**: sensor node counts pulses and converts them to flow (L/min) using time-aware math.
@@ -56,7 +56,7 @@ ETX (0x03)
 
 ---
 
-### End-to-end control flow (UI → pump)
+### End-to-End Control Flow (UI to Pump)
 
 1. Operator uses the dashboard to write control intents under `/pump_system/control`.
 2. ESP32 polls control and applies the highest-priority safety rules:

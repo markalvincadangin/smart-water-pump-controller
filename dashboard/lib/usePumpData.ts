@@ -126,7 +126,7 @@ export function usePumpData() {
           min_free_heap_bytes?: number;
         }) | null;
         if (!raw) return;
-        // REFACTOR [N-06/N-07]: normalize firmware canonical keys into dashboard model.
+        // Normalize firmware canonical keys (backward compat with firmware v1.x)
         const data: PumpStatus = {
           ...DEFAULT_STATUS,
           ...raw,

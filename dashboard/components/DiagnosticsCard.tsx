@@ -34,7 +34,6 @@ interface DiagnosticsCardProps {
 const LOG_LEVEL_LABELS = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'VERBOSE'];
 
 /**
- * REFACTOR [D4.6]: System Diagnostics
  * High-density diagnostic telemetry and remote hardware configuration.
  */
 export default function DiagnosticsCard({

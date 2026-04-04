@@ -1,7 +1,11 @@
-# SmartFlow Firmware Operational Rules
+# SmartFlow Firmware Operational Rules (Current)
 
-Date: 2026-04-02  
-Scope: `firmware/platformio_smart_water_pump_controller/` (ESP32 master)
+| Field | Value |
+|---|---|
+| Product | SmartFlow |
+| Scope | `firmware/platformio_smart_water_pump_controller/` (ESP32 master) |
+| Status | Normative operational behavior |
+| Date | 2026-04-02 |
 
 This is the single source document for implemented firmware behavior: modes, safety, cloud connectivity, WiFi recovery, restart/safe-mode behavior, and command semantics.
 

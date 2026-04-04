@@ -27,7 +27,6 @@ interface ControlPanelProps {
 }
 
 /**
- * REFACTOR [D4.4]: Operator Controls
  * Consolidated panel for system mode selection and direct pump interaction.
  * Includes safety confirmation for emergency actions.
  */
