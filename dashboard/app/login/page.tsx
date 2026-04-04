@@ -25,11 +25,21 @@ export default function LoginPage() {
   async function handleSignIn() {
     setError(null);
     setLoading(true);
-    const ok = await signInWithGoogle();
+    const result = await signInWithGoogle();
     setLoading(false);
-    if (ok) {
+    if (result.ok) {
       router.replace("/");
     } else {
+      if (result.errorCode === "auth/unauthorized-domain") {
+        setError(
+          `Firebase blocked this domain. Add ${window.location.hostname} (and localhost) to Firebase Console -> Authentication -> Settings -> Authorized domains.`
+        );
+        return;
+      }
+      if (result.errorCode === "auth/popup-blocked") {
+        setError("Popup was blocked by the browser. Allow popups and try again.");
+        return;
+      }
       setError("Sign-in failed or access denied.");
     }
   }

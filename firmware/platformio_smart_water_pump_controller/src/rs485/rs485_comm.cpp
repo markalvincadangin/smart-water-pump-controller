@@ -256,7 +256,7 @@ static bool pollRemoteSensorNodeInternal(uint32_t timeBudgetMs) {
 
     if (!rs485ReadFrame(payload, sizeof(payload), frameTimeoutMs)) {
       if (attempt == (RS485_MAX_RETRIES - 1)) {
-        LOG(LOG_LEVEL_ERROR, "RS485-ERR", "ReadFrame Timeout/Fail (all retries)");
+        LOG(LOG_LEVEL_WARN, "RS485-ERR", "ReadFrame Timeout/Fail (all retries)");
       }
       delay(4);
       continue;
@@ -322,7 +322,11 @@ static bool pollRemoteSensorNodeInternal(uint32_t timeBudgetMs) {
     remoteSensorOnline = (remoteSensorLastRxMs > 0) &&
                          (elapsedMillis32(now, remoteSensorLastRxMs) <= REMOTE_SENSOR_OFFLINE_MS);
 
-    remoteSensorLastErrCode = 4;  // local: frame timeout/parse failure
+    // Keep transient single-miss behavior non-disruptive while link is still fresh.
+    // Escalate to local comm-loss code only after the online window is stale.
+    if (!remoteSensorOnline) {
+      remoteSensorLastErrCode = 4;  // local: frame timeout/parse failure
+    }
     ultrasonicCycleTimeoutCount++;
     ultrasonicCycleTimeoutCountWin++;
     // Comm loss: keep last known values; downstream freshness/stability gates fail-safe.
