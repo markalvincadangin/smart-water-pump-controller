@@ -11,13 +11,18 @@ import {
 } from "firebase/auth";
 import { auth } from "./firebase";
 
+export interface SignInResult {
+  ok: boolean;
+  errorCode?: string;
+}
+
 /** Comma-separated Firebase UIDs allowed to access the dashboard. */
 const AUTHORIZED_UIDS = (process.env.NEXT_PUBLIC_AUTHORIZED_UIDS ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-export async function signInWithGoogle(): Promise<boolean> {
+export async function signInWithGoogle(): Promise<SignInResult> {
   try {
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
@@ -26,13 +31,17 @@ export async function signInWithGoogle(): Promise<boolean> {
       const uid = result.user.uid;
       if (!AUTHORIZED_UIDS.includes(uid)) {
         await firebaseSignOut(auth);
-        return false;
+        return { ok: false, errorCode: "auth/forbidden" };
       }
     }
-    return true;
+    return { ok: true };
   } catch (err) {
     console.error("[Auth] Google sign-in failed:", err);
-    return false;
+    const errorCode =
+      typeof err === "object" && err !== null && "code" in err
+        ? String((err as { code: unknown }).code)
+        : "auth/unknown";
+    return { ok: false, errorCode };
   }
 }
 
