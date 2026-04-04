@@ -1,4 +1,4 @@
-# Firmware — Smart Water Pump Controller
+# Firmware - SmartFlow
 **Platform:** ESP32 DevKit V1 (38-pin)
 **Framework:** Arduino (via Arduino IDE or VS Code + Arduino extension)  
 **Notes:** This README describes current behavior and wiring at a high level. Source-of-truth behavior is the code in `firmware/`.
@@ -19,7 +19,7 @@ The ESP32 firmware runs a non-blocking control loop that:
 - Reads control commands from Firebase every **3 seconds**
 - Reads device config from Firebase every **30 seconds** (or uses NVS when offline)
 - Automatically starts/stops the pump based on tank level thresholds (AUTO mode)
-- Detects dry-run conditions (configurable threshold and timeout, default 30s of flow < 0.5 LPM)
+- Detects dry-run conditions (configurable threshold and timeout, default 30s of flow < 1.0 LPM)
 - Overflow protection: max runtime cutoff (default 120 min)
 - Sensor/communications failsafe: stale/unstable remote data blocks starts; stale data stops a running pump
 - Scheduled sleep mode (optional): Light Sleep during idle hours to reduce power/heat
@@ -62,7 +62,7 @@ firmware/
 |------|-----------|-------------|-------|
 | 4 | OUTPUT | 5V Relay Module IN | Active LOW — LOW = pump ON |
 | 17 | OUTPUT | RS-485 TX (UART2 TX) → MAX485 DI | **FINAL:** UART2 TX for RS-485 |
-| 16 | INPUT | RS-485 RX (UART2 RX) ← MAX485 RO | **FINAL:** UART2 RX for RS-485 |
+| 25 | INPUT | RS-485 RX (UART2 RX) ← MAX485 RO | **FINAL:** UART2 RX for RS-485 |
 | 5 | OUTPUT | RS-485 DE/RE (tied) | **FINAL:** LOW=RX, HIGH=TX |
 
 > **GPIO 34** is input-only on the ESP32 — it has no internal pull-up/pull-down
@@ -157,8 +157,8 @@ Calibration and thresholds can be changed **without reflashing** via the dashboa
 The default calibration is for **Bestank WT660** (660L, sensor on lid):
 
 ```cpp
-#define TANK_EMPTY_CM   122   // Sensor-to-bottom when tank is empty
-#define TANK_FULL_CM     8    // Sensor-to-water when tank is full
+#define TANK_EMPTY_CM   120   // Sensor-to-bottom when tank is empty
+#define TANK_FULL_CM     30    // Sensor-to-water when tank is full
 ```
 
 **How to calibrate for your actual tank:**
@@ -223,7 +223,7 @@ The firmware reads `/pump_system/control/mode` from Firebase every 3 seconds.
 |------|-----------|--------|
 | `AUTO` | Pump starts at ≤ start level, stops at ≥ stop level (hysteresis) | Dashboard / default |
 | `MANUAL` | Operator policy mode; pump ON/OFF is controlled by `manual_desired` (full safety enforced) | Dashboard |
-| `COUNTDOWN` | Timed run started via `countdown_start` (duration 1–120 min), then returns to AUTO | Dashboard |
+| `COUNTDOWN` | Timed run started via `countdown_start` (duration 1–120 min); on expiry/stop, mode remains COUNTDOWN (idle) until explicit restart | Dashboard |
 
 > **Safety override:** If dry-run or overflow lockout is active, the pump will not run in any mode until the error is acknowledged via `clear_error = true`.
 >
@@ -237,11 +237,13 @@ The firmware publishes `run_mode` to describe the *actual* operational state of 
 |---------------|---------|
 | `AUTO`        | AUTO mode, pump running |
 | `AUTO_STANDBY`| AUTO mode, pump idle (above start level) |
+| `AUTO_COOLDOWN` | AUTO mode, anti-short-cycle cooldown active |
 | `MANUAL_ON`   | MANUAL mode, pump running (full safety) |
 | `MANUAL_OFF`  | MANUAL mode selected, pump off (sticky MANUAL) |
-| `COUNTDOWN`   | Timed run in progress (COUNTDOWN mode active) |
-| `STOPPED`     | Pump stopped by Emergency Stop latch |
-| `OFF`         | Pump off (idle or blocked by lockout) |
+| `MANUAL_COOLDOWN` | MANUAL mode, anti-short-cycle cooldown active |
+| `COUNTDOWN`   | COUNTDOWN mode (active timer or idle in COUNTDOWN policy mode) |
+
+Emergency-stop state is represented separately by `emergency_stop_latched`.
 
 Dashboard can request:
 - **MANUAL intent** via `mode="MANUAL"` and `manual_desired=true|false`.
@@ -255,7 +257,7 @@ All runs are subject to P1 safety (dry-run, overflow) — manual operation never
 ## Safety Logic
 
 ### Dry-Run Lockout (Level 2 — Software)
-- **Trigger:** Pump is running but flow rate below threshold (default < 0.5 LPM) for more than timeout (default 30s)
+- **Trigger:** Pump is running but flow rate below threshold (default < 1.0 LPM) for more than timeout (default 30s)
 - **Action:** Relay opens (pump off), `is_error = true` pushed to Firebase
 - **Reset:** Only via dashboard — user clicks ACK button, which sets
   `/pump_system/control/clear_error = true` in Firebase
@@ -303,7 +305,7 @@ All runs are subject to P1 safety (dry-run, overflow) — manual operation never
     wifi_rssi:           -65         (int,   dBm)
     last_boot_reason:    "Power-on"  (string)
     uptime_minutes:      125         (int)
-    run_mode:            "AUTO"      (string: OFF|AUTO|AUTO_STANDBY|MANUAL|COUNTDOWN)
+    run_mode:            "AUTO"      (string: AUTO|AUTO_STANDBY|AUTO_COOLDOWN|MANUAL_ON|MANUAL_OFF|MANUAL_COOLDOWN|COUNTDOWN)
     countdown_remaining_sec: 0       (int,   seconds left in COUNTDOWN; 0 when inactive)
     last_fault_code:     ""          (string: DRY_RUN|OVERFLOW|LEVEL_SENSOR|FLOW_SENSOR|SAFE_MODE)
     last_fault_message:  ""          (string, human-readable detail)
@@ -337,7 +339,9 @@ All runs are subject to P1 safety (dry-run, overflow) — manual operation never
     countdown_start: false           (bool:  one-shot start countdown)
     countdown_add_min: 5             (int:   minutes to add)
     countdown_add_time: false        (bool:  one-shot to add time)
+    countdown_stop: false            (bool:  one-shot to stop active countdown timer)
     bypass_level_sensor: false       (bool:  toggle level sensor bypass)
+    bypass_flow_sensor: false        (bool:  toggle dry-run flow-sensor bypass)
 
   config/
     device/                          ← Dashboard writes, ESP32 reads every 30s
@@ -357,7 +361,7 @@ Connect at **115200 baud** to see live debug output:
 
 ```
 ====================================
- Smart Water Pump Controller
+ SmartFlow
 ====================================
 [INIT] GPIO configured. Pump OFF.
 [INIT] Flow sensor interrupt attached on GPIO 34.
@@ -429,4 +433,4 @@ the ESP32 re-enters `setup()`, connects to WiFi, and initializes Firebase.
 
 ---
 
-*For current, canonical documentation: `docs/specs/firmware.md` and `docs/specs/dashboard.md`. Historical release docs live under `docs/archive/releases/`.*
+*For current, canonical documentation: `docs/specs/firmware.md` and `docs/specs/dashboard.md`. The first stable release docs live under `docs/releases/v1.0.0/`.*

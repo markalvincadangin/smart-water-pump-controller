@@ -33,4 +33,4 @@ If `GET /api/health` returns **503**, the dashboard is reporting that Firebase c
 
 ## Rollback
 
-If you cannot resolve env quickly, roll back the dashboard per `docs/operations/ROLLBACK_RUNBOOK.md` (Rollback A: Dashboard Only) to the last deployment that was healthy.
+If you cannot resolve env quickly, roll back the dashboard per `docs/operations/rollback_runbook.md` (Rollback A: Dashboard Only) to the last deployment that was healthy.

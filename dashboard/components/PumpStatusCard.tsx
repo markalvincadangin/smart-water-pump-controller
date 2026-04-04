@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import clsx from "clsx";
+import { MetricDisplay } from "./MetricDisplay";
 
 interface PumpStatusCardProps {
   runMode: string;
@@ -28,7 +29,6 @@ const MODE_LABELS: Record<string, { label: string; chipClass: string; dotClass: 
 };
 
 /**
- * REFACTOR [D4.3]: Pump Status & Metrics
  * Real-time pump diagnostics and run-mode feedback with cooldown tracking.
  */
 export default function PumpStatusCard({
@@ -126,40 +126,24 @@ export default function PumpStatusCard({
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 gap-y-3 mt-auto">
-        <MetricRow 
+        <MetricDisplay 
           label="Flow Indicator" 
           value={isRunning ? `${flowRate.toFixed(2)} LPM` : "—"} 
           isHighlighted={isRunning && flowRate > 0}
         />
-        <MetricRow 
+        <MetricDisplay 
           label="System Uptime" 
           value={formatUptime(uptimeMin)} 
         />
-        <MetricRow 
+        <MetricDisplay 
           label="Boot Reason" 
           value={bootReason} 
         />
-        <MetricRow 
+        <MetricDisplay 
           label="Total Cycles" 
           value={totalCycles.toLocaleString()} 
         />
       </div>
-    </div>
-  );
-}
-
-function MetricRow({ label, value, isHighlighted }: { label: string; value: string; isHighlighted?: boolean }) {
-  return (
-    <div className="flex items-end justify-between group border-b border-[var(--card-border)] border-dashed pb-2 last:border-0 last:pb-0">
-      <span className="text-xs font-medium text-[var(--text-secondary)]">
-        {label}
-      </span>
-      <span className={clsx(
-        "font-mono text-sm font-semibold transition-colors tabular-nums tracking-tight",
-        isHighlighted ? "text-sf-teal" : "text-[var(--text-primary)]"
-      )}>
-        {value}
-      </span>
     </div>
   );
 }

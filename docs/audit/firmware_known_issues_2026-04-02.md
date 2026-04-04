@@ -1,6 +1,6 @@
 # SmartFlow Firmware Issue Register
 
-Date: 2026-04-02 (last updated: 2026-04-02 Round 3 — post-fix verification scan)
+Date: 2026-04-02 (last updated: 2026-04-03 Final scan alignment)
 
 Scope:
 
@@ -92,7 +92,7 @@ Purpose:
 | M-27 | Critical | **OPERATOR LOCKOUT**: `readFirebaseControl()` returned early when e-stop latched, blocking `reset_stop` and `clear_error`. Operator could not recover without power-cycle. | Device trapped in e-stop with no remote recovery path.                       | Resolved — early return removed. E-stop latch now only blocks mode-apply branch; all other fields (`reset_stop`, `clear_error`, bypass toggles) continue processing. Verified in source.                                                     |
 | M-28 | Medium   | `pushFirebaseErrorLog()` used monotonic `esp_timer_get_time()` as timestamp instead of NTP wall-clock.                                                                     | Error log timestamps in Firebase do not align with real-world calendar time. | Resolved — NTP epoch used when synced (`ntpEpochSecAtLastSync + deltaSec`), falls back to uptime seconds. Verified in source.                                                                                                                |
 | M-29 | Low      | `total_pump_run_min` truncated seconds to minutes without rounding. Sub-minute runtime lost on every push.                                                                 | Cumulative runtime metric drifts over many short pump cycles.                | Resolved — `(totalPumpRunSec + 30UL) / 60UL` rounds to nearest minute. Verified in source.                                                                                                                                                   |
-| M-30 | Medium   | `LOG_COMPILE_FLOOR` set to `LOG_LEVEL_INFO`, compiling out DEBUG and VERBOSE levels. Firebase `debug_log_level` runtime tuning broken for those levels.                    | Runtime log verbosity tuning via Firebase had no effect for DEBUG/VERBOSE.   | Resolved (claimed) — `LOG_COMPILE_FLOOR = LOG_LEVEL_VERBOSE` per audit. Master node `config.h` not present in scanned project files; cannot independently verify from source. Treat as claimed-resolved until master config upload confirms. |
+| M-30 | Medium   | `LOG_COMPILE_FLOOR` set to `LOG_LEVEL_INFO`, compiling out DEBUG and VERBOSE levels. Firebase `debug_log_level` runtime tuning broken for those levels.                    | Runtime log verbosity tuning via Firebase had no effect for DEBUG/VERBOSE.   | Resolved — verified in source. `LOG_COMPILE_FLOOR = LOG_LEVEL_VERBOSE` confirmed in master `config.h`. |
 | M-31 | High     | `connectWiFi()` blocking loop ran before WDT registration in `setup()`. No watchdog recovery if WiFi hung beyond ~30s.                                                     | Device could hang indefinitely on boot if WiFi environment is unstable.      | Resolved — WDT registered before `connectWiFi()`; `esp_task_wdt_reset()` added inside WiFi retry loop. Verified in source.                                                                                                                   |
 
 
@@ -117,6 +117,14 @@ The following `millis() - X` subtractions remain in source but are confirmed non
 - **M-16 lastAddTime**: Intentionally left edge-detected only for convenience command de-dup. One-shot clear is now always attempted whenever `countdown_add_time=true`.
 - **M-30 verified in source**: `LOG_COMPILE_FLOOR = LOG_LEVEL_VERBOSE` is set in master `config.h`; retain field log-level smoke test in validation checklist.
 - **Open operational items**: M-03 (safe mode reachability), M-04 (NTP-dependent recovery), M-06 (volatile timers), M-07 (log masking), M-08 (blocking startup), M-09 (secrets hygiene), M-11 (RS-485 oscillation).
+
+### 2.9 New Findings (2026-04-03 Final Scan)
+
+| ID     | Severity | Issue | Impact | Status |
+| ------ | -------- | ----- | ------ | ------ |
+| NEW-01 | Low | `firebaseCooldownUntilMs = millis() + 10000UL` in WiFi reconnect path (`main.cpp`) uses raw addition and can overflow near 49-day wraparound. | 10s cooldown can be skipped at rollover; cosmetic reliability issue (non-safety). | Open — non-blocking for flash. Recommended fix: `addMillisSaturated(millis(), 10000UL)`. |
+| NEW-02 | Low (Cosmetic) | Routine telemetry logs in `main.cpp` were emitted at `LOG_LEVEL_ERROR` instead of `LOG_LEVEL_INFO`. | Healthy operation appears as errors in syslog/Firebase logs; real errors become noisier to triage. | Open — non-blocking for flash. Recommended fix: downgrade those two calls to INFO. |
+| NEW-03 | Low (Cosmetic) | Sleep wake target arithmetic uses raw `lastSensorMs + SLEEP_WAKE_INTERVAL_MS` without overflow protection in sleep block. | At rollover, sleep cadence can briefly tighten before self-recovering; no pump safety effect. | Open — non-blocking for flash. Recommended fix: `addMillisSaturated(lastSensorMs, SLEEP_WAKE_INTERVAL_MS)`. |
 
 ---
 
@@ -270,7 +278,9 @@ This branch is the controller's runtime snapshot.
 
 ### Immediate Priority
 
-- **M-30**: Confirm `LOG_COMPILE_FLOOR = LOG_LEVEL_VERBOSE` in deployed master `config.h`. File not present in scanned project tree — cannot verify from source.
+- **NEW-01**: Replace raw cooldown addition in main WiFi reconnect path with `addMillisSaturated(...)`.
+- **NEW-02**: Reclassify routine telemetry logs from ERROR to INFO in `main.cpp`.
+- **NEW-03**: Harden sleep wake arithmetic with `addMillisSaturated(...)` in `main.cpp`.
 - **S-11**: Keep dashboard/operator guide aligned that `remote_level_discard_count` is per-window and non-cumulative.
 - **X-02**: Document FORCE_ON/FORCE_OFF mapping behavior in operator guide.
 
@@ -284,7 +294,7 @@ This branch is the controller's runtime snapshot.
 ### Field Validation
 
 - Confirm emergency-stop and reset-stop behavior after repeated dashboard toggles and network faults (validates M-16, M-27 fixes).
-- Validate flow sensor tuning (S-04, `FLOW_MIN_PULSE_INTERVAL_US = 800µs`) against installed YF-G1 in field conditions.
+- Validate flow sensor tuning (S-04, `FLOW_MIN_PULSE_INTERVAL_US = 5000µs`) against installed YF-G1 in field conditions.
 - Monitor `remote_level_discard_count` behavior (S-11) against tank geometry and wave-reflection noise.
 - Keep secrets files out of version control; ensure example files stay sanitized (M-09).
 
@@ -299,13 +309,10 @@ This branch is the controller's runtime snapshot.
 
 ### Audit Summary
 
-- **Date of latest scan**: 2026-04-02 (Round 3 — post-fix verification)
-- **Total tracked**: 40 items (M-01–M-32, S-01–S-12, X-01–X-03; M-06 appears in two sections, counted once).
-- **Critical**: 0 open (X-01 regression-monitored, all critical firmware bugs resolved).
-- **High**: 6 open (M-03, M-04, M-09, M-11, X-02, M-16).
-- **Medium**: 10 open (M-06, M-07, M-08, M-10, S-01, S-02, S-03, S-08, S-10, S-11, X-03).
-- **Low**: 2 open (M-12, S-05).
-- **Resolved / closed**: M-13, M-14, M-15, M-17, M-18, M-19, M-20, M-21, M-22, M-23, M-24, M-25, M-26, M-27, M-28, M-29, M-31, M-32, S-06/S-09, S-12, X-01 (boot window closed).
-- **Mitigated**: M-01, M-02, M-05, M-10 (partial).
-- **Claimed-unverified**: M-30.
+- **Date of latest scan**: 2026-04-03 (final firmware scan alignment)
+- **Previously tracked fixes**: 20/20 confirmed present.
+- **Safe timing patterns**: 11 patterns reviewed and classified non-issue.
+- **New findings**: 3 (NEW-01..NEW-03), all low/cosmetic and non-blocking for flash.
+- **Open safety-critical issues**: 0.
+- **Flash recommendation**: Safe to flash now; patch NEW-01..NEW-03 in next maintenance update cycle.
 

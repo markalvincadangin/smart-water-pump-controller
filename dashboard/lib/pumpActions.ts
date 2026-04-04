@@ -1,12 +1,12 @@
-// dashboard/lib/pumpActions.ts
-// REFACTOR [D1]: Typed, error-handled Firebase write actions
-
 import { ref, set, update } from 'firebase/database';
 import { db } from './firebase';
 import type { ControlMode, LogLevel } from './types';
 
-// All actions return Promise<void> and throw on error.
-// Callers must wrap in try/catch and set pending state.
+/**
+ * Typed, error-handled Firebase write actions for pump control.
+ * All actions return Promise<void> and throw on error.
+ * Callers must wrap in try/catch and set pending state.
+ */
 
 export const setMode = (mode: ControlMode) =>
   set(ref(db, '/pump_system/control/mode'), mode);

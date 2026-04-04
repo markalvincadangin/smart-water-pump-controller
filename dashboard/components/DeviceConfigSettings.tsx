@@ -34,8 +34,7 @@ interface DeviceConfigSettingsProps {
 }
 
 /**
- * REFACTOR [D5.1]: DeviceConfigSettings
- * Modernized with SF design tokens, high-fidelity inputs, and clear safety semantics.
+ * Device configuration interface with high-fidelity inputs and clear safety semantics.
  */
 export default function DeviceConfigSettings({ 
   onClose, 

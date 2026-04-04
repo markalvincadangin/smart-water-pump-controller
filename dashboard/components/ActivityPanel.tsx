@@ -1,59 +1,15 @@
 "use client";
 
 import clsx from "clsx";
-import type { LucideIcon } from "lucide-react";
-import { Clock, Settings, Bell, Zap, ShieldCheck, Timer, Square, RotateCw, Activity } from "lucide-react";
+import { Clock } from "lucide-react";
 import { useAuditEvents } from "@/lib/useAuditEvents";
-import type { AuditAction } from "@/lib/audit";
+import { getAuditActionLabel, getAuditActionIcon } from "@/lib/audit";
 import CollapsibleSection from "@/components/CollapsibleSection";
-import { formatPhtDateTime, getPhtTimezoneLabel } from "@/lib/time";
+import { formatPhtDateTimeOrDefault, getPhtTimezoneLabel } from "@/lib/time";
 
 type AuditMeta = {
   mode?: string;
 };
-
-function formatAction(action: AuditAction) {
-  switch (action) {
-    case "control.set_mode": return "Changed mode";
-    case "control.ack_error": return "Acknowledged error";
-    case "control.request_reboot": return "Requested reboot";
-    case "control.manual_desired": return "Manual intent changed";
-    case "control.emergency_stop": return "Emergency stop";
-    case "control.reset_stop": return "Reset stop";
-    case "control.run_countdown_start": return "Started countdown";
-    case "control.run_countdown_add_time": return "Added 5 min to countdown";
-    case "control.countdown_stop": return "Stopped countdown";
-    case "control.bypass_level_sensor": return "Level sensor bypass";
-    case "control.bypass_flow_sensor": return "Flow sensor bypass";
-    case "config.device.save": return "Saved device settings";
-    case "config.notifications.save": return "Saved alert settings";
-    default: return "Activity";
-  }
-}
-
-function iconFor(action: AuditAction): LucideIcon {
-  switch (action) {
-    case "control.set_mode": return Zap;
-    case "control.ack_error": return ShieldCheck;
-    case "control.request_reboot": return RotateCw;
-    case "control.manual_desired": return Activity;
-    case "control.emergency_stop": return Square;
-    case "control.reset_stop": return RotateCw;
-    case "control.run_countdown_start": return Timer;
-    case "control.run_countdown_add_time": return Timer;
-    case "control.countdown_stop": return Square;
-    case "control.bypass_level_sensor": return Settings;
-    case "control.bypass_flow_sensor": return Settings;
-    case "config.device.save": return Settings;
-    case "config.notifications.save": return Bell;
-    default: return Activity;
-  }
-}
-
-function safeTime(at: unknown) {
-  if (typeof at !== "number") return "—";
-  return formatPhtDateTime(at);
-}
 
 export default function ActivityPanel() {
   const { events } = useAuditEvents(10);
@@ -82,7 +38,7 @@ export default function ActivityPanel() {
       ) : (
         <div className="space-y-2">
           {events.map((e) => {
-            const Icon = iconFor(e.action);
+            const Icon = getAuditActionIcon(e.action);
             const who = e.email || (e.uid ? `${e.uid.slice(0, 6)}…` : "Unknown user");
             const mode = (e.meta as AuditMeta | undefined)?.mode;
             const atMs = typeof e.at_ms === "number" ? e.at_ms : e.at;
@@ -97,14 +53,14 @@ export default function ActivityPanel() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-mono text-text-primary break-words">
-                    {e.detail ?? `${formatAction(e.action)}${mode ? ` · ${mode}` : ""}`}
+                    {e.detail ?? `${getAuditActionLabel(e.action)}${mode ? ` · ${mode}` : ""}`}
                   </p>
                   <p className="text-[10px] font-mono text-text-muted mt-0.5 break-words">
                     {who}
                   </p>
                 </div>
                 <div className={clsx("text-[10px] font-mono text-text-muted shrink-0")}>
-                  {safeTime(atMs)}
+                  {formatPhtDateTimeOrDefault(atMs)}
                 </div>
               </div>
             );

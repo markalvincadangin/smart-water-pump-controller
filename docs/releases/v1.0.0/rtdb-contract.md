@@ -1,4 +1,4 @@
-## Firebase RTDB Contract — v1.0.0
+# Firebase RTDB Contract - SmartFlow v1.0.0
 
 ### Purpose
 
@@ -62,16 +62,19 @@ Path: `/pump_system/control`
 | `countdown_start` | boolean | no | **one-shot** | Start countdown (UI sets true then clears) |
 | `countdown_add_min` | number | no | persistent | Minutes to add when `countdown_add_time` is triggered (commonly 5) |
 | `countdown_add_time` | boolean | no | **one-shot** | Add time to running countdown |
+| `countdown_stop` | boolean | no | **one-shot** | Stop an active countdown while mode remains `COUNTDOWN` |
 | `emergency_stop` | boolean | no | **one-shot** | Latch emergency stop |
 | `reset_stop` | boolean | no | **one-shot** | Clear emergency stop latch |
 | `clear_error` | boolean | yes | **one-shot** | Clears dry-run and overflow lockouts |
 | `reboot_request_id` | number | no | persistent | Monotonic token: new value triggers ESP32 soft restart |
 | `bypass_level_sensor` | boolean | no | persistent | Maintenance: ignore level for start/stop (flow guard still active) |
+| `bypass_flow_sensor` | boolean | no | persistent | Maintenance bypass for dry-run flow gate |
 
 ### 3.2 One-shot conventions
 
 - **UI-reset one-shots**: UI writes `true`, waits a short window, then writes `false` (or clears field).
   - `countdown_start`
+  - `countdown_stop`
   - `emergency_stop`
   - `reset_stop`
 - **Firmware-reset one-shots**: Firmware may write `false` back after processing.
@@ -93,15 +96,25 @@ Path: `/pump_system/status`
 | `water_level_percent` | number | 0–100 (computed by master, preferably from `DIST`) |
 | `flow_rate_lpm` | number | Liters per minute |
 | `is_running` | boolean | True when relay energizes contactor coil |
-| `run_mode` | string | OFF \| AUTO \| AUTO_STANDBY \| MANUAL_ON \| MANUAL_OFF \| COUNTDOWN \| STOPPED |
+| `run_mode` | string | AUTO \| AUTO_STANDBY \| AUTO_COOLDOWN \| MANUAL_ON \| MANUAL_OFF \| MANUAL_COOLDOWN \| COUNTDOWN |
 | `is_error` | boolean | Dry-run lockout latched |
 | `is_overflow_error` | boolean | Overflow protection latched |
 | `last_fault_code` | string | Fault identifier (see below) |
 | `last_fault_message` | string | Human-readable fault details |
 | `manual_desired` | boolean | Echo of control intent (for UI clarity) |
 | `emergency_stop_latched` | boolean | True when emergency stop latch is active |
-| `remote_sensor_stable` | boolean | RS‑485 stability latch: N consecutive good frames |
+| `remote_sensor_stable` | boolean | RS-485 stability latch: N consecutive good frames |
 | `level_fresh` | boolean | Freshness gate: last good frame within timeout |
+
+Current expected `run_mode` values for this release:
+
+- `AUTO`
+- `AUTO_STANDBY`
+- `AUTO_COOLDOWN`
+- `MANUAL_ON`
+- `MANUAL_OFF`
+- `MANUAL_COOLDOWN`
+- `COUNTDOWN`
 
 ### 4.2 Recommended diagnostic fields
 

@@ -1,60 +1,73 @@
-## RS-485 Tank Link — Protocol
+# RS-485 Tank Link
 
-This document defines the minimal protocol between:
+This document defines the active tank-node communication contract between NodeMCU sensor node and ESP32 controller.
 
-- The **tank-side NodeMCU V2 (ESP8266, CP2102) node** (near the JSN-SR04T sensor), and
-- The **main ESP32 controller** in the pump enclosure.
+## Link profile
 
-### Physical layer
+- Bus: RS-485 half-duplex
+- Baud: 115200 (8N1)
+- Topology: single master (ESP32), single slave (NodeMCU)
+- Medium: CAT6 pair for A/B plus shared GND reference
 
-- Bus: RS-485 half-duplex over CAT6 twisted pair (Green/Green-White).
-- Speed: 115200 baud, 8N1 (default UART settings).
-- Termination: optional 120 Ω across A/B at both ends if noise is observed.
-- **CLARIFIED power:** The main enclosure uses a **local 5V adapter** for the ESP32. A **separate 12V adapter** is injected into CAT6 and travels to the tank enclosure, where an LM2596 buck converter generates the local 5V rail for the NodeMCU, sensors, and MAX485.
-- **CLARIFIED grounding:** Run CAT6 **GND** alongside A/B and tie it to both transceivers’ GND pins (ESP32/MAX485 side and NodeMCU/MAX485 side). RS-485 is differential, but the transceivers still require a shared reference to stay within common-mode limits.
+## Production pin map
 
-### Message format
+### ESP32 controller
 
-Each update is a single ASCII line:
+- TX2 GPIO17 -> MAX485 DI
+- RX2 GPIO25 <- MAX485 RO
+- DE/RE GPIO5 -> MAX485 DE+RE (tied)
+
+### NodeMCU sensor node
+
+- TX GPIO1 -> MAX485 DI
+- RX GPIO3 <- MAX485 RO
+- DE/RE GPIO14 (D5) -> MAX485 DE+RE (tied)
+
+## Request and response contract
+
+### Master request
 
 ```text
-LVL:<percent>;ERR:<flag>\r\n
+REQ\n
 ```
 
-- `<percent>`: integer 0–100, water level percentage.
-- `<flag>`: `0` (OK) or `1` (ultrasonic sensor error).
-
-Examples:
+### Slave response frame
 
 ```text
-LVL:87;ERR:0\r\n
-LVL:12;ERR:1\r\n
+\x02LVL:<pct>;DIST:<cm>;FLOW:<lpm>;ERR:<code>;LDSC:<n>;SEQ:<seq>;CRC:<hex4>\x03
 ```
 
-### Behaviour
+Field meaning:
 
-- The tank node sends one frame every 1–2 seconds.
-- On repeated JSN timeouts or invalid readings, the node sets `ERR:1`.
-- When readings recover, the node sets `ERR:0` again.
+- `LVL`: water level percent integer
+- `DIST`: ultrasonic distance in cm (1 decimal)
+- `FLOW`: flow rate in L/min (2 decimals)
+- `ERR`: sensor error bitmask from node
+- `LDSC`: level-discard count (0 to 255, saturating)
+- `SEQ`: sequence counter (0 to 255)
+- `CRC`: CRC16-Modbus over payload before `CRC:`
 
-The main ESP32:
+## Reliability expectations
 
-- Treats missing frames for several seconds as "sensor offline" and may set `isSensorError`.
-- Uses `LVL` as the authoritative `waterLevelPct` for pump logic and Firebase telemetry.
+- ESP32 applies timeout and retry for missed/invalid frames
+- Node frame parser handles inter-byte stall reset
+- Master parser supports backward compatibility where `LDSC` may be absent
 
-### FINAL UART + DE/RE pins (production)
+## Wiring and grounding requirements
 
-**ESP32 (main enclosure):**
+- Use twisted pair for A/B
+- Carry shared GND between enclosures
+- Add 120 ohm termination at ends if noise/reflections appear
+- Keep RS-485 away from mains switching lines where possible
 
-- TX2 (GPIO17) → MAX485 DI
-- RX2 (GPIO25) ← MAX485 RO
-- DE/RE (GPIO5) → MAX485 DE+RE (tied)
+## Power architecture baseline
 
-**NodeMCU V2 (tank enclosure):**
+- ESP32 enclosure: local 5V supply
+- Tank enclosure: independent 12V feed with buck conversion to local 5V for NodeMCU/sensors/transceiver
 
-- TX (GPIO1) → MAX485 DI
-- RX (GPIO3) ← MAX485 RO
-- DE/RE (D5 / GPIO14) → MAX485 DE+RE (tied)
+## Field verification checklist
 
-> **Flashing note (NodeMCU):** Disconnect MAX485 from NodeMCU TX/RX during USB flashing, then reconnect.
-
+1. Node sends framed payload continuously at expected interval.
+2. ESP32 receives valid CRC frames with stable `SEQ` progression.
+3. Disconnect/reconnect test transitions to offline and recovers cleanly.
+4. Sensor fault induces expected `ERR` behavior and recovery after fault clears.

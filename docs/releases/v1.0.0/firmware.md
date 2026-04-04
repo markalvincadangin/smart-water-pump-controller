@@ -1,4 +1,4 @@
-## Firmware Documentation — v1.0.0
+# Firmware Documentation - SmartFlow v1.0.0
 
 ### Scope
 
@@ -61,13 +61,15 @@ Emergency stop:
 
 Run mode (published status, actual state):
 
-- `OFF`
 - `AUTO`
 - `AUTO_STANDBY`
+- `AUTO_COOLDOWN`
 - `MANUAL_ON`
 - `MANUAL_OFF`
+- `MANUAL_COOLDOWN`
 - `COUNTDOWN`
-- `STOPPED` (emergency stop latched)
+
+Emergency-stop status is represented separately via `emergency_stop_latched`.
 
 ### 1.4 Safety logic (priority order)
 
@@ -81,7 +83,7 @@ The system uses an explicit priority model (highest wins):
 3. **Freshness/stability gating**:
    - If RS‑485 data is stale or link is unstable, pump start is blocked.
    - If the pump is running and data becomes stale/unstable, pump is stopped (failsafe) unless bypass is active.
-4. **Maintenance bypass** (optional): `bypass_level_sensor=true` ignores level-based stop/start but does not bypass dry-run/overflow.
+4. **Maintenance bypass** (optional): `bypass_level_sensor=true` ignores level-based gating. Dry-run and overflow lockouts remain active.
 5. **Mode behavior**:
    - AUTO: hysteresis on level
    - MANUAL: obey `manual_desired` with safety + (optional) full-tank stop when level is valid

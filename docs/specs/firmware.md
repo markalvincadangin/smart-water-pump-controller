@@ -1,6 +1,11 @@
-## Firmware Specification (Current)
+# Firmware Specification (Current)
 
-**Refactor version:** 2.0 | Updated 2026-03-31 (Phases 1–3 complete)
+| Field | Value |
+|---|---|
+| Product | SmartFlow |
+| Scope | ESP32 master + ESP8266 sensor node |
+| Status | Current (non-versioned) |
+| Last updated | 2026-03-31 |
 
 This document is the **current** (non-versioned) firmware specification for the SmartFlow system.
 It supersedes the older archived specs and release notes. Historical documents remain under `docs/archive/`.
@@ -93,8 +98,9 @@ Policy mode is stored in `pumpMode` (RTDB: `/pump_system/control/mode`):
 | `MANUAL_ON` | MANUAL, pump running | MANUAL — On |
 | `MANUAL_OFF` | MANUAL, pump off | MANUAL — Off |
 | `MANUAL_COOLDOWN` | MANUAL, pump off, off-timer active | MANUAL — Cooldown Xs |
-| `COUNTDOWN` | Countdown running | Countdown |
-| `STOPPED` | Emergency stop latched | Emergency Stop |
+| `COUNTDOWN` | COUNTDOWN mode (active or idle timer state) | Countdown |
+
+`emergency_stop_latched` is published separately and should be used as the canonical emergency-stop indicator.
 
 **Emergency stop**
 

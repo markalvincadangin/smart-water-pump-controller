@@ -1,6 +1,6 @@
 # PRR Critical Blockers — Remediation Summary
 
-This document summarizes the remediation work performed to move the Smart Water Pump Controller to **Go** status per the [Production Readiness Review](../PRODUCTION_READINESS_REVIEW.md).
+This document summarizes historical remediation work that moved SmartFlow toward production readiness.
 
 ---
 
@@ -10,7 +10,7 @@ This document summarizes the remediation work performed to move the Smart Water 
 - **Config:** `dashboard/jest.config.js`, `dashboard/jest.setup.js`
 - **Scripts:** `npm run test`, `npm run test:watch`, `npm run test:coverage`; `validate` now includes `npm run test`
 - **Gold-standard tests:**
-  - `dashboard/__tests__/lib/controlContract.test.ts` — `VALID_CONTROL_MODES`, `isValidControlMode`, `sanitizeControlMode` (pump_system/control/mode data contract: AUTO, FORCE_ON, FORCE_OFF, COUNTDOWN)
+  - `dashboard/__tests__/lib/controlContract.test.ts` — `VALID_CONTROL_MODES`, `isValidControlMode`, `sanitizeControlMode` (pump_system/control/mode data contract: AUTO, MANUAL, COUNTDOWN)
   - `dashboard/__tests__/lib/usePendingControl.test.tsx` — pending mode clearing and toast on confirmation
   - `dashboard/__tests__/lib/usePumpData.test.tsx` — Firebase mocks; setMode, startCountdown duration clamping
 - **Shared contract:** `dashboard/lib/controlContract.ts` — `VALID_CONTROL_MODES`, `isValidControlMode()`, `sanitizeControlMode()` for v3.0 mode validation
@@ -32,7 +32,7 @@ This document summarizes the remediation work performed to move the Smart Water 
 - **Bootstrap:** To grant admin, set `pump_system/config/admins/{uid}` to `true` in Firebase Console or via a one-time script. No UIDs in rules.
 
 ### Dependency Patching Plan
-- **File:** `docs/operations/DEPENDENCY_PATCHING_PLAN.md`
+- **File:** `docs/operations/dependency_patching_plan.md`
 - **Content:** Step-by-step plan to resolve 7 high-severity dashboard npm audit findings (Next.js, flatted, serialize-javascript/PWA, LHCI) without breaking the build. Overrides and upgrade order documented.
 
 ---
@@ -40,7 +40,7 @@ This document summarizes the remediation work performed to move the Smart Water 
 ## 3. Deployment & Disaster Recovery (Gate 4)
 
 ### Rollback Runbook
-- **File:** `docs/operations/ROLLBACK_RUNBOOK.md`
+- **File:** `docs/operations/rollback_runbook.md`
 - **Content:** Point of no return; rollback procedures for Dashboard only, Database rules only, Full stack (dashboard + rules), and Functions only. Prerequisites and post-rollback steps included.
 
 ### Health API
@@ -84,32 +84,32 @@ curl -s http://localhost:3000/api/health
 |--------|--------|
 | Unit/integration tests & coverage | **Resolved** — Jest in dashboard and functions; gold-standard tests for control contract, usePendingControl, usePumpData, canSend/recordSent. |
 | Hardcoded UIDs in database rules | **Resolved** — Rules use only `pump_system/config/admins/{uid}`. |
-| Rollback procedure | **Resolved** — Rollback runbook in `docs/operations/ROLLBACK_RUNBOOK.md`. |
+| Rollback procedure | **Resolved** — Rollback runbook in `docs/operations/rollback_runbook.md`. |
 | Health checks | **Resolved** — `/api/health` implemented. |
 | Build reproducibility (firmware) | **Resolved** — platformio.ini pins library versions. |
-| Dashboard npm high-severity vulns | **Documented** — `DEPENDENCY_PATCHING_PLAN.md`; execute per plan for full mitigation. |
+| Dashboard npm high-severity vulns | **Documented** — `dependency_patching_plan.md`; execute per plan for full mitigation. |
 
 ---
 
 ## Operational Launch
 
-- **Launch runbook:** [LAUNCH_SEQUENCE_RUNBOOK.md](LAUNCH_SEQUENCE_RUNBOOK.md) — Execute Phase 1 (bootstrap + rule confirmation) before Phase 2 (pipeline). If health returns 503, halt and follow [HEALTH_CHECK_503_REMEDIATION.md](HEALTH_CHECK_503_REMEDIATION.md).
+- **Launch runbook:** [launch_sequence_runbook.md](launch_sequence_runbook.md) — Execute Phase 1 (bootstrap + rule confirmation) before Phase 2 (pipeline). If health returns 503, halt and follow [health_check_503_remediation.md](health_check_503_remediation.md).
 - **First admin:** Run `scripts/bootstrap-admin.js` with your Google UID and service account key; then confirm a control write from the dashboard.
 
 ---
 
 ## Production Launch Log (Historical Record)
 
-**System version:** v3.0 (certified zero-failure launch).  
-**Fill in after completing the [Launch Sequence Runbook](LAUNCH_SEQUENCE_RUNBOOK.md).** Do not proceed to pipeline/telemetry until Phase 1 (admin bootstrap + rule confirmation) is verified.
+**System version:** v1.0.0 (first stable release).  
+**Fill in after completing the [Launch Sequence Runbook](launch_sequence_runbook.md).** Do not proceed to pipeline/telemetry until Phase 1 (admin bootstrap + rule confirmation) is verified.
 
 | Field | Value |
 |-------|--------|
-| **System version** | v3.0 |
+| **System version** | v1.0.0 |
 | **Final production deployment (UTC)** | _2026-03-15 — firmware flashed; dashboard control and status stream verified_ |
-| **Verified admin UID** | _Fill in your Firebase Auth UID (dashboard user markalvin.cadangin@wvsu.edu.ph)_ |
+| **Verified admin UID** | _Fill in your Firebase Auth UID (dashboard user admin@example.com)_ |
 | **Health check** | _Confirm 200 OK on production DASHBOARD_URL/api/health_ |
 | **Function verification** | _Optional: low level / dry run notification_ |
 | **Status stream (first 60 min)** | _Verified — ESP32 writing to pump_system/status every ~3s; Firebase sync OK_ |
 | **min_free_heap_observed_bytes (T+60 min)** | _Check dashboard/status telemetry when available_ |
-| **Notes** | _First boot: NVS pump_cfg not found (defaults used); state namespace mode NOT_FOUND until first persist. Ultrasonic 5 consecutive timeouts → isLevelSensorError; bypass enabled from dashboard. FORCE_OFF, AUTO, manual run/stop, COUNTDOWN, +5 min add, dry-run lockout, clear error, mode write-back confirmed — all exercised successfully._ |
+| **Notes** | _First boot: NVS pump_cfg not found (defaults used); state namespace mode NOT_FOUND until first persist. Ultrasonic 5 consecutive timeouts -> sensor error path observed; bypass enabled from dashboard. AUTO, MANUAL run/stop, COUNTDOWN, +5 min add, dry-run lockout, clear error, mode write-back confirmed — all exercised successfully._ |

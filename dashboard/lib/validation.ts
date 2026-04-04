@@ -5,8 +5,7 @@ import {
 } from "./constants";
 
 /**
- * REFACTOR [D6.1]: Device Configuration Validation
- * Strict bounds checking for firmware-adjacent parameters.
+ * Device configuration validation with strict bounds checking for firmware-adjacent parameters.
  */
 
 export interface ValidationResult {
@@ -91,7 +90,9 @@ export type DeviceConfigField =
 
 export type FieldErrors = Partial<Record<DeviceConfigField, string>>;
 
-// REFACTOR [D6]: Field-level validation for inline errors
+/**
+ * Field-level validation for inline error display in configuration forms.
+ */
 export function validateDeviceConfigFields(form: DeviceConfig): FieldErrors {
   const errors: FieldErrors = {};
 
