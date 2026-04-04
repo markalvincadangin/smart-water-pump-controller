@@ -5,7 +5,8 @@ Targets:
 - **ESP8266 sensor node**: unchanged behavior (still provides LVL/FLOW/ERR over RS-485), only referenced for end-to-end tests
 
 Source of truth:
-- `docs/architecture_redesign_vNext.md` (modes: AUTO / MANUAL (ON/OFF intent) / COUNTDOWN + Emergency Stop action)
+- `docs/specs/firmware.md` and `docs/operations/firmware_config_from_database.md`
+- `docs/operations/rs485_tank_link.md` for transport behavior and link reliability constraints
 
 ---
 

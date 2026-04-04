@@ -4,7 +4,8 @@ Target:
 - `dashboard/` (Next.js PWA)
 
 Source of truth:
-- `docs/architecture_redesign_vNext.md`
+- `docs/specs/dashboard.md`
+- `docs/operations/firmware_config_from_database.md` and `docs/operations/rs485_tank_link.md`
 
 ---
 
