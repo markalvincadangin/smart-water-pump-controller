@@ -201,6 +201,7 @@ export default function DashboardPage() {
               isLevelBypass={status?.bypass_level_sensor ?? false}
               isFlowBypass={status?.bypass_flow_sensor ?? false}
               isIdleMode={status?.is_idle_mode ?? false}
+              isLoading={!status}
               onResetEStop={resetEmergencyStop}
               onClearError={acknowledgeError}
             />
