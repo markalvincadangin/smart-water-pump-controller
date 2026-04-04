@@ -1,107 +1,84 @@
-# Admin Bootstrap & Rule Simulation
-## Security validation for dynamic database rules (v3.0)
+# Admin Bootstrap and Rule Validation
 
----
+This runbook validates SmartFlow access control after `database.rules.json` deployment.
 
-## 1. Bootstrap first admin UID
+## Scope
 
-After deploying `database.rules.json`, **no user can write to control until** at least one UID is set at `pump_system/config/admins/{uid} = true`. Use one of the methods below.
+- Bootstrap first dashboard admin at `pump_system/config/admins/{uid}`
+- Validate that non-admin users cannot write privileged control fields
+- Confirm ESP32 service-account behavior remains functional
 
-### Option A: Firebase CLI (manual one-off)
+## Current rule model
 
-You need the **database URL** and **Authentication UID** of the user who should be admin.
+From `database.rules.json`:
 
-1. Get the UID: Firebase Console → **Authentication** → **Users** → copy the **User UID** of the Google account you use for the dashboard.
-2. Using the Firebase REST API with a credential that has admin access (e.g. a service account), or the **Realtime Database** tab:
-   - Go to **Realtime Database** → **Data**.
-   - Navigate to `pump_system` → `config` → `admins`.
-   - If `admins` does not exist, click **+** to add a child `admins` (object).
-   - Under `admins`, add a child with key = **your UID** and value = **true**.
+- `pump_system/control/mode`: writable by admin UIDs and ESP32 Email/Password client
+- Privileged control fields (`manual_desired`, `bypass_*`, `reboot_request_id`, etc.): admin UIDs only
+- ESP32 can write one-shot `false` resets for selected control keys (`emergency_stop`, `reset_stop`, `countdown_start`, `clear_error`, `countdown_add_time`, `countdown_stop`)
+- `pump_system/config/device`: admin UIDs only
+- `pump_system/status` and `pump_system/logs/errors`: ESP32 Email/Password client write path
 
-### Option B: Node.js script (recommended for automation)
+## 1. Bootstrap first admin
 
-From repo root, with a **service account key** (JSON) for the Firebase project:
+1. Get the dashboard user UID:
+  - Firebase Console -> Authentication -> Users
+2. Run the bootstrap script:
 
 ```bash
-# One-time: install dependencies in scripts/
 cd scripts
 npm install
-
-# Set path to service account key (download from Firebase Console → Project Settings → Service accounts)
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/serviceAccountKey.json"
-
-# Bootstrap: replace YOUR_UID with the UID from Authentication → Users
-node bootstrap-admin.js YOUR_UID
+node bootstrap-admin.js --keyfile /path/to/serviceAccountKey.json YOUR_ADMIN_UID
 ```
 
-Or with explicit keyfile (from repo root):
+3. Confirm output contains:
 
-```bash
-cd scripts && node bootstrap-admin.js --keyfile /path/to/serviceAccountKey.json YOUR_UID
+```text
+Admin bootstrap OK: pump_system/config/admins/YOUR_ADMIN_UID = true
 ```
 
-**Success:** Script prints `Admin bootstrap OK: pump_system/config/admins/YOUR_UID = true`.
+4. Verify in RTDB Data view:
 
-### Option C: One-liner from functions directory
-
-If you already have `functions/` with `firebase-admin` installed and a service account key at `functions/serviceAccountKey.json`:
-
-```bash
-cd functions
-node -e "
-const admin = require('firebase-admin');
-admin.initializeApp({ credential: admin.credential.cert(require('./serviceAccountKey.json')) });
-const uid = process.argv[1] || 'YOUR_UID';
-admin.database().ref('pump_system/config/admins').child(uid).set(true).then(() => { console.log('Admin set:', uid); process.exit(0); }).catch(e => { console.error(e); process.exit(1); });
-" YOUR_UID
+```text
+pump_system/config/admins/YOUR_ADMIN_UID = true
 ```
 
-Replace `YOUR_UID` with the UID from Firebase Console → Authentication → Users.
+## 2. Validate rules behavior
 
----
+### Admin path must succeed
 
-## 2. Rule simulation: non-admin write must be denied
+1. Sign in to dashboard with bootstrapped admin account.
+2. Change `control/mode` between `AUTO`, `MANUAL`, and `COUNTDOWN`.
+3. Expected: write succeeds, UI state updates.
 
-To confirm that `pump_system/control/mode` is **denied** for an authenticated user who is **not** in `pump_system/config/admins`:
+### Non-admin path must fail
 
-### Option A: Firebase Console Rules Playground
+1. Use a second authenticated user not present in `config/admins`.
+2. Attempt write to:
 
-1. Firebase Console → **Realtime Database** → **Rules** tab → **Rules Playground** (or **Simulator**).
-2. **Location:** `/pump_system/control/mode`
-3. **Operation:** **Write**
-4. **Type:** **Authenticated**; choose a **User** that is **not** listed under `pump_system/config/admins` (or use a test user that has no admin entry).
-5. **Value:** `"AUTO"` (string).
-6. Run the simulation.
-7. **Expected:** **Denied** (simulation shows that the write would be rejected).
-
-### Option B: Manual test with second Google account
-
-1. Add a second Google user in Firebase Authentication (e.g. a test account).
-2. Do **not** add that user’s UID to `pump_system/config/admins`.
-3. In an incognito window, sign in to the dashboard with that second account.
-4. Try to change mode (e.g. switch to FORCE_OFF or AUTO).
-5. **Expected:** The write fails; UI may show an error or the mode does not change. In the browser dev tools (Network or Console), you should see a Firebase permission-denied error.
-
-### Option C: REST API with ID token
-
-With an ID token for a **non-admin** user (e.g. from the dashboard after signing in with a test account):
-
-```bash
-# Replace DATABASE_URL and ID_TOKEN
-curl -X PUT -d '"AUTO"' \
-  "https://YOUR_PROJECT-default-rtdb.asia-southeast1.firebasedatabase.app/pump_system/control/mode.json?auth=ID_TOKEN"
+```text
+/pump_system/control/manual_desired
 ```
 
-**Expected:** `401` or `403` and a body indicating permission denied (e.g. `"Permission denied"`). A successful write would return `200` and the value; with dynamic rules and a non-admin UID, the request must be denied.
+3. Expected: permission denied.
 
----
+### ESP32 compatibility must remain intact
 
-## 3. Verification checklist
+1. Confirm ESP32 continues writing to:
 
-| Step | Action | Expected |
-|------|--------|----------|
-| 1 | Deploy rules | `firebase deploy --only database` |
-| 2 | Bootstrap admin | Set `pump_system/config/admins/{uid} = true` for at least one UID |
-| 3 | Sign in as admin | Dashboard loads; mode change succeeds |
-| 4 | Rules simulation | Write to `control/mode` as non-admin → **Denied** |
-| 5 | ESP32 status write | ESP32 (Email/Password) can still write to `pump_system/status` |
+```text
+/pump_system/status
+```
+
+2. Confirm control one-shot self-clears can still be set back to `false` by ESP32 where applicable.
+
+## 3. Rule simulation checklist
+
+| Check | Expected result |
+|------|------------------|
+| Admin write to `control/mode` | Allowed |
+| Non-admin write to `control/mode` | Denied |
+| Non-admin write to privileged control field | Denied |
+| ESP32 status write | Allowed |
+| ESP32 one-shot reset (`false`) on allowed keys | Allowed |
+
+If any expected rule behavior fails, stop release progression and resolve before launch.

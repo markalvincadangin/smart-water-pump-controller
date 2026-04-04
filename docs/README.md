@@ -8,11 +8,10 @@ This directory contains all project documentation for the Smart Water Pump Contr
 - **Architecture**:
   - [architecture_redesign_vNext.md](./architecture_redesign_vNext.md) — current mode/safety architecture (vNext)
 - **Releases** (`./releases/`)
-  - Release documentation sets (deployment snapshot docs), e.g. `releases/v1.0.0/`.
-- **Historical versioned docs** (`./archive/releases/`)
-  - `v2.0/` and `v3.0/` are retained for reference and may not match current code.
+  - `v1.0.0/` is the first stable release documentation set.
+  - No other stable release sets are retained in this repository.
 - **Operations** (`./operations/`)
-  - [troubleshooting.md](./operations/troubleshooting.md), [safety.md](./operations/safety.md), [NOTIFICATIONS_SETUP.md](./operations/NOTIFICATIONS_SETUP.md), [FIRMWARE_CONFIG_FROM_DATABASE.md](./operations/FIRMWARE_CONFIG_FROM_DATABASE.md), [RS485_TANK_LINK.md](./operations/RS485_TANK_LINK.md).
+  - [troubleshooting.md](./operations/troubleshooting.md), [safety.md](./operations/safety.md), [notifications_setup.md](./operations/notifications_setup.md), [firmware_config_from_database.md](./operations/firmware_config_from_database.md), [rs485_tank_link.md](./operations/rs485_tank_link.md).
 - **Assets** (`./assets/`)
   - `diagrams/` — system diagrams (e.g. Diagram.png, Diagram.pdf).
   - `manuals/` — Master_Manual.pdf, Hardware_Documentation.pdf, Software_Firmware_Documentation.pdf.

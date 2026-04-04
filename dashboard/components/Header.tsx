@@ -19,8 +19,7 @@ interface HeaderProps {
 }
 
 /**
- * REFACTOR [D4.1]: SmartFlow Global Header
- * Features sticky positioning, brand wordmark, and connection health telemetry.
+ * Global header with brand wordmark, connection health telemetry, and settings access.
  */
 export default function Header({
   isConnected,

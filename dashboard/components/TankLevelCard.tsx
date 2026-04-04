@@ -16,7 +16,6 @@ interface TankLevelCardProps {
 }
 
 /**
- * REFACTOR [D4.2]: Tank Level Visualization
  * Displays water level at-a-glance with high-contrast SVG fill and safety thresholds.
  */
 export default function TankLevelCard({

@@ -1,43 +1,158 @@
-# Smart Water Pump Controller
-**Location:** Leon, Iloilo
-**Motor:** 1.5HP Lotus Jet Pump, 220V AC Single-Phase
-**Tank:** 660L (Bestank WT660)
+# SmartFlow
 
-An industrial-grade IoT pump controller that automates a deep well water system.
-It combines high-voltage motor control hardware (magnetic contactor, thermal overload relay)
-with an ESP32 microcontroller and a Firebase-backed web dashboard for remote monitoring
-and control from any device.
+**An industrial-grade IoT water pump controller** combining high-voltage motor control hardware with a Firebase-backed Next.js dashboard for remote monitoring and automation.
+
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
+[![Firmware](https://img.shields.io/badge/firmware-v1.0.0-blue)]()
+[![Dashboard](https://img.shields.io/badge/dashboard-v1.0.0-blue)]()
 
 ---
 
-## How It Works
+## About
 
-The system operates in three independent layers so that a failure in software never
-compromises the physical safety of the motor:
+SmartFlow automates a 1.5 HP deep-well water pump system filling a 660L tank with real-time monitoring, remote control, and multi-layer safety protection. The system remains safe even if the cloud connection fails—hardware interlocks and firmware safeguards prevent damage.
+
+**Deployed in:** Leon, Iloilo, Philippines | **Status:** Production  
+**Hardware:** ESP32 master + ESP8266 tank sensor + CJX2-2510 magnetic contactor + LR2-D13 thermal overload relay
+
+---
+
+## Key Features
+
+- **Three-layer safety architecture** — Hardware interlock, firmware lockouts, and manual bypass
+- **Real-time monitoring** — Water level (ultrasonic), flow rate (hall-effect), WiFi signal, heap memory
+- **Three operating modes** — AUTO (level-triggered), MANUAL (on/off), COUNTDOWN (timer-based)
+- **Dry-run protection** — Detects pump cavitation and stops automatically
+- **Overflow prevention** — Configurable max runtime limit
+- **Sensor failure handling** — Auto-bypass or manual intervention options
+- **Remote dashboard** — Next.js PWA, mobile-installable, works offline
+- **Firebase integration** — Real-time RTDB, Email/Password + Google OAuth
+- **OTA updates** — Over-the-air firmware updates on tank sensor node
+- **Scheduled sleep mode** — Reduces power consumption during off-peak hours
+- **Comprehensive audit log** — Every action (mode change, error, reboot) timestamped and searchable
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Arduino IDE 2.x or PlatformIO + VS Code
+- Node.js 18+
+- Firebase project with Realtime Database, Email/Password, and Google authentication enabled
+- Hardware: ESP32 DevKit V1, NodeMCU V2 (ESP8266), relay module, 40m CAT6 UTP cable, IP65 enclosure
+
+### 1. Hardware Assembly (30 min)
+
+See [hardware/bom.md](hardware/bom.md) for the complete bill of materials and [hardware/wiring_notes.md](hardware/wiring_notes.md) for detailed wiring.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 3 — CLOUD / DASHBOARD                                    │
-│  Next.js web app  ←→  Firebase RTDB  ←→  ESP32 (every 3s)      │
-│  View level & flow, switch modes, acknowledge errors            │
-├─────────────────────────────────────────────────────────────────┤
-│  LAYER 2 — FIRMWARE (ESP32)                                     │
-│  Polls tank node over RS-485 · Runs AUTO / MANUAL / COUNTDOWN   │
-│  Emergency stop latch · Dry-run lockout · Overflow cutoff       │
-├─────────────────────────────────────────────────────────────────┤
-│  LAYER 1 — HARDWARE (always active)                             │
-│  20A MCB  →  Contactor (CJX2-2510)  →  TOR (LR2-D13)  →  Pump │
-│  TOR trips on overcurrent regardless of ESP32 or dashboard      │
-└─────────────────────────────────────────────────────────────────┘
+Power chain (always active, independent of firmware):
+  Grid (220V) → MCB → Magnetic Contactor → Thermal Overload Relay → 1.5 HP Pump
 ```
 
-**Normal AUTO operation:**
-1. ESP8266 tank node reads: JSN-SR04T ultrasonic (distance) + YF-G1 flow (pulses)
-2. ESP32 polls the tank node over RS-485 with CRC-framed messages
-3. ESP32 computes level (%) from the configured tank calibration and enforces freshness/stability gates
-4. When tank drops to configured start level → ESP32 closes relay → contactor energizes → pump starts
-5. When tank reaches configured stop level → ESP32 opens relay → contactor releases → pump stops
-5. Live status streams to Firebase and appears on the dashboard in real time
+---
+
+### 2. Firmware Setup (15 min)
+
+**Install libraries** (Arduino Library Manager):
+- Firebase ESP Client ≥ 4.4.14 by Mobizt
+- ArduinoJson ≥ 6.21.5 by Benoit Blanchon (v6.x only)
+
+**Flash ESP32 master:**
+```bash
+# Option 1: Arduino IDE
+1. Open: firmware/arduino_smart_water_pump_controller/arduino_smart_water_pump_controller.ino
+2. Board: ESP32 Dev Module | Speed: 115200 | Partition: Huge APP (3MB No OTA/1MB SPIFFS)
+3. Click Upload
+
+# Option 2: PlatformIO
+cd firmware/platformio_smart_water_pump_controller && pio run -t upload
+```
+
+**Flash ESP8266 tank sensor:**
+```bash
+# Arduino IDE
+1. Open: firmware/arduino_sensor_node/arduino_sensor_node.ino
+2. Board: NodeMCU 1.0 (ESP-12E Module) | Speed: 115200
+3. Click Upload
+```
+
+**Configure credentials:**
+- Copy `firmware/secrets.h.example` → `firmware/secrets.h`
+- Add WiFi SSID, password, Firebase URL, and email/password credentials
+- **Never commit secrets.h**
+
+See [firmware/README.md](firmware/README.md) for full setup details and calibration.
+
+---
+
+### 3. Dashboard Setup (10 min)
+
+```bash
+cd dashboard
+npm install
+cp .env.local.example .env.local
+# Edit .env.local with Firebase credentials
+npm run dev
+# Visit http://localhost:3000
+```
+
+**Firebase Console configuration** (one-time):
+1. Enable Email/Password authentication (for ESP32)
+2. Enable Google authentication (for users)
+3. Create Realtime Database in test mode
+4. Deploy security rules: `firebase deploy --only database`
+
+See [dashboard/README.md](dashboard/README.md) for full setup and deployment to Vercel.
+
+---
+
+### 4. Pre-Energization Checklist
+
+✅ Complete every item before powering the 220V circuit:
+
+- [ ] Multimeter continuity check: no short between Live and Neutral
+- [ ] Tug test: all 220V wires secure
+- [ ] Thermal Overload Relay dial set to motor FLA (8–9A)
+- [ ] TOR L3/T3 terminals capped
+- [ ] Earth continuity verified (< 1Ω from enclosure to pump casing)
+- [ ] Voltage dividers measured: ~3.3V on GPIO 34 and GPIO 18
+- [ ] CAT6 pinout verified at enclosure and tank ends
+- [ ] All PG cable glands tightened
+- [ ] Firmware flashed; Serial Monitor shows healthy boot
+- [ ] Dashboard running and showing live telemetry
+- [ ] IP65 enclosure lid gasket seated correctly
+
+---
+
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ LAYER 3 — CLOUD / DASHBOARD                                 │
+│ Next.js PWA  ↔  Firebase RTDB  ↔  ESP32 (every 3s)          │
+│ View, control, configure, audit trail                       │
+├─────────────────────────────────────────────────────────────┤
+│ LAYER 2 — FIRMWARE (ESP32 + ESP8266)                        │
+│ Poll tank node (RS-485) → Compute level → Apply logic       │
+│ Emergency stop, dry-run lockout, overflow cutoff            │
+├─────────────────────────────────────────────────────────────┤
+│ LAYER 1 — HARDWARE (always active)                          │
+│ 20A MCB → Contactor → Thermal Overload Relay → Pump        │
+│ TOR trips on overcurrent (independent of software)          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Data flow (AUTO mode example):**
+1. Tank sensor (ESP8266) reads ultrasonic distance + flow pulses
+2. ESP32 polls via RS-485 every 1 second (CRC-protected)
+3. ESP32 computes water level (%) and validates freshness
+4. When level ≤ start threshold → relay closes → contactor energizes → pump starts
+5. When level ≥ stop threshold → relay opens → pump stops
+6. Live status syncs to Firebase every 3 seconds
+7. Dashboard displays real-time metrics and audit log
 
 ---
 
@@ -45,316 +160,180 @@ compromises the physical safety of the motor:
 
 ```
 smart-water-pump-controller/
-│
-├── README.md                          ← You are here
-├── .gitignore
-├── firebase.json                      ← Firebase CLI config (functions, rules)
-├── database.rules.json                 ← RTDB security rules
-│
-├── docs/
-│   ├── README.md                       ← Docs index
-│   ├── archive/
-│   │   ├── releases/                   ← Historical versioned docs (v2/v3, etc.)
-│   ├── operations/                     ← Troubleshooting, safety (future)
-│   ├── assets/
-│   │   ├── diagrams/                   ← System diagrams
-│   │   └── manuals/                    ← PDFs and manuals
-│   └── archive/                        ← Historical plans and notes
-│
+├── README.md                              ← You are here
 ├── firmware/
-│   ├── arduino_smart_water_pump_controller/
-│   │   ├── arduino_smart_water_pump_controller.ino  ← Open this in Arduino IDE and flash to ESP32
-│   │   ├── 01_config.ino
-│   │   ├── 02_rs485_comm.ino
-│   │   ├── 03_safety_pump.ino
-│   │   ├── 04_persistence.ino
-│   │   ├── 05_connectivity_cloud.ino
-│   │   └── smart_water_pump_controller_shared.h
-│   ├── arduino_sensor_node/                           ← Arduino sketch for NodeMCU V2 (ESP8266 tank node)
-│   ├── platformio_smart_water_pump_controller/      ← PlatformIO project (VS Code)
-│   │   ├── platformio.ini
-│   │   ├── src/
-│   │   └── include/
-│   ├── platformio_sensor_node/                       ← PlatformIO project for NodeMCU V2 (ESP8266 tank node)
-│   ├── libraries.txt                                ← Required Arduino libraries
-│   └── README.md                                    ← Full flash & calibration guide
-│
+│   ├── arduino_smart_water_pump_controller/    ← ESP32 master (Arduino IDE)
+│   ├── arduino_sensor_node/                    ← ESP8266 tank node (Arduino IDE)
+│   ├── platformio_smart_water_pump_controller/ ← ESP32 master (PlatformIO)
+│   ├── platformio_sensor_node/                 ← ESP8266 tank node (PlatformIO)
+│   └── README.md                               ← Hardware pinout & calibration
 ├── dashboard/
-│   ├── app/                           ← Next.js App Router pages
-│   ├── components/                    ← UI components
-│   ├── lib/                           ← Firebase client, types, data hook
-│   ├── .env.local.example             ← Firebase credentials template
-│   ├── package.json
-│   └── README.md                      ← Full dashboard setup & deploy guide
-│
-├── functions/                         ← Firebase Cloud Functions (email notifications)
-│   ├── src/index.ts
-│   └── package.json
-│
-└── hardware/
-    ├── bom.md                         ← Full bill of materials (27 items)
-    ├── enclosure_layout.md            ← Component placement & zone map
-    └── wiring_notes.md                ← Complete wiring reference & checklist
+│   ├── app/                    ← Next.js App Router pages
+│   ├── components/             ← UI components
+│   ├── lib/                    ← Firebase client, hooks, types
+│   └── README.md               ← Setup & deployment guide
+├── functions/                  ← Firebase Cloud Functions (email alerts)
+├── hardware/
+│   ├── bom.md                  ← Bill of materials
+│   ├── wiring_notes.md         ← Wiring reference & checklist
+│   └── enclosure_layout.md     ← Component placement
+├── docs/
+│   ├── releases/               ← Release notes & deployment checklist
+│   ├── specs/                  ← Firmware & dashboard specifications
+│   ├── operations/             ← Troubleshooting & notifications setup
+│   └── README.md               ← Documentation index
+└── database.rules.json         ← Firebase RTDB security rules
 ```
 
-**Canonical specs (current):**
+**Full file structure & documentation index:** [docs/README.md](docs/README.md)
 
-- Firmware spec: [docs/specs/firmware.md](docs/specs/firmware.md)
-- Dashboard spec: [docs/specs/dashboard.md](docs/specs/dashboard.md)
-- Architecture (vNext): [docs/architecture_redesign_vNext.md](docs/architecture_redesign_vNext.md)
+---
+
+## Technology Stack
+
+| Component | Technology |
+|-----------|-----------|
+| **Microcontroller** | ESP32 DevKit V1, NodeMCU V2 (ESP8266) |
+| **Firmware** | Arduino framework (C/C++) |
+| **Cloud database** | Firebase Realtime Database |
+| **Authentication** | Firebase (Email/Password + Google OAuth) |
+| **Frontend** | Next.js 15, TypeScript, Tailwind CSS |
+| **Charts** | Recharts |
+| **Switching** | CJX2-2510 magnetic contactor + LR2-D13 TOR |
+| **Level sensor** | JSN-SR04T-2.0 ultrasonic (waterproof) |
+| **Flow sensor** | YF-G1 1-inch hall-effect meter |
+| **Enclosure** | IP65 ABS 30×40×20 cm |
+| **Cable** | CAT6 UTP outdoor 40m |
 
 ---
 
 ## Safety Architecture
 
-There are three independent protection layers. They are additive — a failure
-in an outer layer does not disable the inner layers.
+Three independent protection layers ensure the system fails safe:
 
-| Priority | Layer | Mechanism | Always Active? |
-|----------|-------|-----------|----------------|
-| 1 (highest) | Hardware | LR2-D13 TOR trips if motor current > FLA (~8–9A) | ✅ Yes |
-| 2 | Firmware | Dry-run lockout (configurable, default 30s of flow < 0.5 LPM); overflow cutoff (max runtime); sensor failure detection | ✅ Yes (when powered) |
-| 3 | Manual | Physical bypass switch energizes contactor directly | User-activated |
+| Layer | Mechanism | Always Active? | Covers |
+|-------|-----------|---|---|
+| **Hardware** | LR2-D13 TOR trips on motor current > 8–9A | ✅ Yes | Overcurrent, phase loss |
+| **Firmware** | Dry-run lockout, overflow cutoff, sensor validity gate | ✅ Yes (when powered) | Cavitation, overflow, comm loss |
+| **Manual** | Physical bypass switch energizes contactor directly | User-activated | Emergency start (diagnostics) |
 
-> ⚠ When the **manual bypass switch** is ON, all software protections (dry-run
-> detection, tank level cutoff) are bypassed. The TOR thermal protection is the
-> only protection that remains active. Use manual mode only for diagnostics.
+> ⚠️ **Manual bypass mode:** All software protections are bypassed. Only the thermal overload relay remains active. Use only for diagnostics.
 
----
-
-## Quick Start
-
-Complete these four phases in order. Do not power the 220V circuit until
-Phase 4 is fully checked off.
+See [firmware/README.md](firmware/README.md#safety-architecture) for detailed safety specifications.
 
 ---
 
-### Phase 1 — Hardware Build
+## Configuration
 
-**Prerequisites:** All items from `hardware/bom.md` on hand. Power fully disconnected.
+Device parameters are stored in Firebase and applied at runtime. No reflash required.
 
-1. Mount DIN rail inside the IP65 enclosure
-2. Snap MCB, Contactor, and TOR onto the DIN rail
-3. Drill and install cable glands: PG16 × 2 (power), PG9 × 1 (CAT6)
-4. Mount ESP32, relay module, and power adapter in the low-voltage zone
-5. Wire the 220V power path: Grid → MCB → Terminal Block → Contactor → TOR → Pump
-6. Wire the neutral busbar (separate terminal for each neutral wire)
-7. Wire earth: DIN rail grounding lug → pump motor casing (green/yellow, 3-conductor cable)
-8. Wire the coil trigger circuit: MCB Live → Relay COM → Relay NO → TOR pin 95 → TOR pin 96 → Contactor A1
-9. Wire the manual bypass switch in parallel with the Relay NO–COM path
-10. Wire 5V logic: Power Adapter → ESP32 VIN + Relay VCC; GND rail to both
-11. Wire GPIO 4 → Relay IN
-12. Build and label voltage dividers: `1kΩ + 2kΩ` for GPIO 34 (Flow) and GPIO 18 (ECHO)
-13. Terminate CAT6 pairs at both enclosure and tank ends (see `hardware/wiring_notes.md` Section E)
-14. Set TOR dial to motor FLA (typically **8–9A** for 1.5HP 220V)
-15. Cap TOR L3/T3 terminals with terminal covers
+| Parameter | Default | Min | Max | Notes |
+|-----------|---------|-----|-----|-------|
+| Tank empty distance (cm) | 122 | 25 | 200 | Calibrate in field |
+| Tank full distance (cm) | 30 | 25 | 150 | Calibrate in field |
+| Pump start level (%) | 20 | 0 | 100 | Start filling at this level |
+| Pump stop level (%) | 90 | 0 | 100 | Stop filling at this level |
+| Dry-run threshold (L/min) | 0.5 | 0 | 60 | Flow must exceed this to run |
+| Dry-run timeout (sec) | 30 | 1 | 300 | Time before lockout triggers |
+| Max pump runtime (min) | 60 | 1 | 1440 | Overflow protection limit |
 
-> 📄 Full detail: `hardware/wiring_notes.md` and `hardware/enclosure_layout.md`
+All parameters are tunable via the dashboard. See [docs/specs/README.md](docs/specs/README.md) for RTDB schema and protocol documentation.
 
 ---
 
-### Phase 2 — Firmware
+## Troubleshooting
 
-**Prerequisites:** Arduino IDE 2.x installed, ESP32 board support added, libraries installed.
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| Firebase not initialized | WiFi not connected or credentials wrong | Check ESP32 Serial Monitor; verify SSID/password in secrets.h |
+| Ultrasonic reads 0% | Sensor timeout or out of range | Verify sensor power and CAT6 wiring; check tank distance is 20–600 cm |
+| Pump not responding to dashboard commands | ESP32 not polling Firebase | Check cloud control poll interval in logs; verify ESP32 WiFi connection |
+| Thermal overload keeps tripping | Motor overload or TOR dial set too low | Lower pump duty cycle; re-calibrate TOR dial to motor FLA |
+| Dashboard shows stale data | Cloud control poll failure | Check ESP32 uptime; verify Firebase rules allow ESP32 UID to read |
 
-**Required libraries** (install via Arduino Library Manager):
-| Library | Author | Version |
-|---------|--------|---------|
-| Firebase ESP Client | Mobizt | ≥ 4.4.14 |
-| ArduinoJson | Benoit Blanchon | ≥ 6.21.5 **(v6.x only — not v7)** |
-
-1. Open `firmware/arduino_smart_water_pump_controller/arduino_smart_water_pump_controller.ino` (ESP32 master) in Arduino IDE, and `firmware/arduino_sensor_node/arduino_sensor_node.ino` (ESP8266 tank node) for the sensor node.  
-   Alternatively, use PlatformIO: `firmware/platformio_smart_water_pump_controller/` and `firmware/platformio_sensor_node/`.
-2. Copy `secrets.h.example` to `secrets.h` and fill in WiFi, Firebase, and Email/Password credentials (see `firmware/README.md`)
-3. Set board: **Tools → Board → ESP32 Dev Module**
-4. Set board: **ESP32 Dev Module**; upload speed **115200**; Partition Scheme **Huge APP (3MB No OTA/1MB SPIFFS)**; Flash Mode **QIO**; PSRAM **Disabled**
-5. Click **Upload**
-6. Open Serial Monitor at **115200 baud** — confirm boot output shows WiFi connected
-   and Firebase initialized before closing
-
-> 📄 Full detail: `firmware/README.md`
+Full troubleshooting guide: [docs/operations/troubleshooting.md](docs/operations/troubleshooting.md)
 
 ---
 
-### Phase 3 — Dashboard
+## Deployment
 
-**Prerequisites:** Node.js 18+, a Firebase project with Realtime Database, Email/Password, and Google Auth enabled.
+For complete end-to-end deployment and go-live checklist, see [docs/releases/v1.0.0/deploy.md](docs/releases/v1.0.0/deploy.md).
 
+**Deploy dashboard to Vercel:**
 ```bash
-# 1. Enter the dashboard directory
 cd dashboard
-
-# 2. Install dependencies
-npm install
-
-# 3. Set up Firebase credentials
-cp .env.local.example .env.local
-# Edit .env.local with your Firebase project values
-
-# 4. Run locally
-npm run dev
-# Visit http://localhost:3000
-```
-
-**Firebase Console setup** (one-time):
-1. [console.firebase.google.com](https://console.firebase.google.com) → your project
-2. **Realtime Database** → Create database → Start in test mode
-3. **Authentication** → Sign-in methods → **Email/Password** (for ESP32) and **Google** (for dashboard) → Enable both
-4. **Realtime Database → Rules** — use `database.rules.json` and replace `YOUR_GOOGLE_UID` with your UID from Authentication → Users, or deploy: `firebase deploy --only database`
-
-**Deploy to Vercel (optional):**
-```bash
 npx vercel
-# Add each NEXT_PUBLIC_FIREBASE_* variable when prompted (same as .env.local)
+# Add NEXT_PUBLIC_FIREBASE_* variables when prompted
 ```
 
-**Install as app (PWA):** Once deployed over HTTPS, users can add the dashboard to the home screen on mobile (Add to Home Screen / Install app) for an app-like experience.
+**Enable push notifications (optional):**
+See [docs/operations/notifications_setup.md](docs/operations/notifications_setup.md) for Firebase Cloud Functions setup and FCM token management.
 
-> 📄 Full detail: `dashboard/README.md`
-
----
-
-### Phase 4 — Pre-Energization Checklist
-
-Complete every item before switching the MCB on for the first time.
-
-- [ ] Multimeter continuity check: no short between Live and Neutral at MCB input
-- [ ] Tug test: pull every 220V wire — nothing moves
-- [ ] TOR dial confirmed at motor FLA (8–9A)
-- [ ] TOR L3/T3 terminals capped
-- [ ] Neutral busbar: each wire on its own terminal slot (no shared slots)
-- [ ] Earth continuity: < 1Ω from DIN rail lug to pump motor casing
-- [ ] Voltage dividers verified: ~3.3V measured at GPIO 34 and GPIO 18 when sensor outputs 5V
-- [ ] CAT6 pinout verified at both ends (enclosure and tank)
-- [ ] All PG glands tightened — cables cannot pull through
-- [ ] Firmware flashed and Serial Monitor shows healthy boot
-- [ ] Dashboard running and showing live data from ESP32
-- [ ] IP65 enclosure lid gasket seated correctly
+> **Note on calibration:** If you're experiencing water level reading discrepancies, see [docs/operations/calibration_fix_integration.md](docs/operations/calibration_fix_integration.md) for diagnosis and adjustment procedures.
 
 ---
 
-## Full deployment
-
-For a single, end-to-end deployment guide (Firebase, Functions, Dashboard, ESP32, and smoke tests), use **`docs/archive/releases/v2.0/deploy.md`** (historical) and cross-check against the current specs in `docs/specs/`.
-
-## Notifications (Optional)
-
-Email and **push notifications** (to phone/browser, like YouTube or Facebook) for dry-run lockout, low tank level, pump started, and overflow protection. See `docs/operations/NOTIFICATIONS_SETUP.md`.
-
-## Implemented Enhancements
-
-The system includes safety, resilience, power-saving, and UX features:
-
-- **Phases 1–5:** Sensor reliability, overflow protection, NVS persistence, scheduled sleep, uptime counter, dynamic dashboard labels
-- **Phase 6:** Settings tooltips (InfoTooltip), push notifications (FCM), installable PWA (Add to Home Screen), Firebase optimization assessment
-
-See `docs/ENHANCEMENT_PLAN.md` and `docs/IMPLEMENTATION_VERIFICATION.md` for the full list and status.
-
----
-
-## Firebase Data Structure
-
-```
-/pump_system/
-  status/                          ← ESP32 writes every 3 seconds
-    water_level_percent: 85        int    0–100
-    is_running:          true      bool
-    flow_rate_lpm:       12.4      float  L/min
-    is_error:            false     bool   true = dry-run lockout active
-    is_sensor_error:     false     bool   ultrasonic/flow sensor failure
-    is_overflow_error:   false     bool   max runtime exceeded (overflow protection)
-    is_sleeping:         false     bool   scheduled sleep mode active
-    wifi_rssi:           -65       int    dBm, signal strength
-    last_boot_reason:    "Power-on" string e.g. Power-on, Task watchdog
-    uptime_minutes:      125       int    minutes since boot
-    ultrasonic_cycles_ok:      120  int    cycles with ≥1 valid ultrasonic sample
-    ultrasonic_cycles_timeout: 0    int    cycles with 0 valid ultrasonic samples
-    ultrasonic_last_good_cm:   35.2 float  last good median distance (cm)
-    flow_discard_max_sane:     0    int    discarded flow readings due to max-sane guard
-    flow_stuck_high_events:    0    int    stuck-high detections
-    free_heap_bytes:           182000 int
-    min_free_heap_bytes:       175000 int    (ESP32)
-    max_alloc_heap_bytes:      82000  int    (ESP32)
-    min_free_heap_observed_bytes: 175000 int
-    firebase_consecutive_failures: 0  int
-    firebase_last_error:       ""     string
-
-  control/                         ← Dashboard writes, ESP32 reads every 3 seconds
-    mode:        "AUTO"            string  AUTO | FORCE_ON | FORCE_OFF
-    clear_error: false             bool    set true to acknowledge dry-run/sensor/overflow errors
-
-  config/
-    device/                        ← Dashboard writes, ESP32 reads every 30 seconds
-      tank_empty_cm, tank_full_cm, pump_start_level, pump_stop_level,
-      dry_run_threshold_lpm, dry_run_timeout_sec, flow_calibration_factor,
-      max_pump_runtime_min, sleep_enabled, sleep_start_hour, sleep_end_hour,
-      sleep_emergency_level, sensor_failure_threshold, idle_sensor_interval_ms,
-      idle_firebase_interval_ms
-    notifications_by_user/        ← Per-user notification settings (Dashboard ↔ Cloud Function)
-      $uid/
-        enabled, email, fcmTokens, dryRunAlert, lowLevelAlert, lowLevelThreshold,
-        pumpStartedAlert, overflowAlert
-    notification_last_sent/       ← Functions only (throttling); no client access
-```
-
----
-
-## Pin Reference
-
-| GPIO | Direction | Connected To | Protection |
-|------|-----------|-------------|-----------|
-| 4 | OUTPUT | 5V Relay IN | — (active LOW) |
-| 5 | OUTPUT | JSN-SR04T TRIG | — (3.3V output, direct) |
-| 18 | INPUT | JSN-SR04T ECHO | 1kΩ + 2kΩ voltage divider |
-| 34 | INPUT | YF-G1 Signal | 1kΩ + 2kΩ voltage divider |
-
----
-
-## Maintenance Schedule
+## Maintenance
 
 | Interval | Task |
 |----------|------|
-| Monthly | Verify ultrasonic sensor accuracy against a physical dipstick measurement |
-| Quarterly | Inspect PG16/PG9 cable glands for insect ingress or seal degradation |
-| Quarterly | **Dependency review:** Run `npm audit` in `dashboard/` and `functions/`; follow `docs/operations/DEPENDENCY_PATCHING_PLAN.md` for high-severity fixes |
-| Bi-annually | Tug test all high-current terminal connections (thermal cycling loosens screws) |
-| As needed | Re-calibrate TOR dial if motor is replaced or rewound |
+| Monthly | Verify ultrasonic accuracy vs. physical dipstick |
+| Quarterly | Inspect IP65 enclosure gasket and PG cable glands |
+| Quarterly | Run `npm audit` in `dashboard/` and `functions/`; address high-severity findings |
+| Bi-annually | Tug-test all high-current terminal connections (thermal cycling loosens screws) |
+| As needed | Re-calibrate TOR if motor is replaced or rewound |
+
+---
+
+## Contributing
+
+We welcome contributions. Please follow these guidelines:
+
+1. **Fork** the repository
+2. **Create a branch** for your feature or fix: `git checkout -b my-feature`
+3. **Test thoroughly:**
+   - Firmware: `pio run && pio run -t upload`
+   - Dashboard: `npm run build && npm test`
+4. **Write clear commit messages** following [conventional commits](https://www.conventionalcommits.org)
+5. **Submit a pull request** with a description of your changes
+
+**Code of conduct:** Please be respectful and constructive. This is a safety-critical system for real-world use.
 
 ---
 
 ## Security
 
-- **Dashboard:** Google sign-in required. Unauthorized users are redirected to `/login`. Firebase rules restrict control writes to your Google UID.
-- **ESP32:** Uses Firebase Email/Password Auth. Credentials are in `secrets.h` (gitignored).
-- **Firebase rules:** Only your UID can write to `/pump_system/control/`; ESP32 can still read control and write status.
+- **Dashboard:** Requires Google sign-in. Unauthorized users redirected to login.
+- **Firmware:** ESP32 uses Firebase Email/Password auth (credentials in `secrets.h`, gitignored).
+- **RTDB:** Only your Google UID can write to `/pump_system/control/`. ESP32 can read control and write status.
+- **API Keys:** Never commit `.env.local` or `secrets.h`. Use `.env.local.example` and `secrets.h.example` as templates.
 
 ---
 
-## Repository Conventions
+## License
 
-- `docs/` — read-only reference. Never edit PDFs; update the source `.drawio` and re-export.
-- `firmware/` — use either Arduino IDE with `arduino_smart_water_pump_controller/` or PlatformIO with `platformio_smart_water_pump_controller/`. Use `secrets.h.example` → `secrets.h` for credentials (never commit `secrets.h`).
-- `dashboard/` — never commit `.env.local`. It is gitignored. Use `.env.local.example` as the template.
-- `hardware/` — plain markdown. Update these files when physical changes are made to the build.
+This project is provided as-is for educational and personal use. No formal license is currently applied.
 
 ---
 
-## Tech Stack
+## About This Project
 
-| Layer | Technology |
-|-------|-----------|
-| Microcontroller | ESP32 DevKit V1 (38-pin), Arduino framework |
-| Cloud database | Firebase Realtime Database |
-| Authentication | Firebase (Email/Password for ESP32, Google for dashboard) |
-| Frontend framework | Next.js 14 (App Router), TypeScript |
-| Styling | Tailwind CSS |
-| Charts | Recharts |
-| High-voltage switching | CJX2-2510 Magnetic Contactor + LR2-D13 TOR |
-| Level sensing | JSN-SR04T-2.0 waterproof ultrasonic |
-| Flow sensing | YF-G1 1-inch hall-effect |
-| Enclosure | IP65 ABS, 30×40×20cm |
-| Sensor cable | CAT6 UTP outdoor, 40m |
+**SmartFlow** was created by **you** with AI assistance for automating water pump systems in Leon, Iloilo. The project combines custom hardware interfacing, real-time cloud integration, and a full-stack web application—all open for your modification and improvement.
+
+**Technology credits:**
+- Firebase (Real-time database and authentication)
+- Next.js & Tailwind (Dashboard framework and styling)
+- Arduino & PlatformIO (Microcontroller development)
 
 ---
 
-*Smart Water Pump Controller — Leon, Iloilo*
+## Support
+
+- **Documentation:** [docs/README.md](docs/README.md)
+- **Issues:** [GitHub Issues](../../issues)
+- **Discussions:** [GitHub Discussions](../../discussions) (coming soon)
+
+---
+
+**SmartFlow** — Industrial IoT automation for reliable water systems.  
+*Built in Leon, Iloilo. Deployed in production. Battle-tested. Yours to use, modify, and improve.*

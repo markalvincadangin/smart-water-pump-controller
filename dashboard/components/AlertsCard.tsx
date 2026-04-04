@@ -22,7 +22,6 @@ interface AlertsCardProps {
 }
 
 /**
- * REFACTOR [D4.5]: Prioritized Alerts & Faults
  * Centralizes all system warnings and operational exceptions with actionability.
  */
 export default function AlertsCard({

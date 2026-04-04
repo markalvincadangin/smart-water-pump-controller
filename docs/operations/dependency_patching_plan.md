@@ -1,104 +1,76 @@
-# Dashboard Dependency Patching Plan
-## Resolving 7 High-Severity npm Audit Findings (PRR Gate 2)
+# Dependency and Security Maintenance Plan
 
-This plan addresses the high-severity vulnerabilities reported by `npm audit` in the dashboard without breaking the build. Execute in a branch and run `npm run validate:build` and `npm run test` after each step.
+This document defines the ongoing process for dependency risk management across dashboard and functions.
 
----
+## Scope
 
-## Summary of High-Severity Issues (as of PRR)
+- `dashboard/` npm dependencies
+- `functions/` npm dependencies
+- Build and deploy integrity after upgrades
 
-| Severity | Package / Chain | Issue |
-|----------|-----------------|--------|
-| High | Next.js 10–15.x | DoS via Image Optimizer `remotePatterns`; DoS via RSC deserialization |
-| High | flatted | Unbounded recursion DoS in `parse()` |
-| High | serialize-javascript (via @ducanh2912/next-pwa → workbox) | RCE via RegExp.flags / Date.prototype.toISOString |
-| (Medium/low in chain) | cookie, tmp, yauzl (via @lhci/cli / lighthouse) | Cookie out-of-bounds; tmp symlink; yauzl off-by-one |
+## Update cadence
 
----
+- Weekly: audit and patch review
+- Monthly: routine dependency refresh
+- Immediate: critical/high advisory with known exploit path
 
-## Step 1: Upgrade Next.js (Minimal Non-Breaking)
+## Standard workflow
 
-**Goal:** Move to a patched Next.js line without jumping to Next 16 (breaking).
+1. Create maintenance branch.
+2. Run audits:
 
-- **Action:** Upgrade to the latest 14.x patch that includes security fixes:
-  - `npm install next@14.2.35` (or latest 14.x, e.g. 14.2.x) and `eslint-config-next@14.2.35`.
-- **Check:** Release notes for 14.2.35 (or chosen 14.x) for DoS fixes. If the advisory says "fixed in 15.x", consider a one-step upgrade to 15.x and run full regression (build + manual smoke).
-- **Verification:** `npm run build` and `npm run test` pass.
+```bash
+cd dashboard && npm audit
+cd ../functions && npm audit
+```
 
----
+3. Upgrade lowest-risk packages first.
+4. Re-run build and tests after each logical batch.
+5. Commit lockfiles with clear change notes.
 
-## Step 2: Patch flatted (Direct Dependency or Resolve)
+## Validation gates
 
-**Goal:** Bump flatted to ≥3.4.0.
+Dashboard:
 
-- **Action:** If flatted appears as a direct dependency, `npm install flatted@latest`. If it is transitive, add an override in `package.json`:
-  ```json
-  "overrides": {
-    "glob": "^11.0.0",
-    "flatted": ">=3.4.0"
-  }
-  ```
-- **Verification:** `npm run build` and `npm run test`; no new runtime errors.
+```bash
+cd dashboard
+npm ci
+npm run lint
+npm run test
+npm run build
+```
 
----
+Functions:
 
-## Step 3: PWA / Workbox (serialize-javascript)
+```bash
+cd functions
+npm ci
+npm run test
+npm run build
+```
 
-**Goal:** Reduce RCE risk from serialize-javascript used by workbox (inside @ducanh2912/next-pwa).
+## Release decision rules
 
-- **Option A (preferred):** Upgrade `@ducanh2912/next-pwa` to a version that pulls in a patched workbox/serialize-javascript. Check:
-  - `npm info @ducanh2912/next-pwa versions`
-  - Install latest 10.x: `npm install @ducanh2912/next-pwa@latest`
-  - Run `npm audit` again; if serialize-javascript is still high, add override:
-    ```json
-    "serialize-javascript": ">=7.0.3"
-    ```
-- **Option B:** If upgrades break PWA build, consider temporarily disabling PWA in production until the maintainer updates deps, or switch to a different PWA plugin that uses patched workbox.
-- **Verification:** `npm run build` (PWA assets generate); `npm run test`; manual check of service worker in browser.
+- Block release on unresolved critical vulnerabilities in runtime production dependencies.
+- Track medium/low issues in backlog with owner and target date.
+- For dev-only advisories, document impact and mitigation rationale.
 
----
+## Emergency patching
 
-## Step 4: LHCI / Lighthouse (cookie, tmp, yauzl)
+If urgent fix is needed:
 
-**Goal:** These are dev-only (test/lighthouse). Lowest risk to production runtime.
+1. Patch dependency.
+2. Validate with full build/test.
+3. Deploy through normal CI path.
+4. Monitor runtime logs and health endpoint.
+5. Prepare rollback path in advance.
 
-- **Action 1:** Upgrade LHCI to a version that uses patched lighthouse/puppeteer:
-  - `npm install @lhci/cli@latest --save-dev`
-  - If `npm audit fix --force` suggests downgrading to @lhci/cli@0.1.0, do **not** use that; prefer staying on a recent 0.14.x and accepting dev-only medium/low, or removing `validate:lighthouse` from the default `validate` script until LHCI updates.
-- **Action 2:** Add overrides to force patched transitive deps (optional, only if audit still reports high/critical in this chain):
-  ```json
-  "overrides": {
-    "glob": "^11.0.0",
-    "flatted": ">=3.4.0",
-    "serialize-javascript": ">=7.0.3",
-    "cookie": ">=0.7.0",
-    "tmp": ">=0.2.4",
-    "yauzl": ">=3.2.1"
-  }
-  ```
-  Run `npm install` and then `npm run build` and `npm run test` to ensure no breakage.
+## Documentation requirements
 
-- **Verification:** `npm audit` shows no high/critical, or only low in dev deps; build and tests pass.
+Each dependency patch PR should include:
 
----
-
-## Step 5: Lockfile and CI
-
-- After all changes: `npm install` and commit `package.json` and `package-lock.json`.
-- In CI, run `npm ci && npm run test && npm run build` and optionally `npm audit --audit-level=high` (fail on high or critical).
-
----
-
-## Rollback
-
-If any step breaks the build or tests, revert that step’s `package.json` / `package-lock.json` and document the remaining risk (e.g. “Next.js DoS mitigated by 14.2.x; serialize-javascript dev-only in workbox”). Re-run the rollback runbook if a bad deploy was made.
-
----
-
-## Order of Operations (Quick Reference)
-
-1. Next.js 14.x patch (or 15.x if required by advisory).
-2. flatted override or upgrade.
-3. @ducanh2912/next-pwa upgrade and/or serialize-javascript override.
-4. LHCI upgrade or overrides for cookie/tmp/yauzl; optionally relax `validate` script.
-5. Commit lockfile and enable `npm audit --audit-level=high` in CI.
+- Advisory IDs and severity
+- Affected package chain
+- Why selected version is safe
+- Test/build evidence
+- Rollback note
