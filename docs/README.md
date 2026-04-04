@@ -6,7 +6,7 @@ This directory contains all project documentation for the Smart Water Pump Contr
   - [specs/firmware.md](./specs/firmware.md)
   - [specs/dashboard.md](./specs/dashboard.md)
 - **Architecture**:
-  - [architecture_redesign_vNext.md](./architecture_redesign_vNext.md) — current mode/safety architecture (vNext)
+  - Current architecture references are maintained under `./specs/` and `./operations/`.
 - **Releases** (`./releases/`)
   - `v1.0.0/` is the first stable release documentation set.
   - No other stable release sets are retained in this repository.
