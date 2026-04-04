@@ -16,7 +16,8 @@ SmartFlow controls a 1.5 HP water pump connected to 220V AC power. Improper depl
 
 ### Electrical System
 - [ ] **Circuit Breaker (MCB)** — Verified at 20A rating
-  - Tested: Toggle OFF/ON confirms relay clicks
+  - Tested: Voltage present at expected downstream terminals when ON, and absent downstream when OFF
+  - Functional check (separate from MCB isolation): relay/contactor actuates when commanded under safe test conditions
   - Location: Accessible and clearly labeled
 - [ ] **Thermal Overload Relay (TOR)** — LR2-D13 installed and calibrated
   - Dial set to **8–9 A** (matches motor nameplate)
