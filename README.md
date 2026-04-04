@@ -2,10 +2,10 @@
 
 **An industrial-grade IoT water pump controller** combining high-voltage motor control hardware with a Firebase-backed Next.js dashboard for remote monitoring and automation.
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
-[![Firmware](https://img.shields.io/badge/firmware-v1.0.0-blue)]()
-[![Dashboard](https://img.shields.io/badge/dashboard-v1.0.0-blue)]()
+[![Build Status](https://img.shields.io/badge/build-CI%20configured-brightgreen)](.github/workflows/deploy.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Firmware](https://img.shields.io/badge/firmware-v1.0.0-blue)](firmware/README.md)
+[![Dashboard](https://img.shields.io/badge/dashboard-v1.0.0-blue)](dashboard/README.md)
 
 ---
 
@@ -13,8 +13,10 @@
 
 SmartFlow automates a 1.5 HP deep-well water pump system filling a 660L tank with real-time monitoring, remote control, and multi-layer safety protection. The system remains safe even if the cloud connection fails—hardware interlocks and firmware safeguards prevent damage.
 
-**Deployed in:** Leon, Iloilo, Philippines | **Status:** Production  
+**Deployed in:** Western Visayas, Philippines | **Status:** Production  
 **Hardware:** ESP32 master + ESP8266 tank sensor + CJX2-2510 magnetic contactor + LR2-D13 thermal overload relay
+
+> Safety-critical system: review [DEPLOYMENT_SAFETY.md](DEPLOYMENT_SAFETY.md) before first energization.
 
 ---
 
@@ -39,7 +41,7 @@ SmartFlow automates a 1.5 HP deep-well water pump system filling a 660L tank wit
 ### Prerequisites
 
 - Arduino IDE 2.x or PlatformIO + VS Code
-- Node.js 18+
+- Node.js 22+
 - Firebase project with Realtime Database, Email/Password, and Google authentication enabled
 - Hardware: ESP32 DevKit V1, NodeMCU V2 (ESP8266), relay module, 40m CAT6 UTP cable, IP65 enclosure
 
@@ -118,12 +120,14 @@ See [dashboard/README.md](dashboard/README.md) for full setup and deployment to 
 - [ ] Thermal Overload Relay dial set to motor FLA (8–9A)
 - [ ] TOR L3/T3 terminals capped
 - [ ] Earth continuity verified (< 1Ω from enclosure to pump casing)
-- [ ] Voltage dividers measured: ~3.3V on GPIO 34 and GPIO 18
+- [ ] Voltage dividers verified at tank node inputs (JSN ECHO and flow signal are MCU-safe at ~3.3V)
 - [ ] CAT6 pinout verified at enclosure and tank ends
 - [ ] All PG cable glands tightened
 - [ ] Firmware flashed; Serial Monitor shows healthy boot
 - [ ] Dashboard running and showing live telemetry
 - [ ] IP65 enclosure lid gasket seated correctly
+
+For a complete commissioning and operations checklist, use [DEPLOYMENT_SAFETY.md](DEPLOYMENT_SAFETY.md).
 
 ---
 
@@ -287,38 +291,38 @@ See [docs/operations/notifications_setup.md](docs/operations/notifications_setup
 
 ## Contributing
 
-We welcome contributions. Please follow these guidelines:
+We welcome contributions focused on safety, reliability, and maintainability.
 
-1. **Fork** the repository
-2. **Create a branch** for your feature or fix: `git checkout -b my-feature`
-3. **Test thoroughly:**
-   - Firmware: `pio run && pio run -t upload`
-   - Dashboard: `npm run build && npm test`
-4. **Write clear commit messages** following [conventional commits](https://www.conventionalcommits.org)
-5. **Submit a pull request** with a description of your changes
-
-**Code of conduct:** Please be respectful and constructive. This is a safety-critical system for real-world use.
+- Start here: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Key requirement: preserve fail-safe behavior (pump OFF on fault/ambiguity)
+- Validate before PR:
+  - Firmware: `pio run -d firmware/platformio_smart_water_pump_controller` and `pio run -d firmware/platformio_sensor_node`
+  - Dashboard: `cd dashboard && npm run validate`
 
 ---
 
 ## Security
 
-- **Dashboard:** Requires Google sign-in. Unauthorized users redirected to login.
-- **Firmware:** ESP32 uses Firebase Email/Password auth (credentials in `secrets.h`, gitignored).
-- **RTDB:** Only your Google UID can write to `/pump_system/control/`. ESP32 can read control and write status.
-- **API Keys:** Never commit `.env.local` or `secrets.h`. Use `.env.local.example` and `secrets.h.example` as templates.
+- Vulnerability reporting and disclosure policy: [SECURITY.md](SECURITY.md)
+- Dashboard requires authenticated access.
+- Never commit secrets (`dashboard/.env.local`, firmware `secrets.h`).
+- Apply least-privilege Firebase rules for control and status paths.
 
 ---
 
 ## License
 
-This project is provided as-is for educational and personal use. No formal license is currently applied.
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+
+## Trademark Notice
+
+Third-party product names, logos, and brands (for example, ESP32, ESP8266, Firebase, Next.js, and hardware model names) are the property of their respective owners. Their use in this repository is for identification and compatibility reference only and does not imply affiliation or endorsement.
 
 ---
 
 ## About This Project
 
-**SmartFlow** was created by **you** with AI assistance for automating water pump systems in Leon, Iloilo. The project combines custom hardware interfacing, real-time cloud integration, and a full-stack web application—all open for your modification and improvement.
+**SmartFlow** was created by Mark Alvin Cadangin with AI assistance for automating water pump systems in Leon, Iloilo. The project combines custom hardware interfacing, real-time cloud integration, and a full-stack web application.
 
 **Technology credits:**
 - Firebase (Real-time database and authentication)
@@ -330,10 +334,11 @@ This project is provided as-is for educational and personal use. No formal licen
 ## Support
 
 - **Documentation:** [docs/README.md](docs/README.md)
-- **Issues:** [GitHub Issues](../../issues)
-- **Discussions:** [GitHub Discussions](../../discussions) (coming soon)
+- **Release checklist:** [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
+- **Issues:** Use the repository Issues tab on GitHub
+- **Discussions:** Use the repository Discussions tab on GitHub
 
 ---
 
 **SmartFlow** — Industrial IoT automation for reliable water systems.  
-*Built in Leon, Iloilo. Deployed in production. Battle-tested. Yours to use, modify, and improve.*
+*Built in the Philippines. Deployed in production. Battle-tested. Yours to use, modify, and improve.*
