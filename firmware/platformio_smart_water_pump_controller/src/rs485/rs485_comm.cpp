@@ -147,7 +147,10 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   uint32_t ldsc = 0;
 
   // DIST (cm) is preferred when present to prevent calibration drift.
+  // Keep a valid LVL fallback so we do not drop an otherwise good frame
+  // when DIST is temporarily inconsistent with calibration bounds.
   if (!parseIntField(payload, "LVL:", lvl)) return false;
+  int lvlFromFrame = lvl;
   (void)parseFloatField(payload, "DIST:", dist); // optional
   if (!parseFloatField(payload, "FLOW:", flow)) return false;
   if (!parseIntField(payload, "ERR:", err)) return false;
@@ -165,12 +168,25 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
 
   if (dist >= 0.0f) {
     float rangeCm = (float)(cfgTankEmptyCm - cfgTankFullCm);
-    if (rangeCm <= 0.1f) return false;
+    if (rangeCm <= 0.1f) {
+      // Invalid calibration window: preserve LVL from frame rather than dropping link data.
+      lvl = lvlFromFrame;
+      dist = -1.0f;
+    }
+  }
+
+  if (dist >= 0.0f) {
+    float rangeCm = (float)(cfgTankEmptyCm - cfgTankFullCm);
     float pct = 100.0f * ((float)cfgTankEmptyCm - dist) / rangeCm;
-    if (!(pct >= -5.0f) || !(pct <= 105.0f)) return false;
-    if (pct < 0.0f) pct = 0.0f;
-    if (pct > 100.0f) pct = 100.0f;
-    lvl = (int)(pct + 0.5f);
+    if ((pct >= -5.0f) && (pct <= 105.0f)) {
+      if (pct < 0.0f) pct = 0.0f;
+      if (pct > 100.0f) pct = 100.0f;
+      lvl = (int)(pct + 0.5f);
+    } else {
+      // DIST is inconsistent (often transient at near-full levels); keep LVL fallback.
+      lvl = lvlFromFrame;
+      dist = -1.0f;
+    }
   }
 
   if (lvl < 0 || lvl > 100) return false;
