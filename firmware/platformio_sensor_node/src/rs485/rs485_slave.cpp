@@ -33,6 +33,9 @@ static void rs485SetTx(bool tx) {
 }
 
 static void sendFrame() {
+  // Give the master transceiver time to return to RX after sending REQ.
+  delayMicroseconds(RS485_RX_TO_TX_GUARD_US);
+
   // Respond immediately from cached values (never block on sensors)
   int lvl = 0;
   float dist = -1.0f;
@@ -69,6 +72,9 @@ static void sendFrame() {
 }
 
 static void sendPingAckFrame(uint32_t seq) {
+  // Mirror normal frame guard so diagnostics and production timing match.
+  delayMicroseconds(RS485_RX_TO_TX_GUARD_US);
+
   char payload[64];
   int n = snprintf(payload, sizeof(payload), "HELLO;SEQ:%lu;NODE_OK:1;", (unsigned long)seq);
   if (n <= 0 || (size_t)n >= sizeof(payload)) return;
