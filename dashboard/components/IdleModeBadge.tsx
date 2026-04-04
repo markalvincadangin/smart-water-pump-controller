@@ -2,7 +2,7 @@ import React from 'react';
 
 interface IdleModeBadgeProps {
   isIdle?: boolean;
-  waterLevelPercent?: number;
+  waterLevelPercent?: number | null;
 }
 
 /**
@@ -13,7 +13,7 @@ interface IdleModeBadgeProps {
  */
 export function IdleModeBadge({
   isIdle = false,
-  waterLevelPercent = 0,
+  waterLevelPercent,
 }: IdleModeBadgeProps) {
   if (!isIdle) {
     return null;
