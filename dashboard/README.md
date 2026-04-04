@@ -1,6 +1,6 @@
-# SmartFlow — Web Dashboard
+# Dashboard - SmartFlow
 
-Next.js 14 + Firebase RTDB real-time dashboard for the ESP32 pump controller.  
+Next.js 15 + Firebase RTDB real-time dashboard for the ESP32 pump controller.  
 Access is protected by **Google sign-in**; only authorized users can view and control the pump.
 
 **Current specs:** See [docs/specs/dashboard.md](../docs/specs/dashboard.md) and [docs/specs/firmware.md](../docs/specs/firmware.md).
@@ -11,7 +11,7 @@ Access is protected by **Google sign-in**; only authorized users can view and co
 
 | Layer      | Technology                              |
 |------------|-----------------------------------------|
-| Framework  | Next.js 14 (App Router)                 |
+| Framework  | Next.js 15 (App Router)                 |
 | Language   | TypeScript                              |
 | Styling    | Tailwind CSS                            |
 | Charts     | Recharts                                |
@@ -51,7 +51,7 @@ Edit `.env.local` and fill in your Firebase credentials. Optionally:
 **Where to find Firebase values:**  
 Firebase Console → Project Settings → General → Your apps → Web → SDK setup and configuration
 
-**Push notifications (optional):** Add `NEXT_PUBLIC_FIREBASE_VAPID_KEY` from Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair. See `docs/operations/NOTIFICATIONS_SETUP.md` section 4b.
+**Push notifications (optional):** Add `NEXT_PUBLIC_FIREBASE_VAPID_KEY` from Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → Generate key pair. See `docs/operations/notifications_setup.md`.
 
 For the full RTDB contract and dashboard behavior reference, see:
 
@@ -76,8 +76,8 @@ Before deploying, review `database.rules.json`. The recommended setup is:
   pump_system/config/admins/{uid} = true
   ```
 
-- Only admin UIDs can write to `control/mode/` and `control/clear_error`. ESP32 (Email/Password) can read control and write status.
-- A small, hardcoded UID allowlist may be kept temporarily for bootstrap, but the admins map should be the long-term single source of truth.
+- Only admin UIDs can write control and device configuration paths. ESP32 (Email/Password) can read control and write status.
+- Use the admins map as the single source of truth for authorization.
 
 ### 7. Run locally
 ```bash
@@ -195,8 +195,8 @@ vercel env add NEXT_PUBLIC_FIREBASE_API_KEY
 
 - Dashboard does **not** provide any “override safety” controls. All safety protections remain enforced by firmware.
 - **Dry-run lockout** can only be cleared via the ACK button after physically verifying the water source.
-- **clear_error** acknowledges dry-run, sensor failure, and overflow errors in one action.
+- **clear_error** acknowledges dry-run and overflow lockouts. Sensor and communication errors auto-clear when signal health recovers.
 
 ---
 
-Historical release notes remain under `docs/releases/` but may not match current code.
+Historical release snapshots remain under `docs/releases/` and may differ from the current implementation.

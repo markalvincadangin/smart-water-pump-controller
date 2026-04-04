@@ -1,6 +1,10 @@
-# SmartFlow — RS-485 Protocol Specification
-### Document version: 1.0 | 2026-03-31
-### Applies to: NodeMCU V2 firmware v2.x (Phase 2) + ESP32 master firmware v2.x (Phase 3)
+# SmartFlow RS-485 Protocol Specification
+
+| Field | Value |
+|---|---|
+| Document version | 1.0 |
+| Date | 2026-03-31 |
+| Applies to | NodeMCU V2 firmware v2.x (Phase 2) and ESP32 master firmware v2.x (Phase 3) |
 
 This document is the **authoritative contract** for the RS-485 half-duplex link between
 the ESP32 master controller and the NodeMCU V2 sensor node. All firmware implementations

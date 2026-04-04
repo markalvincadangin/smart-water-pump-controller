@@ -1,4 +1,4 @@
-## Deployment Guide — v1.0.0
+## Deployment Guide - SmartFlow v1.0.0
 
 ### Audience
 
@@ -13,9 +13,9 @@ This is the end-to-end deployment guide for operators and engineers deploying:
 
 ---
 
-## 0) Safety and “don’t energize yet”
+## 0) Safety and pre-energization rule
 
-- Do not energize the 220V motor circuit until:
+- Do not energize the 220 V motor circuit until:
   - Low-voltage wiring is verified
   - The dashboard shows live status updates
   - Emergency stop and lockouts behave as expected
@@ -177,7 +177,7 @@ Flash and verify it responds over RS‑485 (master logs should show valid frames
 
 ---
 
-## 6) RS‑485 link commissioning (field checklist)
+## 6) RS-485 link commissioning (field checklist)
 
 Deployment requirements for stable RS‑485 over long cable runs:
 

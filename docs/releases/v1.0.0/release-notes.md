@@ -1,72 +1,66 @@
-## Release Notes — v1.0.0
+# Release Notes - SmartFlow v1.0.0
 
-### Summary
+## Release Classification
 
-This is the **first deployment-ready release** of the Smart Water Pump Controller, implementing a distributed architecture:
+- Stability: Stable
+- Release type: First stable release
+- Scope: Firmware, dashboard, RTDB contract, deployment runbook, and safety UX
 
-- **ESP32 master**: pump control + safety + cloud sync
-- **ESP8266 (NodeMCU V2) sensor node**: tank sensing (ultrasonic distance + flow) over **RS‑485**
-- **Dashboard**: Next.js PWA operator UI backed by Firebase Realtime Database
+## Summary
 
-Core safety behavior is designed to **fail safe** under sensor faults, RS‑485 faults, and cloud/network faults.
+SmartFlow v1.0.0 is the first stable release of the distributed pump-control system:
 
----
+- ESP32 master controller for pump actuation, safety enforcement, and cloud sync.
+- ESP8266 (NodeMCU V2) sensor node for ultrasonic/flow telemetry over RS-485.
+- Next.js dashboard (v15) for operator visibility and admin-gated control intents.
+- Firebase RTDB contract and rules aligned to additive, safety-first operation.
 
-### What’s included
+## Included Capabilities
 
-#### Firmware (ESP32 master)
+### Firmware (ESP32 master)
 
-- **Modes (vNext)**:
-  - `AUTO` (hysteresis)
-  - `MANUAL` (intent-based ON/OFF using `manual_desired`)
-  - `COUNTDOWN` (explicit start using `countdown_start`)
-  - Separate **Emergency Stop** action (`emergency_stop` latch; `reset_stop` unlatch)
-- **Safety invariants**:
-  - Dry-run lockout (latched until `clear_error`)
-  - Overflow protection (max runtime; latched until `clear_error`)
-  - Emergency stop latch forces pump OFF until reset
-  - RS‑485 data freshness/stability gates prevent unsafe starts; stale data stops a running pump (failsafe)
-- **RS‑485 protocol hardening**:
-  - STX/ETX framing
-  - CRC16 (Modbus)
-  - Sequence number for duplicate detection and robustness
-  - Master prefers `DIST:` from node and computes level % from master calibration to avoid drift
-- **Resilience**:
-  - Crash-loop safe mode (deterministic boot counter + safe-mode duration handling)
-  - Wi‑Fi reconnection with backoff and Firebase cooldown handling
-  - NVS persistence for config and critical counters
+- Policy modes: `AUTO`, `MANUAL`, `COUNTDOWN`.
+- Emergency stop latch via `emergency_stop` and `reset_stop` one-shots.
+- Dry-run and overflow lockout handling with fail-safe pump-off behavior.
+- RS-485 frame validation (STX/ETX + CRC16 + sequence-aware handling).
+- NVS-backed persistence for config and critical state.
 
-#### Firmware (ESP8266 sensor node)
+### Firmware (ESP8266 sensor node)
 
-- **Flow**: interrupt pulse counting and time-aware conversion to L/min
-- **Ultrasonic**: non-blocking measurement state machine, median filtering, plausibility checks
-- **RS‑485**: responds to master with framed payload including `DIST`, `FLOW`, `ERR`, `SEQ`, `CRC`
+- Non-blocking ultrasonic acquisition and filtering.
+- ISR-based flow pulse counting and L/min conversion.
+- Framed RS-485 response payload with `DIST`, `FLOW`, `ERR`, `SEQ`, and `CRC`.
 
-#### Dashboard
+### Dashboard
 
-- **Typed RTDB contract** in `dashboard/lib/types.ts` aligned to firmware
-- **Safe control writers** (mode validation; one-shot patterns)
-- **Clear safety-state UX**:
-  - Emergency stop status
-  - “Link unstable” and “Level stale” gates
-  - Fault mapping with safe fallback for unknown fault codes
+- Typed control/status model aligned to firmware behavior.
+- Admin-gated writes using `pump_system/config/admins/{uid}`.
+- Safety-state UX for e-stop, lockouts, stale level, and unstable sensor link.
 
-#### Firebase rules & operational hardening
+### RTDB and Rules
 
-- **No hardcoded UIDs** in `database.rules.json`; admin access is controlled via:
-  - `pump_system/config/admins/{uid} = true`
+- No hardcoded UIDs in rules.
+- Additive contract model under `/pump_system/*`.
+- Clear write ownership boundaries for controller, admins, and user-scoped preferences.
 
----
+## Compatibility Notes
 
-### Breaking changes / compatibility notes
+- Legacy policy values `FORCE_ON` and `FORCE_OFF` are not valid operating modes for this release.
+- Legacy control fields may remain present for compatibility, but standard operation is based on `mode`, `manual_desired`, and countdown/e-stop one-shots.
 
-- Legacy policy modes `FORCE_ON` and `FORCE_OFF` are **not used** in this release.
-- Legacy control one-shots (`manual_start`, `manual_stop`) are retained as **read-only compatibility** in the dashboard types but should not be used for new operation.
+## Validation Status
 
----
+- Build and behavior require hardware-in-loop validation for final commissioning.
+- Dashboard quality checks should be executed with `npm run validate` in `dashboard/`.
+- Firmware reproducibility depends on pinned PlatformIO dependencies.
 
-### Known limitations (release-time)
+## Known Limitations
 
-- **Hardware-in-loop testing** is required to validate RS‑485 noise margins, grounding, and power transient behavior on the real installation (this can’t be fully proven by builds/tests alone).
-- Lighthouse CI is skipped on Windows during local validation due to a known temp-dir cleanup issue; it should be run in CI/Linux for a full performance regression gate.
+- RS-485 noise tolerance and power transient resilience require on-site verification.
+- Local Lighthouse checks can vary by host environment; CI/Linux is preferred for repeatable performance gates.
+
+## Upgrade Guidance
+
+- This release is intended as the baseline stable version.
+- Future releases should preserve backward-compatible RTDB and RS-485 extensions.
 

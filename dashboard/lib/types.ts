@@ -1,6 +1,7 @@
-// dashboard/lib/types.ts
-// REFACTOR [D1]: Complete typed interfaces for all Firebase paths
-// Source of truth: SmartFlow System Refactor Plan v2.0 §4.2
+/**
+ * Complete typed interfaces for all Firebase RTDB paths.
+ * Source of truth: SmartFlow System Refactor Plan v2.0 §4.2
+ */
 
 export type RunMode =
   | 'AUTO_STANDBY'

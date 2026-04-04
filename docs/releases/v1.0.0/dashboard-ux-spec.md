@@ -1,6 +1,6 @@
-## Dashboard UX Spec — v1.0.0
+# Dashboard UX Specification - SmartFlow v1.0.0
 
-### Goal
+## Goal
 
 Provide a calm, high-signal operator UI that:
 
@@ -10,7 +10,7 @@ Provide a calm, high-signal operator UI that:
 
 ---
 
-## 1) Information hierarchy (recommended)
+## 1. Information Hierarchy
 
 1. **System state (always visible)**
    - Controller connectivity and last update age
@@ -31,9 +31,9 @@ Provide a calm, high-signal operator UI that:
 
 ---
 
-## 2) State clarity rules
+## 2. State Clarity Rules
 
-### 2.1 Never “infer” the pump state
+### 2.1 Never infer pump state
 
 - “Pump ON” is only when `status.is_running === true`.
 - “Pump requested ON” is separate (MANUAL intent) and is shown via `manual_desired`.
@@ -51,7 +51,7 @@ If the user requests pump ON but `is_running` remains false, show explicit block
 
 ---
 
-## 3) Control UX rules
+## 3. Control UX Rules
 
 ### 3.1 Admin gating
 
@@ -82,10 +82,10 @@ If the user requests pump ON but `is_running` remains false, show explicit block
 
 ---
 
-## 4) Visual design rules (safety-oriented)
+## 4. Visual Design Rules (Safety-Oriented)
 
 - Calm baseline; reserve red for e-stop/lockouts only.
 - Avoid heavy animation except for “pump running” indication.
-- Use consistent icons; avoid emojis for critical meanings.
+- Use consistent icons and labels for critical states.
 - Maintain large touch targets (≥44px) and strong disabled-state clarity.
 
