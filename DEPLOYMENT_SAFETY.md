@@ -138,7 +138,7 @@ SmartFlow controls a 1.5 HP water pump connected to 220V AC power. Improper depl
 
 ### Initial Pump Activation
 - [ ] **Tank is EMPTY** (verified visually)
-  - Level reading in Dashboarrd shows 0–5%
+  - Level reading in Dashboard shows 0–5%
   - Hysteresis: pump will NOT auto-start until level drops below start threshold
 - [ ] **Relay click test** (no water flow yet)
   - Switch mode to MANUAL

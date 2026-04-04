@@ -67,7 +67,13 @@ export default function ControlPanel({
   useEffect(() => {
     if (currentMode !== "COUNTDOWN") return;
     const interval = setInterval(() => {
-      setLocalSec((prev) => (prev > 0 ? prev - 1 : 0));
+      setLocalSec((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
     return () => clearInterval(interval);
   }, [currentMode]);

@@ -24,7 +24,7 @@ Project maintainers may edit/remove comments, close issues/PRs, or block contrib
 
 ## Reporting
 
-Report concerns privately to: markcadangin@gmail.com
+Report concerns privately to: markc.dev.iot@gmail.com
 
 Please include relevant links/screenshots and context.
 
