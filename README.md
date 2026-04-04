@@ -334,7 +334,7 @@ Third-party product names, logos, and brands (for example, ESP32, ESP8266, Fireb
 ## Support
 
 - **Documentation:** [docs/README.md](docs/README.md)
-- **Release checklist:** [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
+- **Release documentation:** See [docs/README.md](docs/README.md)
 - **Issues:** Use the repository Issues tab on GitHub
 - **Discussions:** Use the repository Discussions tab on GitHub
 

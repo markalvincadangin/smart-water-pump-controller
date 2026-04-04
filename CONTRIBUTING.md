@@ -37,8 +37,8 @@ See [README.md](README.md) for system overview.
 ### 3. Set Up Local Development
 
 ```bash
-# Clone the repo
-git clone https://github.com/yourname/smart-water-pump-controller
+# Clone the repo (copy the HTTPS or SSH URL from the GitHub "Code" button)
+git clone <repo-url>
 cd smart-water-pump-controller
 
 # Firmware setup
