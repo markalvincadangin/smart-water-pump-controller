@@ -197,10 +197,11 @@ export default function DashboardPage() {
               isSensorError={status?.is_sensor_error ?? false}
               isFlowSensorError={status?.is_flow_sensor_error ?? false}
               isManualRuntimeWarning={status?.manual_runtime_warning ?? false}
-              isRemoteSensorStable={status?.remote_sensor_stable ?? true}
+              isRemoteSensorStable={status?.remote_sensor_stable ?? false}
               isLevelBypass={status?.bypass_level_sensor ?? false}
               isFlowBypass={status?.bypass_flow_sensor ?? false}
               isIdleMode={status?.is_idle_mode ?? false}
+              isLoading={!status}
               onResetEStop={resetEmergencyStop}
               onClearError={acknowledgeError}
             />
@@ -213,7 +214,7 @@ export default function DashboardPage() {
               <TankLevelCard 
                 level={status?.level_estimate_active ? (status?.estimated_level_pct ?? level) : level}
                 distanceCm={status?.ultrasonic_last_good_cm}
-                isFresh={status?.level_fresh ?? true}
+                isFresh={status?.level_fresh ?? false}
                 isSensorError={status?.is_sensor_error ?? false}
                 isEstimate={status?.level_estimate_active ?? false}
                 addedVolumeL={status?.flow_volume_added_l}

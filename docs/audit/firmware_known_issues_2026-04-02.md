@@ -160,6 +160,7 @@ The following `millis() - X` subtractions remain in source but are confirmed non
 | S-10 | Medium   | `snLevelDiscardCount` is `uint16_t` but cast to `uint8_t` (clamped at 255) before packing into the RS-485 frame. Values above 255 lose granularity in telemetry.                           | `remoteSensorLevelDiscardCount` on Master cannot reliably show aggressive filtering above 255 discards.                                         | Confirmed reporting gap — accepted. Saturation at 255 is better than wrapping. No safety impact.                            |
 | S-11 | Medium   | `snLevelDiscardCount` resets to 0 at the start of each 1-second measurement window (`usResetWindow()`). The RS-485 frame value is a per-window snapshot, not a cumulative counter.         | Dashboard displays `remote_level_discard_count` as if cumulative; operators cannot assess long-term sensor filter health from this field alone. | Confirmed semantic confusion — documentation needed. Dashboard and field-service guides must note the per-window semantics. |
 | S-12 | Low      | `usMedianValid()` returns index `n/2` (upper median for even windows, e.g. n=4 returns index 2). Undocumented. Slight downward bias on fill-level readings for even-count windows (~1–3%). | Minor overflow detection delay on even-sample windows. Acceptable in practice given 5-sample window (odd).                                      | Confirmed design choice — documentation needed. Add code comment explaining upper-median selection.                         |
+| S-13 | Low      | `PIN_FLOW_INPUT` assigned to GPIO12/D6 with a comment in `config.h` marked *"temporary diagnostic reroute"*. The canonical pin was never confirmed or reverted. No comment documents the original pin or rationale for the reroute. | If the reroute was load-bearing (e.g. avoiding a boot-strapping conflict on D3/D7/D8), silent reassignment could break a working sensor node. Field wiring may be inconsistent with source. | Open — requires hardware verification with board in hand. Do not change `config.h` until verified. See `docs/specs/firmware.md` Hardware Interface section. |
 
 
 ### 3.4 Sensor Node Notes & Recommendations
@@ -168,6 +169,8 @@ The following `millis() - X` subtractions remain in source but are confirmed non
 - **S-10, S-11**: No firmware change needed. Dashboard documentation must clarify that `remote_level_discard_count` is a per-window (not cumulative) counter, resetting every ~1 second.
 - **S-12**: Add a single-line code comment in `usMedianValid()` documenting the upper-median choice. No behavior change needed.
 - **S-08**: Documenting the 20ms stall-reset derivation is recommended before long-term deployment: at 115200 baud, one byte is ~87µs; the 20ms window covers ~230 byte-times, which is intentionally conservative to handle line-ringing on a 40m CAT6 run.
+- **S-13**: `PIN_FLOW_INPUT` rerouted to GPIO12/D6 per a comment marked "temporary" in `config.h`; canonical pin never confirmed or reverted. **Do not change without hardware verification.** See `docs/specs/firmware.md` Hardware Interface table.
+
 
 ---
 

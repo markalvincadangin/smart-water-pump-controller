@@ -25,7 +25,7 @@ Access is protected by **Google sign-in**; only authorized users can view and co
 ## Quick Start
 
 ### 1. Prerequisites
-- Node.js 18+
+- Node.js 22+
 - A Firebase project with **Realtime Database**, **Email/Password**, and **Google Auth** enabled
 
 ### 2. Clone / copy this project

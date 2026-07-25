@@ -65,12 +65,13 @@ export default function ControlPanel({
   }, [countdownRemainingSec, localSec]);
 
   useEffect(() => {
-    if (currentMode !== "COUNTDOWN" || localSec <= 0) return;
+    const countdownActive = currentMode === "COUNTDOWN" && countdownRemainingSec > 0;
+    if (!countdownActive) return;
     const interval = setInterval(() => {
       setLocalSec((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(interval);
-  }, [currentMode, localSec]);
+  }, [currentMode, countdownRemainingSec]);
 
   if (isLoading) {
     return (

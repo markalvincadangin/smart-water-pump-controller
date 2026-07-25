@@ -10,6 +10,9 @@
 
 #define RS485_BAUD        115200
 #define RS485_TX_TURNAROUND_US  60
+// Guard time after receiving a complete command before the node drives TX.
+// This avoids clipping the first bytes when the master is still switching DE/RE to RX.
+#define RS485_RX_TO_TX_GUARD_US  1200
 
 // ----------------------------
 // Debug transport selection
