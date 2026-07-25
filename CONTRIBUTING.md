@@ -42,7 +42,7 @@ git clone <repo-url>
 cd smart-water-pump-controller
 
 # Firmware setup
-cd firmware/platformio_smart_water_pump_controller
+cd firmware/master_node
 pip install platformio
 cp src/config/secrets.h.example src/config/secrets.h
 # Edit secrets.h with your WiFi/Firebase credentials
@@ -140,7 +140,7 @@ Any other approaches?
 
 1. **Compile without errors**
    ```bash
-   cd firmware/platformio_smart_water_pump_controller
+   cd firmware/master_node
    pio run
    # Should succeed with ✓
    ```

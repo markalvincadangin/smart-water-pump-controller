@@ -14,7 +14,7 @@ Tank-side RS-485 slave + flow + ultrasonic. See repo `firmware/README.md` for sy
 Build / upload (USB serial, default):
 
 ```bash
-cd firmware/platformio_sensor_node
+cd firmware/sensor_node
 pio run -e nodemcuv2 -t upload
 ```
 
@@ -31,7 +31,7 @@ pio device monitor -e nodemcuv2
 ### 1. One-time: create Wi-Fi secrets
 
 ```bash
-cd firmware/platformio_sensor_node
+cd firmware/sensor_node
 cp src/config/secrets_ota.h.example src/config/secrets_ota.h   # Linux / macOS
 # Windows PowerShell:
 Copy-Item src/config/secrets_ota.h.example src/config/secrets_ota.h

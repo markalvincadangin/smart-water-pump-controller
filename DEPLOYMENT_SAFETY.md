@@ -61,10 +61,10 @@ SmartFlow controls a 1.5 HP water pump connected to 220V AC power. Improper depl
 ### Firmware Upload
 - [ ] **Firmware version:** ________ (matching docs release)
 - [ ] **PlatformIO build successful** (no errors/warnings)
-  - Command: `pio run -d firmware/platformio_smart_water_pump_controller`
+  - Command: `pio run -d firmware/master_node`
   - Output: `✓ SUCCESS`
 - [ ] **Sensor Node firmware** uploaded and tested separately
-  - Command: `pio run -d firmware/platformio_sensor_node -e nodemcuv2`
+  - Command: `pio run -d firmware/sensor_node -e nodemcuv2`
   - Serial output shows: `Boot: Sensor node debug enabled`
 
 ### Configuration Validation

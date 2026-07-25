@@ -52,7 +52,7 @@ This document summarizes historical remediation work that moved SmartFlow toward
 ## 4. Build Integrity (Gate 3)
 
 ### Firmware version pinning
-- **File:** `firmware/platformio_smart_water_pump_controller/platformio.ini`
+- **File:** `firmware/master_node/platformio.ini`
 - **Change:** `lib_deps` pinned to:
   - `mobizt/Firebase Arduino Client Library for ESP8266 and ESP32@4.4.17`
   - `bblanchon/ArduinoJson@6.21.6`
@@ -70,7 +70,7 @@ cd dashboard && npm run lint && npm run test && npm run build
 cd functions && npm run test && npm run build
 
 # Firmware
-cd firmware/platformio_smart_water_pump_controller && pio run
+cd firmware/master_node && pio run
 
 # Health (after dashboard is running with valid .env.local)
 curl -s http://localhost:3000/api/health

@@ -9,8 +9,8 @@
 RTDB `/pump_system/config/device` is missing or has incorrect `tank_empty_cm` and `tank_full_cm` fields.
 
 ## Technical Details
-- **Sensor node config** (platformio_sensor_node): `TANK_US_DIST_EMPTY_CM=120`, `TANK_US_DIST_FULL_CM=30`
-- **ESP32 hardcoded defaults** (platformio_smart_water_pump_controller): `TANK_EMPTY_CM=122`, `TANK_FULL_CM=8` (obsolete)
+- **Sensor node config** (sensor_node): `TANK_US_DIST_EMPTY_CM=120`, `TANK_US_DIST_FULL_CM=30`
+- **ESP32 hardcoded defaults** (master_node): `TANK_EMPTY_CM=122`, `TANK_FULL_CM=8` (obsolete)
 - **ESP32 conversion formula** (rs485_comm.cpp:170-174):
   ```cpp
   pct = 100.0 * (cfgTankEmptyCm - dist) / (cfgTankEmptyCm - cfgTankFullCm)
@@ -101,6 +101,6 @@ Dashboard
 ```
 
 ## Documentation References
-- ESP32 calibration read: `firmware/platformio_smart_water_pump_controller/src/connectivity/connectivity_cloud.cpp:148-171`
-- Distance-to-percent conversion: `firmware/platformio_smart_water_pump_controller/src/rs485/rs485_comm.cpp:170-174`
-- Sensor node config: `firmware/platformio_sensor_node/src/config/config.h:39-47`
+- ESP32 calibration read: `firmware/master_node/src/connectivity/connectivity_cloud.cpp:148-171`
+- Distance-to-percent conversion: `firmware/master_node/src/rs485/rs485_comm.cpp:170-174`
+- Sensor node config: `firmware/sensor_node/src/config/config.h:39-47`

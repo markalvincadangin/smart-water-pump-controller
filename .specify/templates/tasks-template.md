@@ -40,7 +40,7 @@
 ============================================================ -->
 ## Phase 2: Firmware *(if applicable)*
 
-**Build**: `pio run` in `firmware/platformio_smart_water_pump_controller/` or `firmware/platformio_sensor_node/`
+**Build**: `pio run` in `firmware/master_node/` or `firmware/sensor_node/`
 **Validation**: Hardware serial monitor (no CI — document expected serial output)
 
 ### User Story 1 — [Title] (P1) — Firmware

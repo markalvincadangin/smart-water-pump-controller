@@ -48,7 +48,7 @@ void runTest(const char* name, bool (*fn)()) {
 ## NodeMCU Sensor Node — Test Suite
 
 **Location:** `firmware/test_sensor_node/` (Arduino IDE)
-or `firmware/platformio_sensor_node/test/` (PlatformIO)
+or `firmware/sensor_node/test/` (PlatformIO)
 
 ### TC-S-01: Hardware Sanity
 
@@ -284,7 +284,7 @@ bool test_crc() {
 ## ESP32 Master Node — Test Suite
 
 **Location:** `firmware/test_master_node/` (Arduino IDE)
-or `firmware/platformio_smart_water_pump_controller/test/` (PlatformIO)
+or `firmware/master_node/test/` (PlatformIO)
 
 ### TC-M-01: GPIO and Relay
 

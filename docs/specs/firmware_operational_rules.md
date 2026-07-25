@@ -10,7 +10,7 @@ source: hand-authored
 | Field | Value |
 |---|---|
 | Product | SmartFlow |
-| Scope | `firmware/platformio_smart_water_pump_controller/` (ESP32 master) |
+| Scope | `firmware/master_node/` (ESP32 master) |
 | Status | Normative operational behavior |
 | Last reviewed | 2026-07-25 |
 
