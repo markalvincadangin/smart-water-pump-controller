@@ -1,15 +1,23 @@
+---
+status: current
+version: 1.1
+last-reviewed: 2026-07-25
+source: hand-authored
+---
+
 # Firmware Specification (Current)
 
 | Field | Value |
 |---|---|
 | Product | SmartFlow |
-| Scope | ESP32 master + ESP8266 sensor node |
+| Scope | ESP32 master + NodeMCU V2 (ESP8266) sensor node |
 | Status | Current (non-versioned) |
-| Last updated | 2026-03-31 |
+| Last reviewed | 2026-07-25 |
 
 This document is the **current** (non-versioned) firmware specification for the SmartFlow system.
 It supersedes the older archived specs and release notes. Historical documents remain under `docs/archive/`.
 For the full RS-485 protocol contract see [`docs/specs/rs485_protocol.md`](./rs485_protocol.md).
+For implemented operational behavior (modes, safety rules, WiFi, restart/safe-mode) see [`docs/specs/firmware_operational_rules.md`](./firmware_operational_rules.md).
 
 ### System architecture
 
