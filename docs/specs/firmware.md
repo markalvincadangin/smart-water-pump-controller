@@ -33,19 +33,15 @@ For implemented operational behavior (modes, safety rules, WiFi, restart/safe-mo
 
 ### Firmware build targets
 
-- **PlatformIO (recommended for CI/build validation)**
-  - ESP32 master: `firmware/platformio_smart_water_pump_controller/`
-  - ESP8266 node: `firmware/platformio_sensor_node/`
-- **Arduino IDE (parity build, multi-tab sketches)**
-  - ESP32 master: `firmware/arduino_smart_water_pump_controller/`
-  - ESP8266 node: `firmware/arduino_sensor_node/`
+- ESP32 master (PlatformIO): `firmware/master_node/`
+- ESP8266 node (PlatformIO): `firmware/sensor_node/`
 
 ### Hardware interface (GPIO assignments)
 
 Production pin assignments as defined in each module's `config.h`.
 Changes to these pins require updating both the source constants and this table.
 
-**ESP32 master** (`firmware/platformio_smart_water_pump_controller/src/config/config.h`)
+**ESP32 master** (`firmware/master_node/src/config/config.h`)
 
 | Constant | GPIO | Direction | Function |
 |----------|------|-----------|----------|
@@ -54,7 +50,7 @@ Changes to these pins require updating both the source constants and this table.
 | `RS485_RX_PIN` | GPIO 25 (UART2 RX2) | IN | RS-485 receive ← MAX485 RO |
 | `RS485_DE_RE_PIN` | GPIO 5 | OUT | RS-485 direction — LOW = RX, HIGH = TX |
 
-**NodeMCU V2 sensor node** (`firmware/platformio_sensor_node/src/config/config.h`)
+**NodeMCU V2 sensor node** (`firmware/sensor_node/src/config/config.h`)
 
 | Constant | GPIO | NodeMCU label | Direction | Function |
 |----------|------|---------------|-----------|----------|
