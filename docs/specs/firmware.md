@@ -40,6 +40,36 @@ For implemented operational behavior (modes, safety rules, WiFi, restart/safe-mo
   - ESP32 master: `firmware/arduino_smart_water_pump_controller/`
   - ESP8266 node: `firmware/arduino_sensor_node/`
 
+### Hardware interface (GPIO assignments)
+
+Production pin assignments as defined in each module's `config.h`.
+Changes to these pins require updating both the source constants and this table.
+
+**ESP32 master** (`firmware/platformio_smart_water_pump_controller/src/config/config.h`)
+
+| Constant | GPIO | Direction | Function |
+|----------|------|-----------|----------|
+| `RELAY_PIN` | GPIO 4 | OUT | Pump relay coil — HIGH = de-energized = pump OFF |
+| `RS485_TX_PIN` | GPIO 17 (UART2 TX2) | OUT | RS-485 transmit → MAX485 DI |
+| `RS485_RX_PIN` | GPIO 25 (UART2 RX2) | IN | RS-485 receive ← MAX485 RO |
+| `RS485_DE_RE_PIN` | GPIO 5 | OUT | RS-485 direction — LOW = RX, HIGH = TX |
+
+**NodeMCU V2 sensor node** (`firmware/platformio_sensor_node/src/config/config.h`)
+
+| Constant | GPIO | NodeMCU label | Direction | Function |
+|----------|------|---------------|-----------|----------|
+| `PIN_RS485_DE_RE` | GPIO 14 | D5 | OUT | RS-485 direction — DE+RE tied |
+| `PIN_FLOW_INPUT` | GPIO 12 | D6 | IN (PULLUP) | YF-G1 flow sensor pulse — *marked temporary diagnostic reroute in source; verify against hardware* |
+| `PIN_US_TRIG` | GPIO 5 | D1 | OUT | JSN-SR04T ultrasonic trigger |
+| `PIN_US_ECHO` | GPIO 16 | D0 | IN | JSN-SR04T ultrasonic echo ¹ |
+
+RS-485 UART0 (NodeMCU): TX = GPIO1, RX = GPIO3 — fixed hardware UART0 pins, selected implicitly when `Serial` is initialized in production mode; not `#define` constants.
+Debug output: Serial1 TX-only on GPIO2 (production mode only).
+
+¹ ECHO requires level-shifting to 3.3 V — see [§ Hardware assumptions](#hardware-assumptions-deployment-critical) below.
+
+---
+
 ### RS‑485 tank link (protocol contract)
 
 **Electrical**
