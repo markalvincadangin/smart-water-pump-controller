@@ -1,162 +1,116 @@
----
-
-description: "Task list template for feature implementation"
----
-
-# Tasks: [FEATURE NAME]
-
-**Input**: Design documents from `/specs/[###-feature-name]/`
-
-**Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
-
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
-
-**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
-
-## Format: `[ID] [P?] [Story] Description`
-
-- **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
-- Include exact file paths in descriptions
-
-## Path Conventions
-
-- **Single project**: `src/`, `tests/` at repository root
-- **Web app**: `backend/src/`, `frontend/src/`
-- **Mobile**: `api/src/`, `ios/src/` or `android/src/`
-- Paths shown below assume single project - adjust based on plan.md structure
-
 <!--
   ============================================================================
-  IMPORTANT: The tasks below are SAMPLE TASKS for illustration purposes only.
+  SMARTFLOW TASKS TEMPLATE
 
-  The /speckit-tasks command MUST replace these with actual tasks based on:
-  - User stories from spec.md (with their priorities P1, P2, P3...)
-  - Feature requirements from plan.md
-  - Entities from data-model.md
-  - Endpoints from contracts/
+  This file is the SAMPLE/GUIDE. The /speckit-tasks command replaces these
+  with actual tasks based on:
+    - User stories from spec.md (priorities P1, P2, P3...)
+    - Module phases from plan.md
+    - Entities from data-model.md / contracts/
 
-  Tasks MUST be organized by user story so each story can be:
-  - Implemented independently
-  - Tested independently
-  - Delivered as an MVP increment
+  Tasks are organized by module then by user story so each story can be
+  implemented, tested, and validated independently.
 
-  DO NOT keep these sample tasks in the generated tasks.md file.
+  IMPORTANT: Delete inapplicable module phases before using.
   ============================================================================
 -->
 
-## Phase 1: Setup (Shared Infrastructure)
+# Tasks: [FEATURE NAME]
 
-**Purpose**: Project initialization and basic structure
+**Branch**: `[###-feature-name]` | **Spec**: [link] | **Plan**: [link]
 
-- [ ] T001 Create project structure per implementation plan
-- [ ] T002 Initialize [language] project with [framework] dependencies
-- [ ] T003 [P] Configure linting and formatting tools
+**Modules**: [list which modules this feature touches]
 
 ---
 
-## Phase 2: Foundational (Blocking Prerequisites)
+## Phase 1: Shared Setup
 
-**Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
+**Purpose**: Any cross-module groundwork (schema design sign-off, new RTDB nodes, shared types)
 
-**⚠️ CRITICAL**: No user story work can begin until this phase is complete
+- [ ] T001 Review constitution gate — confirm all applicable principles pass
+- [ ] T002 [P] Read current behavior in affected files (no code changes)
+- [ ] T003 [P] Confirm RS-485 frame / RTDB schema changes are backward compatible (if applicable)
 
-Examples of foundational tasks (adjust based on your project):
-
-- [ ] T004 Setup database schema and migrations framework
-- [ ] T005 [P] Implement authentication/authorization framework
-- [ ] T006 [P] Setup API routing and middleware structure
-- [ ] T007 Create base models/entities that all stories depend on
-- [ ] T008 Configure error handling and logging infrastructure
-- [ ] T009 Setup environment configuration management
-
-**Checkpoint**: Foundation ready - user story implementation can now begin in parallel
+**Checkpoint**: Constitution gate ✅ — implementation phases may begin
 
 ---
 
-## Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP
+<!-- ============================================================
+  FIRMWARE PHASE — delete this block if firmware is not touched
+============================================================ -->
+## Phase 2: Firmware *(if applicable)*
 
-**Goal**: [Brief description of what this story delivers]
+**Build**: `pio run` in `firmware/platformio_smart_water_pump_controller/` or `firmware/platformio_sensor_node/`
+**Validation**: Hardware serial monitor (no CI — document expected serial output)
 
-**Independent Test**: [How to verify this story works on its own]
+### User Story 1 — [Title] (P1) — Firmware
 
-### Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️
+- [ ] T010 [FW] [US1] [describe: file path + function + what changes]
+- [ ] T011 [FW] [US1] [describe: safety invariant check — grep for direct RELAY_PIN writes]
+- [ ] T012 [FW] [US1] [describe: timing check — grep for raw millis() arithmetic]
+- [ ] T013 [FW] [US1] Document expected serial output for manual hardware validation
 
-> **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
-
-- [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
-
-### Implementation for User Story 1
-
-- [ ] T012 [P] [US1] Create [Entity1] model in src/models/[entity1].py
-- [ ] T013 [P] [US1] Create [Entity2] model in src/models/[entity2].py
-- [ ] T014 [US1] Implement [Service] in src/services/[service].py (depends on T012, T013)
-- [ ] T015 [US1] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T016 [US1] Add validation and error handling
-- [ ] T017 [US1] Add logging for user story 1 operations
-
-**Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
+**Checkpoint**: Firmware builds clean; relay safety invariants verified
 
 ---
 
-## Phase 4: User Story 2 - [Title] (Priority: P2)
+<!-- ============================================================
+  DASHBOARD PHASE — delete this block if dashboard is not touched
+============================================================ -->
+## Phase 3: Dashboard *(if applicable)*
 
-**Goal**: [Brief description of what this story delivers]
+**Dev**: `cd dashboard && npm run dev` (port 3000)
+**Test**: `cd dashboard && npm test`
+**Validate**: `cd dashboard && npm run validate` (lint + build + lighthouse)
 
-**Independent Test**: [How to verify this story works on its own]
+### Tests — write first, must FAIL before implementation
 
-### Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️
+- [ ] T020 [P] [DB-T] [US1] Write test in `dashboard/__tests__/[file].test.tsx` — verify it FAILS
+- [ ] T021 [P] [DB-T] [US1] Write test in `dashboard/__tests__/[file].test.ts` — verify it FAILS
 
-- [ ] T018 [P] [US2] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T019 [P] [US2] Integration test for [user journey] in tests/integration/test_[name].py
+### User Story 1 — [Title] (P1) — Dashboard
 
-### Implementation for User Story 2
+- [ ] T022 [DB] [US1] [describe: component/hook + file path + what changes]
+- [ ] T023 [DB] [US1] [describe]
+- [ ] T024 [DB] [US1] Confirm pre-existing failure count unchanged: `__tests__/lib/usePumpData.test.tsx` (expect 4 failures)
 
-- [ ] T020 [P] [US2] Create [Entity] model in src/models/[entity].py
-- [ ] T021 [US2] Implement [Service] in src/services/[service].py
-- [ ] T022 [US2] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T023 [US2] Integrate with User Story 1 components (if needed)
+**Checkpoint**: `npm test` passes (minus pre-existing 4); `npm run validate` clean
 
-**Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
+### User Story 2 — [Title] (P2) — Dashboard *(if applicable)*
 
----
-
-## Phase 5: User Story 3 - [Title] (Priority: P3)
-
-**Goal**: [Brief description of what this story delivers]
-
-**Independent Test**: [How to verify this story works on its own]
-
-### Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️
-
-- [ ] T024 [P] [US3] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T025 [P] [US3] Integration test for [user journey] in tests/integration/test_[name].py
-
-### Implementation for User Story 3
-
-- [ ] T026 [P] [US3] Create [Entity] model in src/models/[entity].py
-- [ ] T027 [US3] Implement [Service] in src/services/[service].py
-- [ ] T028 [US3] Implement [endpoint/feature] in src/[location]/[file].py
-
-**Checkpoint**: All user stories should now be independently functional
+- [ ] T030 [DB] [US2] [describe]
 
 ---
 
-[Add more user story phases as needed, following the same pattern]
+<!-- ============================================================
+  CLOUD FUNCTIONS PHASE — delete if functions are not touched
+============================================================ -->
+## Phase 4: Cloud Functions *(if applicable)*
+
+**Build**: `cd functions && npm run build`
+**Test**: `cd functions && npm test`
+
+### Tests — write first, must FAIL before implementation
+
+- [ ] T040 [FN-T] [US1] Write test in `functions/src/__tests__/[file].test.ts` — verify it FAILS
+
+### User Story 1 — [Title] (P1) — Functions
+
+- [ ] T041 [FN] [US1] [describe: function name + trigger + what changes]
+- [ ] T042 [FN] [US1] [describe]
+
+**Checkpoint**: `tsc` clean; `npm test` passes
 
 ---
 
-## Phase N: Polish & Cross-Cutting Concerns
+## Phase 5: Integration & Documentation
 
-**Purpose**: Improvements that affect multiple user stories
+**Purpose**: Cross-module validation and docs updates
 
-- [ ] TXXX [P] Documentation updates in docs/
-- [ ] TXXX Code cleanup and refactoring
-- [ ] TXXX Performance optimization across all stories
-- [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
-- [ ] TXXX Security hardening
-- [ ] TXXX Run quickstart.md validation
+- [ ] T050 End-to-end validation: [describe observable system behavior to check]
+- [ ] T051 [P] Update `docs/specs/[relevant-spec].md` if this changes a normative spec (in-place edit, do not create new file)
+- [ ] T052 [P] Update `docs/operations/[relevant-runbook].md` if operational steps change
+- [ ] T053 Commit: `feat([scope]): [description]` — Conventional Commits format
 
 ---
 
@@ -164,89 +118,50 @@ Examples of foundational tasks (adjust based on your project):
 
 ### Phase Dependencies
 
-- **Setup (Phase 1)**: No dependencies - can start immediately
-- **Foundational (Phase 2)**: Depends on Setup completion - BLOCKS all user stories
-- **User Stories (Phase 3+)**: All depend on Foundational phase completion
-  - User stories can then proceed in parallel (if staffed)
-  - Or sequentially in priority order (P1 → P2 → P3)
-- **Polish (Final Phase)**: Depends on all desired user stories being complete
+- **Phase 1 (Setup)**: No dependencies — start immediately
+- **Phase 2 (Firmware)**: Depends on Phase 1 ✅
+- **Phase 3 (Dashboard)**: Depends on Phase 1 ✅; can run in parallel with Phase 2
+- **Phase 4 (Functions)**: Depends on Phase 1 ✅; can run in parallel with Phases 2–3
+- **Phase 5 (Integration)**: Depends on ALL module phases complete
 
-### User Story Dependencies
+### Within Each Module Phase
 
-- **User Story 1 (P1)**: Can start after Foundational (Phase 2) - No dependencies on other stories
-- **User Story 2 (P2)**: Can start after Foundational (Phase 2) - May integrate with US1 but should be independently testable
-- **User Story 3 (P3)**: Can start after Foundational (Phase 2) - May integrate with US1/US2 but should be independently testable
-
-### Within Each User Story
-
-- Tests (if included) MUST be written and FAIL before implementation
-- Models before services
-- Services before endpoints
-- Core implementation before integration
-- Story complete before moving to next priority
+- Tests MUST be written and confirmed FAILING before implementation begins
+- Models / schema definitions before service logic
+- Core implementation before integration points
+- Each user story complete and validated before starting next priority
 
 ### Parallel Opportunities
 
-- All Setup tasks marked [P] can run in parallel
-- All Foundational tasks marked [P] can run in parallel (within Phase 2)
-- Once Foundational phase completes, all user stories can start in parallel (if team capacity allows)
-- All tests for a user story marked [P] can run in parallel
-- Models within a story marked [P] can run in parallel
-- Different user stories can be worked on in parallel by different team members
+- `[P]` tasks within a phase have no intra-phase dependencies and can run in parallel
+- Dashboard and Cloud Functions phases can run in parallel once Phase 1 is done
+- Firmware phase can run in parallel with dashboard/functions if teams are split
 
 ---
 
-## Parallel Example: User Story 1
+## Validation Summary
 
 ```bash
-# Launch all tests for User Story 1 together (if tests requested):
-Task: "Contract test for [endpoint] in tests/contract/test_[name].py"
-Task: "Integration test for [user journey] in tests/integration/test_[name].py"
+# Dashboard
+cd dashboard && npm test
+cd dashboard && npm run validate
 
-# Launch all models for User Story 1 together:
-Task: "Create [Entity1] model in src/models/[entity1].py"
-Task: "Create [Entity2] model in src/models/[entity2].py"
+# Cloud Functions
+cd functions && npm run build && npm test
+
+# Firmware — hardware only, document expected serial output in research.md
+# pio run -e [env] --target upload && pio device monitor
 ```
 
----
-
-## Implementation Strategy
-
-### MVP First (User Story 1 Only)
-
-1. Complete Phase 1: Setup
-2. Complete Phase 2: Foundational (CRITICAL - blocks all stories)
-3. Complete Phase 3: User Story 1
-4. **STOP and VALIDATE**: Test User Story 1 independently
-5. Deploy/demo if ready
-
-### Incremental Delivery
-
-1. Complete Setup + Foundational → Foundation ready
-2. Add User Story 1 → Test independently → Deploy/Demo (MVP!)
-3. Add User Story 2 → Test independently → Deploy/Demo
-4. Add User Story 3 → Test independently → Deploy/Demo
-5. Each story adds value without breaking previous stories
-
-### Parallel Team Strategy
-
-With multiple developers:
-
-1. Team completes Setup + Foundational together
-2. Once Foundational is done:
-   - Developer A: User Story 1
-   - Developer B: User Story 2
-   - Developer C: User Story 3
-3. Stories complete and integrate independently
+**Pre-existing known failure**: `dashboard/__tests__/lib/usePumpData.test.tsx` — 4 tests (mock uses `set`, source uses `update`). Not a regression. Do not fix unless specifically scoped.
 
 ---
 
 ## Notes
 
-- [P] tasks = different files, no dependencies
-- [Story] label maps task to specific user story for traceability
-- Each user story should be independently completable and testable
-- Verify tests fail before implementing
-- Commit after each task or logical group
-- Stop at any checkpoint to validate story independently
-- Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
+- `[P]` = parallel-safe (no dependency on other `[P]` tasks in same phase)
+- `[FW]` / `[DB]` / `[FN]` = module tag for traceability
+- `[US1]` / `[US2]` = maps task to user story from spec
+- Commit after each logical group, not just at phase end
+- Stop at each ✅ checkpoint to validate independently before continuing
+- `docs/` changes: always edit in-place; do NOT create new files for existing topics

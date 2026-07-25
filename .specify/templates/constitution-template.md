@@ -1,50 +1,91 @@
 # [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!-- SmartFlow naming convention: "[ProjectName] Constitution" -->
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
+<!--
+  SMARTFLOW GUIDANCE: This project governs a safety-critical physical system
+  (relay-controlled pump). Your first principle MUST address fail-safe direction.
+  Ask: "If the firmware encounters an unhandled fault, which physical state is safe?"
+  For SmartFlow: de-energized relay (pump OFF) is safe. State this explicitly.
+-->
+
+### [PRINCIPLE_1_NAME] *(NON-NEGOTIABLE)*
+<!-- SmartFlow pattern: "I. Fail Toward [SAFE_STATE]" -->
 [PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+<!--
+  Cover:
+  - Which hardware state is safe under fault/ambiguity
+  - Which function/pin controls safety state
+  - Whether watchdog, timeout, and unhandled exceptions are covered
+-->
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
+### [PRINCIPLE_2_NAME] *(NON-NEGOTIABLE)*
+<!-- SmartFlow pattern: "II. [PROTECTION_NAME] Lockout" -->
 [PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+<!--
+  Cover:
+  - What condition triggers lockout
+  - What the system does immediately (state flag + safe-state actuator call)
+  - What the ONLY valid exit condition is (explicit command vs. timeout)
+  - Whether this survives refactors
+-->
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
+### [PRINCIPLE_3_NAME] *(NON-NEGOTIABLE)*
+<!-- SmartFlow pattern: "III. [SECOND_PROTECTION_NAME]" -->
 [PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
 
 ### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
+<!-- SmartFlow pattern: "IV. Hardware Independence" — software safety != hardware safety -->
 [PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+<!--
+  Cover:
+  - Hardware safety systems present (e.g., thermal overload relay)
+  - Why firmware must not assume sole protection responsibility
+  - What firmware must never bypass
+-->
 
 ### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
+<!-- SmartFlow pattern: "V. Sensor Freshness Gate & Reachable E-Stop" -->
 [PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+<!--
+  For IoT systems: cover data freshness requirements before automated actuation,
+  and ensure emergency stop / error clear paths cannot be blocked by normal code paths.
+-->
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### [PRINCIPLE_6_NAME]
+<!-- SmartFlow pattern: "VI. Backward Compatibility & Additive Contracts" -->
+[PRINCIPLE_6_DESCRIPTION]
+<!--
+  For systems with serial protocols and cloud schemas:
+  - Protocol change rules (new fields must be optional with safe defaults)
+  - Schema change rules (additive only, no removal/rename without migration)
+-->
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+---
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Technical Constraints & Module Governance
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+<!--
+  SmartFlow pattern: enumerate modules, relay control invariant, timing invariant.
+  Replace with your project's equivalent hard constraints.
+-->
+
+1. **Repository Scope**: List each software module and its path.
+2. **[ACTUATOR] Control Invariant**: Identify the single authorized actuator control function.
+   Direct hardware writes outside that function are prohibited.
+3. **[TIMING / RESOURCE] Invariant**: Identify any wrap-safe or resource-safe patterns
+   that must be used everywhere (e.g., monotonic timers, memory allocator).
+
+---
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- **Supremacy**: This Constitution supersedes all informal team practices, feature requests,
+  or unratified documentation.
+- **Compliance**: All Pull Requests, SpecKit plans (`/speckit-plan`), and task breakdowns
+  (`/speckit-tasks`) MUST explicitly verify adherence to the non-negotiable principles.
+- **Amendments**: Any change to these principles requires formal review, physical/system
+  risk assessment, updated field documentation, and an explicit version bump.
 
 **Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
