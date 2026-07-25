@@ -129,7 +129,10 @@ export function validateDeviceConfigFields(form: DeviceConfig): FieldErrors {
     errors.dry_run_timeout_sec = "Enter 10–300 sec.";
   }
 
-  if (form.auto_bypass_on_sensor_fail && (form.auto_bypass_delay_sec < 10 || form.auto_bypass_delay_sec > 300)) {
+  if (
+    form.auto_bypass_on_sensor_fail &&
+    (form.auto_bypass_delay_sec == null || form.auto_bypass_delay_sec < 10 || form.auto_bypass_delay_sec > 300)
+  ) {
     errors.auto_bypass_delay_sec = "Enter 10–300 sec.";
   }
 

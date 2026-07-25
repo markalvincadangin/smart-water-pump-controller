@@ -1,3 +1,10 @@
+---
+status: current
+version: 1.0
+last-reviewed: 2026-07-25
+source: hand-authored
+---
+
 # Dashboard Specification (Current)
 
 | Field | Value |
@@ -5,11 +12,12 @@
 | Product | SmartFlow |
 | Scope | Dashboard operator interface and RTDB control contract |
 | Status | Current (non-versioned) |
-| Last updated | 2026-03-31 |
+| Last reviewed | 2026-07-25 |
 
 This document is the **current** (non-versioned) dashboard specification for the SmartFlow system.
 The dashboard is a safety-critical operator interface. Firmware is the source of truth; the dashboard
 must not infer pump behavior beyond what the ESP32 publishes to RTDB.
+For the full RTDB schema and firmware contract see [`docs/specs/firmware.md`](./firmware.md).
 
 ### System responsibilities
 

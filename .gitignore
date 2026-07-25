@@ -46,6 +46,8 @@ npm-debug.log*
 # Local build/temp artifacts
 **/.pio/
 ip.txt
+graphify-out/
+
 
 # Publication hygiene
 *-default-rtdb-export*.json

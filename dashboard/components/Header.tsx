@@ -72,7 +72,7 @@ export default function Header({
               {/* Idle badge */}
               <IdleModeBadge
                 isIdle={isIdleMode}
-                waterLevelPercent={typeof waterLevelPercent === "number" ? waterLevelPercent : 0}
+                waterLevelPercent={waterLevelPercent ?? undefined}
               />
               {/* RSSI Badge */}
               {rssi !== undefined && rssi !== 0 && (
