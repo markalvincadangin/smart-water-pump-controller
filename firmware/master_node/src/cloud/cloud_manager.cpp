@@ -24,9 +24,7 @@ void CloudManager::init() {
     
     config_cloud.api_key      = API_KEY;
     config_cloud.database_url = DATABASE_URL;
-
-    auth_cloud.user.email    = FIREBASE_EMAIL;
-    auth_cloud.user.password = FIREBASE_PASSWORD;
+    config_cloud.signer.anonymous = true;
 
     config_cloud.token_status_callback = tokenStatusCallback;
 
@@ -67,6 +65,15 @@ void CloudManager::pushMetadata() {
     json.set("hardwareVersion", "ESP32-WROOM-32");
     json.set("protocolVersion", "1.0");
     json.set("serialNumber", deviceId);
+    if (auth_cloud.token.uid.length() > 0) {
+        json.set("firmwareUid", auth_cloud.token.uid.c_str());
+        
+        // Also save to NVS per T008
+        if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
+            prefs.putString("firmwareUid", auth_cloud.token.uid.c_str());
+            prefs.end();
+        }
+    }
 
     Firebase.RTDB.updateNode(&fbdo_cloud, path.c_str(), &json);
 }

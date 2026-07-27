@@ -25,6 +25,7 @@ functions/.env
 .env.production.local
 firmware/**/secrets.h
 firmware/**/secrets_ota.h
+app/google-services.json
 
 # IDE and OS
 .idea/

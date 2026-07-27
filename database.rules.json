@@ -1,138 +1,47 @@
 {
   "rules": {
-    "pump_system": {
-      ".read": "auth != null",
-      "status": {
-        ".read": "auth != null",
-        ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password'"
-      },
-      "control": {
-        ".read": "auth != null",
-        "mode": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "devices": {
+      "$deviceId": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true",
+        "metadata": {
+          ".write": "auth != null && (data.child('firmwareUid').val() == null || auth.uid === data.child('firmwareUid').val() || root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true)"
         },
-        "manual_desired": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
+        "status": {
+          ".write": "auth != null && auth.uid === data.parent().child('metadata/firmwareUid').val()"
         },
-        "emergency_stop": {
-          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
+        "telemetry": {
+          ".write": "auth != null && auth.uid === data.parent().child('metadata/firmwareUid').val()"
         },
-        "reset_stop": {
-          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
-        },
-        "countdown_start": {
-          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
-        },
-        "clear_error": {
-          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
-        },
-        "reboot_request_id": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
-        },
-        "countdown_add_min": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
-        },
-        "manual_start": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
-        },
-        "manual_stop": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
-        },
-        "countdown_duration_min": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
-        },
-        "countdown_add_time": {
-          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
-        },
-        "countdown_stop": {
-          ".write": "auth != null && (root.child('pump_system/config/admins').child(auth.uid).val() === true || (auth.token.firebase.sign_in_provider === 'password' && newData.val() === false))"
-        },
-        "bypass_level_sensor": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
-        },
-        "bypass_flow_sensor": {
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
-        }
-      },
-      "config": {
-        "device": {
-          ".read": "auth != null",
-          ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
-        },
-        "notifications_by_user": {
-          "$uid": {
-            ".read": "auth != null && auth.uid === $uid",
-            ".write": "auth != null && auth.uid === $uid"
+        "shadow": {
+          "desired": {
+            ".write": "auth != null && root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true"
+          },
+          "reported": {
+            ".write": "auth != null && auth.uid === data.parent().parent().child('metadata/firmwareUid').val()"
           }
         },
-        "notification_last_sent": {
-          "$uid": {
-            ".read": false,
-            ".write": false
-          }
+        "settings": {
+          ".write": "auth != null && root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true"
         },
-        "admins": {
-          ".read": "auth != null",
-          "$uid": {
-            ".write": "auth != null && root.child('pump_system/config/admins').child(auth.uid).val() === true"
-          }
-        }
-      },
-      "presence": {
-        ".read": "auth != null",
-        "$session": {
-          ".write": "auth != null && (newData.child('uid').val() === auth.uid) && (newData.child('email').isString() || newData.child('email').val() === null) && newData.child('at').exists()",
-          ".validate": "newData.hasChildren(['uid','at'])"
-        }
-      },
-      "audit": {
+        "diagnostics": {
+          ".write": "auth != null && auth.uid === data.parent().child('metadata/firmwareUid').val()"
+        },
         "events": {
-          ".read": "auth != null",
           "$eventId": {
-            ".write": "auth != null && newData.child('uid').val() === auth.uid",
-            ".validate": "newData.hasChildren(['action','uid','deviceId','at'])"
-          }
-        }
-      },
-      "logs": {
-        "errors": {
-          ".read": "auth != null",
-          "$logId": {
-            ".write": "auth != null && auth.token.firebase.sign_in_provider === 'password'",
-            ".validate": "$logId.matches(/^[A-Za-z0-9_-]{8,64}$/) && newData.hasChildren(['message']) && (newData.child('at').isNumber() || newData.child('timestamp').isNumber())",
-            "message": {
-              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 256"
-            },
-            "at": {
-              ".validate": "newData.isNumber()"
-            },
-            "timestamp": {
-              ".validate": "newData.isNumber()"
-            },
-            "code": {
-              ".validate": "newData.isString() && newData.val().length <= 64"
-            },
-            "deviceId": {
-              ".validate": "newData.isString() && newData.val().length <= 128"
-            },
-            "level": {
-              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 16"
-            },
-            "component": {
-              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64"
-            },
-            "uid": {
-              ".validate": "newData.isString() && newData.val() === auth.uid"
-            },
-            "context": {
-              ".validate": "newData.isString() && newData.val().length <= 512"
-            },
-            "$other": {
-              ".validate": false
-            }
+            ".write": "auth != null && auth.uid === data.parent().parent().child('metadata/firmwareUid').val()"
           }
         }
       }
+    },
+    "firmware": {
+      ".read": "auth != null",
+      ".write": false
     }
   }
 }

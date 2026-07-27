@@ -10,4 +10,5 @@ public:
     
     // Status
     static bool isProvisioned();
+    static void updateStatus(const char* status);
 };

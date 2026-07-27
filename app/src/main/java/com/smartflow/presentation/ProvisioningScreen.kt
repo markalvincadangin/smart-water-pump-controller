@@ -7,6 +7,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.smartflow.viewmodel.ProvisioningState
 import com.smartflow.viewmodel.ProvisioningViewModel
 
@@ -17,6 +21,20 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
     var ssid by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
+    val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION)
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.all { it }) {
+            viewModel.startScanning()
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.Center,
@@ -24,7 +42,7 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
     ) {
         when (val s = state) {
             is ProvisioningState.Idle -> {
-                Button(onClick = { viewModel.startScanning() }) {
+                Button(onClick = { permissionLauncher.launch(permissions) }) {
                     Text("Scan for SmartFlow Device")
                 }
             }
@@ -60,6 +78,11 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
                 CircularProgressIndicator()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Sending credentials to device...")
+            }
+            is ProvisioningState.ProvisioningUpdate -> {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Device status: ${s.message}")
             }
             is ProvisioningState.Success -> {
                 Text("Provisioning Successful!")
