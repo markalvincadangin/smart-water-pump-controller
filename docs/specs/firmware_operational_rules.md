@@ -158,3 +158,4 @@ These command paths are designed to avoid sticky replay during reconnect/retry w
 - Emergency stop must always de-energize and latch.
 - No MANUAL+COUNTDOWN concurrent run path exists.
 - Hard safety lockouts always dominate mode intent until cleared.
+- Direct relay control (calling `setPump(bool)`) is strictly limited to `app_executePumpLogic()` in the app layer, with one explicit exception: the `emergency_stop` handler in `connectivity_cloud.cpp` calls `setPump(false)` directly for latency-critical, immediate shutdown.

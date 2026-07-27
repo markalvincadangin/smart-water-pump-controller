@@ -3,9 +3,9 @@
 
 #include "config/config.h"
 #include "state/state.h"
-
 #include "rs485/rs485_comm.h"
 #include "safety/safety_pump.h"
+#include "app/pump_app.h"
 #include "persistence/persistence.h"
 #include "connectivity/connectivity_cloud.h"
 #include "utils/time_utils.h"
@@ -34,7 +34,6 @@ void setup() {
 
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, HIGH); // Force relay OFF before state machine begins (Active-LOW)
-  setPump(false);
 
   rs485_init();
   LOG(LOG_LEVEL_INFO, "INIT", "GPIO configured. Pump OFF.");
@@ -327,8 +326,8 @@ void loop() {
                   isSleeping ? "Y" : "N");
 
     checkSafetyCutoff();
-    checkCountdownExpiry();
-    executePumpLogic();
+    app_checkCountdownExpiry();
+    app_executePumpLogic();
   }
 
   bool normalIntervalDue = (now - lastFirebaseMs >= firebaseInterval);
