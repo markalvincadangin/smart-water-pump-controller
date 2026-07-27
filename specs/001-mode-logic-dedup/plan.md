@@ -92,6 +92,8 @@ firmware/master_node/src/
 - [ ] [FW-003] In `firmware/master_node/src/safety/safety_pump.cpp`: Centralize `allowStartFromSensors` and `MIN_PUMP_OFF_TIME_MS` checks inside `executePumpLogic()` before the `MANUAL` and `COUNTDOWN` mode branches.
 - [ ] [FW-004] Verify `setPump()` is the only relay control entry point (grep check).
 - [ ] [FW-005] Update `docs/specs/firmware_operational_rules.md` to reflect the deduplicated rules.
+- [ ] [FW-006] Verify by code inspection that `runMode` assignment logic remains mode-specific and is not pulled into the shared pre-evaluation block.
+- [ ] [FW-007] Trace code path for dry-run trigger in each of AUTO, MANUAL, COUNTDOWN and confirm `SafetyDecision::STOP_DRYRUN` reaches `setPump(false)` in all three — document in `quickstart.md`.
 
 ---
 
