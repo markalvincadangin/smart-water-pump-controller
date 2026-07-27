@@ -5,7 +5,7 @@
 #include "../utils/time_utils.h"
 
 static void rs485SetTx(bool tx) {
-  digitalWrite(RS485_DE_RE_PIN, tx ? HIGH : LOW);
+  digitalWrite(PIN_RS485_DE_RE, tx ? HIGH : LOW);
   delayMicroseconds(RS485_TX_TURNAROUND_US);
 }
 
@@ -136,8 +136,8 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   // Compute CRC over substring up to and including the trailing ';' after SEQ.
   size_t crcInputLen = (size_t)(crcPos - payload);
   if (crcInputLen == 0) return false;
-  uint16_t calc = crc16_modbus((const uint8_t*)payload, crcInputLen);
-  if (((uint32_t)calc & 0xFFFFu) != (rxCrc & 0xFFFFu)) return false;
+  uint16_t actualCrc = Crc16::calculateModbus((const uint8_t*)payload, crcPos - payload);
+  if (((uint32_t)actualCrc & 0xFFFFu) != (rxCrc & 0xFFFFu)) return false;
 
   int lvl = 0;
   float dist = -1.0f;
@@ -201,10 +201,10 @@ static bool parseSensorFrameStrict(const char* payload, int& lvlOut, float& flow
   return true;
 }
 
-void rs485_init() {
-  pinMode(RS485_DE_RE_PIN, OUTPUT);
-  digitalWrite(RS485_DE_RE_PIN, LOW);  // RX mode by default
-  Serial2.begin(RS485_UART_BAUD, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+void Rs485Comm::init() {
+  pinMode(PIN_RS485_DE_RE, OUTPUT);
+  digitalWrite(PIN_RS485_DE_RE, LOW);  // RX mode by default
+  Serial2.begin(RS485_UART_BAUD, SERIAL_8N1, PIN_RS485_RX, PIN_RS485_TX);
 }
 
 static bool pollRemoteSensorNodeInternal(uint32_t timeBudgetMs) {
@@ -342,11 +342,11 @@ static bool pollRemoteSensorNodeInternal(uint32_t timeBudgetMs) {
   return gotFrame;
 }
 
-bool rs485_requestData(uint32_t timeBudgetMs) {
+bool Rs485Comm::requestData(uint32_t timeBudgetMs) {
   return pollRemoteSensorNodeInternal(timeBudgetMs);
 }
 
-Rs485SensorData rs485_getParsedData() {
+Rs485SensorData Rs485Comm::getParsedData() {
   Rs485SensorData d{};
   d.waterLevelPct = waterLevelPct;
   d.flowRateLpm = flowRateLpm;

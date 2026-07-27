@@ -1,4 +1,4 @@
-# ADR-002: Deprecate Arduino IDE Parity Build
+# ADR 0001: Deprecate Arduino IDE Parity Build
 
 **Date:** 2026-07-26
 **Status:** Accepted
