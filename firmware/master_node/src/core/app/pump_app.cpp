@@ -1,10 +1,11 @@
 #include "pump_app.h"
 
-#include "../state/state.h"
-#include "../safety/safety_pump.h"
-#include "../utils/time_utils.h"
+#include "../../state/state.h"
+#include "../../safety/safety_pump.h"
+#include "../../utils/time_utils.h"
+#include "../../config/config.h"
 
-void app_checkCountdownExpiry() {
+void PumpApp::checkCountdownExpiry() {
   if (!isCountdownActive || pumpMode != "COUNTDOWN") return;
   uint32_t now = millis();
   if (countdownEndMs != 0 && millisDeadlineReached(now, countdownEndMs)) {
@@ -15,7 +16,7 @@ void app_checkCountdownExpiry() {
   }
 }
 
-void app_executePumpLogic() {
+void PumpApp::executeLogic() {
   // Suspend control decisions until the first valid level sample.
   if (waterLevelPct < 0) return;
 

@@ -22,6 +22,12 @@ For implemented operational behavior (modes, safety rules, WiFi, restart/safe-mo
 ### System architecture
 
 - **ESP32 master** (controller)
+  - Refactored into a strict embedded layer hierarchy:
+    - `hal/`: Hardware Abstraction Layer (GPIO isolation).
+    - `drivers/`: Device control (Sensors, Pump).
+    - `services/`: Domain logic (Water Level, Flow).
+    - `core/`: State machine, Lifecycle, and Bootloader.
+    - `safety/`: Independent E-Stop, Dry-run, and Overflow evaluation logic.
   - Controls pump relay (contactor coil via relay module).
   - Runs the full safety state machine.
   - Syncs status to Firebase RTDB and reads control/config.

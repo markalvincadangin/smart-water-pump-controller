@@ -2,6 +2,7 @@
 
 #include "../state/state.h"
 #include "../connectivity/connectivity_cloud.h"
+#include "../drivers/pump_driver.h"
 #include "../utils/time_utils.h"
 
 void setPump(bool on) {
@@ -18,7 +19,11 @@ void setPump(bool on) {
     LOG(LOG_LEVEL_INFO, "PUMP", "Relay DE-ENERGIZED. Pump is now OFF.");
   }
 
-  digitalWrite(RELAY_PIN, on ? LOW : HIGH);
+  if (on) {
+      PumpDriver::turnOn();
+  } else {
+      PumpDriver::turnOff();
+  }
   isRunning = on;
   if (!on) {
     pumpOffStartMs = millis();
