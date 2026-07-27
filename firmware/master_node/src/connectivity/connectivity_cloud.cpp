@@ -170,16 +170,6 @@ void readDeviceConfigFromFirebase() {
   LOG(LOG_LEVEL_INFO, "FIREBASE", "Device config updated.");
 }
 
-void checkCountdownExpiry() {
-  if (!isCountdownActive || pumpMode != "COUNTDOWN") return;
-  uint32_t now = millis();
-  if (countdownEndMs != 0 && millisDeadlineReached(now, countdownEndMs)) {
-    LOG(LOG_LEVEL_INFO, "COUNTDOWN", "Timer expired. Pump stopped. Mode stays COUNTDOWN.");
-    isCountdownActive = false;
-    countdownEndMs    = 0;
-    // Keep COUNTDOWN mode active; user must explicitly start a new timer.
-  }
-}
 
 bool readFirebaseControl() {
   unsigned long t0 = millis();
@@ -280,7 +270,7 @@ bool readFirebaseControl() {
         emergencyStopLatched = true;
         emergencyStopSavedMode = pumpMode;  // Preserve current mode
         manualDesired = false;
-        setPump(false);
+        setPump(false); // Immediate shutdown (bypasses app_executePumpLogic tick for latency reasons)
         if (isCountdownActive) { isCountdownActive = false; countdownEndMs = 0; }
       }
       Firebase.RTDB.setBool(&fbdo, "/pump_system/control/emergency_stop", false);

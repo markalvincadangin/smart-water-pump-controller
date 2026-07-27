@@ -8,16 +8,23 @@ enum class SafetyDecision {
   STOP_OVERFLOW
 };
 
+struct OverflowStatus {
+  SafetyDecision decision;
+  bool nearThreshold;
+};
+
+struct SafetyStatus {
+  SafetyDecision decision;
+  bool overflowNearThreshold;
+};
+
 // Relay + pump state
 void setPump(bool on);
 
 // Safety checks
 void checkLevelSensorFailure(int sensorReading);
 void checkFlowSensorStuck();
-SafetyDecision checkOverflowProtection();
+OverflowStatus checkOverflowProtection();
 SafetyDecision checkDryRunProtection();
-SafetyDecision checkSafetyCutoff();
-
-// Main pump state machine (P0–P5)
-void executePumpLogic();
+SafetyStatus checkSafetyCutoff();
 
