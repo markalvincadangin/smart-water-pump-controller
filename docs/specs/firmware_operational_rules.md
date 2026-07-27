@@ -63,19 +63,23 @@ Higher-priority OFF conditions always override lower-priority run intent.
 
 ## 5. Mode-Specific Rules
 
-### 5.1 MANUAL
+### 5.1 Shared Gates (MANUAL & COUNTDOWN)
+
+Both MANUAL and COUNTDOWN modes share a unified pre-evaluation block for safety:
+- **Sensor Freshness**: Fresh/stable level data is required when level bypass is OFF. If freshness fails, the pump stops (failsafe) and active COUNTDOWN timers are aborted.
+- **Tank Full**: Reaching the tank-full threshold (`pump_stop_level`) unconditionally stops the pump (and aborts active COUNTDOWN timers).
+- **Min Off-Time**: Cooldown (`MIN_PUMP_OFF_TIME_MS`) is strictly enforced before any restart.
+
+### 5.2 MANUAL
 
 - Intent-based control:
   - `manual_desired = true` requests ON
   - `manual_desired = false` requests OFF
-- Fresh/stable level gates still apply when level bypass is OFF.
-- Tank-full threshold can stop pump in MANUAL.
-- Min off-time/cooldown still enforced.
 - Overflow policy is Option B:
   - `manual_runtime_warning` at ~90% runtime
   - hard overflow stop at configured max runtime
 
-### 5.2 COUNTDOWN
+### 5.3 COUNTDOWN
 
 - Runs only when:
   - `pumpMode == "COUNTDOWN"`
@@ -83,11 +87,11 @@ Higher-priority OFF conditions always override lower-priority run intent.
 - `countdown_start` is one-shot start.
 - `countdown_add_time` is validated and capped extension.
 - `countdown_stop` clears timer but keeps mode COUNTDOWN (idle).
-- On expiry:
+- On expiry (or if interrupted by a shared safety gate):
   - pump OFF
   - mode remains COUNTDOWN idle until explicit restart
 
-### 5.3 AUTO
+### 5.4 AUTO
 
 - Start at/below `pump_start_level`.
 - Stop at/above `pump_stop_level`.

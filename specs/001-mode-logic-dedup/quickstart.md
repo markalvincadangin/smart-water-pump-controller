@@ -24,6 +24,11 @@ The implementation decoupled safety evaluation from hardware execution (i.e. `ch
    - **Outcome:** System must stop the pump, log `[ERROR] DRY-RUN LOCKOUT`, and write `is_error=true` to RTDB. Wait for `clear_error` to recover.
    - Repeat the dry run simulation in MANUAL mode and COUNTDOWN mode.
    - **Outcome:** Same behavior in all modes.
+   - **Code Trace Proof (T023):** 
+     - In `executePumpLogic()`, `checkSafetyCutoff()` is called universally at the top of the function *before* any mode-specific branching (`AUTO`, `MANUAL`, `COUNTDOWN`).
+     - `checkSafetyCutoff()` evaluates `checkDryRunProtection()`, which returns `SafetyDecision::STOP_DRYRUN` on trigger.
+     - `executePumpLogic()` immediately interprets `SafetyDecision::STOP_DRYRUN`, calls `setPump(false)`, and executes an early `return`.
+     - Thus, it's structurally guaranteed that the dry-run trigger forces the pump OFF in *all* modes.
 
 4. **Validate Timer Expiration (Hardware/Serial Monitor)**
    - Trigger a 1-minute countdown.

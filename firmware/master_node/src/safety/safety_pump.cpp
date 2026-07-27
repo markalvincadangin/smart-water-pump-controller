@@ -108,7 +108,7 @@ void checkFlowSensorStuck() {
 }
 
 
-void checkOverflowProtection() {
+SafetyDecision checkOverflowProtection() {
   static bool manualRuntimeWarnLogged = false;
 
   if (!isRunning || !(pumpMode == "AUTO" || pumpMode == "COUNTDOWN" || pumpMode == "MANUAL")) {
@@ -116,13 +116,13 @@ void checkOverflowProtection() {
     pumpAutoStartMs = 0;
     manualRuntimeWarning = false;
     manualRuntimeWarnLogged = false;
-    return;
+    return SafetyDecision::OK;
   }
 
   if (!pumpAutoStartTracking) {
     pumpAutoStartTracking = true;
     pumpAutoStartMs = millis();
-    return;
+    return SafetyDecision::OK;
   }
 
   uint32_t maxRuntimeMs = (uint32_t)cfgMaxPumpRuntimeMin * 60000UL;
@@ -144,14 +144,15 @@ void checkOverflowProtection() {
 
   if (elapsed >= maxRuntimeMs) {
     isOverflowError = true;
-    setPump(false);
     pumpAutoStartTracking = false;
     LOG(LOG_LEVEL_ERROR, "SAFETY", "[ERROR] Max runtime exceeded (%d min). Pump stopped.", cfgMaxPumpRuntimeMin);
     pushFirebaseErrorLog("CRITICAL", "SAFETY_OVERFLOW", "Max runtime exceeded. Pump stopped.");
+    return SafetyDecision::STOP_OVERFLOW;
   }
+  return SafetyDecision::OK;
 }
 
-void checkDryRunProtection() {
+SafetyDecision checkDryRunProtection() {
   // If flow sensor bypass is on, clear any existing dry-run lockout and skip the check.
   // Bypass must recover the controller as well as prevent new dry-run trips.
   if (cfgBypassFlowSensor) {
@@ -163,13 +164,13 @@ void checkDryRunProtection() {
       lastFaultMessage = "";
       LOG(LOG_LEVEL_INFO, "SAFETY", "Flow bypass active. Clearing dry-run lockout.");
     }
-    return;
+    return SafetyDecision::OK;
   }
 
   if (!isRunning) {
     dryRunTimerActive = false;
     dryRunStartMs = 0;
-    return;
+    return SafetyDecision::OK;
   }
 
   // If remote sensor data is stale/unstable, do not advance a dry-run timer.
@@ -180,7 +181,7 @@ void checkDryRunProtection() {
   if (!remoteSensorStable || !levelFreshGate) {
     dryRunTimerActive = false;
     dryRunStartMs = 0;
-    return;
+    return SafetyDecision::OK;
   }
 
   unsigned long dryRunTimeoutMs = (unsigned long)cfgDryRunTimeoutSec * 1000UL;
@@ -194,9 +195,9 @@ void checkDryRunProtection() {
       if (elapsedDr >= dryRunTimeoutMs) {
         isDryRunError = true;
         // HARD SAFETY: always stop the pump regardless of mode.
-        setPump(false);
         LOG(LOG_LEVEL_ERROR, "SAFETY", "[ERROR] DRY-RUN LOCKOUT. Pump stopped; waiting for acknowledge.");
         pushFirebaseErrorLog("CRITICAL", "SAFETY_DRY_RUN", "DRY-RUN LOCKOUT. Pump stopped.");
+        return SafetyDecision::STOP_DRYRUN;
       }
     }
   } else {
@@ -206,12 +207,17 @@ void checkDryRunProtection() {
     dryRunTimerActive = false;
     dryRunStartMs = 0;
   }
+  return SafetyDecision::OK;
 }
 
-void checkSafetyCutoff() {
-  checkDryRunProtection();
+SafetyDecision checkSafetyCutoff() {
+  SafetyDecision dryRunDecision = checkDryRunProtection();
   checkFlowSensorStuck();
-  checkOverflowProtection();
+  SafetyDecision overflowDecision = checkOverflowProtection();
+
+  if (dryRunDecision != SafetyDecision::OK) return dryRunDecision;
+  if (overflowDecision != SafetyDecision::OK) return overflowDecision;
+  return SafetyDecision::OK;
 }
 
 void executePumpLogic() {
@@ -228,12 +234,22 @@ void executePumpLogic() {
     return;
   }
 
-  // Hard safety lockouts: always stop.
-  if (isDryRunError || isOverflowError) {
-    lastFaultCode    = isDryRunError ? "DRY_RUN" : "OVERFLOW";
-    lastFaultMessage = isDryRunError
-      ? "Dry-run lockout: low flow while pump was running."
-      : "Overflow protection: max runtime exceeded.";
+  // Hard safety lockouts: evaluate decisions.
+  SafetyDecision cutoffDecision = checkSafetyCutoff();
+  if (cutoffDecision == SafetyDecision::STOP_DRYRUN || isDryRunError) {
+    lastFaultCode    = "DRY_RUN";
+    lastFaultMessage = "Dry-run lockout: low flow while pump was running.";
+    setPump(false);
+    if (isCountdownActive) {
+      isCountdownActive = false; countdownEndMs = 0;
+      // Keep COUNTDOWN mode active; pump remains off until user starts again.
+    }
+    return;
+  }
+  
+  if (cutoffDecision == SafetyDecision::STOP_OVERFLOW || isOverflowError) {
+    lastFaultCode    = "OVERFLOW";
+    lastFaultMessage = "Overflow protection: max runtime exceeded.";
     setPump(false);
     if (isCountdownActive) {
       isCountdownActive = false; countdownEndMs = 0;
@@ -277,66 +293,55 @@ void executePumpLogic() {
     }
   }
 
-  if (pumpMode == "MANUAL") {
-    // MANUAL is intent-based; manualDesired=false keeps the pump OFF (mode stays MANUAL).
-    if (!manualDesired) {
+  if (pumpMode == "MANUAL" || pumpMode == "COUNTDOWN") {
+    bool isIntentActive = (pumpMode == "MANUAL") ? manualDesired : isCountdownActive;
+    
+    if (!isIntentActive) {
       setPump(false);
       return;
     }
 
-    // In MANUAL, we still require fresh/stable level data when bypass is OFF.
+    // Common safety checks for MANUAL and COUNTDOWN
     if (!cfgBypassLevelSensor && !allowStartFromSensors) {
       if (isRunning) {
         lastFaultCode = (!remoteSensorStable || !levelFreshOk) ? "COMM_LOSS" : "STALE_LEVEL";
         lastFaultMessage = "No fresh/stable level data. Pump stopped (failsafe).";
         setPump(false);
       }
-      return;
-    }
-    if (isLevelSensorError && !cfgBypassLevelSensor) {
-      if (isRunning) {
-        LOG(LOG_LEVEL_ERROR, "MANUAL", "Level sensor error — stopping (fail-safe).");
-        lastFaultCode    = "LEVEL_SENSOR";
-        lastFaultMessage = "Level sensor offline: pump stopped in MANUAL (fail-safe).";
-        setPump(false);
+      if (pumpMode == "COUNTDOWN") {
+        isCountdownActive = false; countdownEndMs = 0;
       }
       return;
     }
-    if (!cfgBypassLevelSensor && waterLevelPct >= cfgPumpStopLevel) {
-      LOG(LOG_LEVEL_INFO, "MANUAL", "Tank full (%d%%). Stopping pump (mode stays MANUAL).", waterLevelPct);
-      setPump(false);
+
+    if (isLevelSensorError && !cfgBypassLevelSensor) {
+      if (isRunning) {
+        LOG(LOG_LEVEL_ERROR, pumpMode.c_str(), "Level sensor error — stopping (fail-safe).");
+        lastFaultCode    = "LEVEL_SENSOR";
+        lastFaultMessage = "Level sensor offline: pump stopped (fail-safe).";
+        setPump(false);
+      }
+      if (pumpMode == "COUNTDOWN") {
+        isCountdownActive = false; countdownEndMs = 0;
+      }
       return;
     }
+
+    if (!cfgBypassLevelSensor && waterLevelPct >= cfgPumpStopLevel) {
+      LOG(LOG_LEVEL_INFO, pumpMode.c_str(), "Tank full (%d%%). Stopping pump.", waterLevelPct);
+      setPump(false);
+      if (pumpMode == "COUNTDOWN") {
+        isCountdownActive = false; countdownEndMs = 0;
+      }
+      return;
+    }
+
+    // Minimum off-time check
     if (!isRunning && pumpOffStartMs > 0 && elapsedMillis32(nowMsPump, pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
       return;
     }
+    
     setPump(true);
-    return;
-  }
-
-  if (pumpMode == "COUNTDOWN") {
-    if (isCountdownActive) {
-      if (!cfgBypassLevelSensor && !allowStartFromSensors) {
-        lastFaultCode = (!remoteSensorStable || !levelFreshOk) ? "COMM_LOSS" : "STALE_LEVEL";
-        lastFaultMessage = "No fresh/stable level data. Pump stopped (failsafe).";
-        setPump(false);
-        isCountdownActive = false; countdownEndMs = 0;
-        // Keep COUNTDOWN mode active; user must explicitly start again.
-        return;
-      }
-      if (!cfgBypassLevelSensor && waterLevelPct >= cfgPumpStopLevel) {
-        LOG(LOG_LEVEL_INFO, "COUNTDOWN", "Tank full (%d%%). Stopping early.", waterLevelPct);
-        setPump(false); isCountdownActive = false; countdownEndMs = 0;
-        // Keep COUNTDOWN mode active.
-        return;
-      }
-      if (!isRunning && pumpOffStartMs > 0 && elapsedMillis32(nowMsPump, pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
-        return;
-      }
-      setPump(true);
-    } else {
-      setPump(false);
-    }
     return;
   }
 
