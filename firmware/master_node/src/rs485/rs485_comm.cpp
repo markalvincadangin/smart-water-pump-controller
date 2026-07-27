@@ -256,21 +256,21 @@ static bool pollRemoteSensorNodeInternal(uint32_t timeBudgetMs) {
 
     if (!rs485ReadFrame(payload, sizeof(payload), frameTimeoutMs)) {
       if (attempt == (RS485_MAX_RETRIES - 1)) {
-        LOG(LOG_LEVEL_WARN, "RS485-ERR", "ReadFrame Timeout/Fail (all retries)");
+        LOG(APP_LOG_LEVEL_WARN, "RS485-ERR", "ReadFrame Timeout/Fail (all retries)");
       }
       delay(4);
       continue;
     }
     if (!validateSensorResponseFrame(payload)) {
       if (attempt == (RS485_MAX_RETRIES - 1)) {
-        LOG(LOG_LEVEL_WARN, "RS485-ERR", "Frame structure invalid (all retries).");
+        LOG(APP_LOG_LEVEL_WARN, "RS485-ERR", "Frame structure invalid (all retries).");
       }
       delay(4);
       continue;
     }
     if (!parseSensorFrameStrict(payload, lvl, flow, err, seq, ldsc)) {
       if (attempt == (RS485_MAX_RETRIES - 1)) {
-        LOG(LOG_LEVEL_ERROR, "RS485-ERR", "Parse strict failed after retries. Payload: %s", payload);
+        LOG(APP_LOG_LEVEL_ERROR, "RS485-ERR", "Parse strict failed after retries. Payload: %s", payload);
       }
       delay(4);
       continue;

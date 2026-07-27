@@ -52,3 +52,11 @@ graphify-out/
 # Publication hygiene
 *-default-rtdb-export*.json
 tmp_admins.json
+
+# Android / Gradle
+*.iml
+.gradle
+local.properties
+.externalNativeBuild
+.cxx
+app/build/

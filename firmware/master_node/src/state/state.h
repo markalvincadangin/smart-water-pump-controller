@@ -2,6 +2,14 @@
 
 #include "../config/config.h"
 
+enum class DeviceLifecycle {
+    UNCLAIMED,
+    PROVISIONING,
+    ONLINE
+};
+
+extern DeviceLifecycle deviceLifecycle;
+
 // Firebase objects
 extern FirebaseData   fbdo;
 extern FirebaseAuth   auth;
@@ -183,7 +191,6 @@ extern unsigned long lastSleepLogMs;
 extern unsigned long lastSensorMs;
 extern unsigned long lastFirebaseMs;
 extern unsigned long lastDeviceConfigMs;
-extern unsigned long lastWifiRetryMs;
 
 // Heap diagnostics
 extern unsigned long lastHeapDiagMs;
