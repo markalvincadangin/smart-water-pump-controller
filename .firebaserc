@@ -1,6 +1,7 @@
 {
   "projects": {
-    "smart-pump": "smart-water-pump-system"
+    "smart-pump": "smart-water-pump-system",
+    "smartflow": "smartflow-fed87"
   },
   "targets": {},
   "etags": {}

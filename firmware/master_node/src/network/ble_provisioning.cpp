@@ -3,6 +3,7 @@
 #include "../config/config.h"
 #include "../state/state.h"
 #include "../utils/app_logger.h"
+#include <nvs_flash.h>
 
 // Generate a random-looking UUID for SmartFlow provisioning
 #define PROV_SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -10,11 +11,14 @@
 #define PASS_CHAR_UUID           "beb5483e-36e1-4688-b7f5-ea07361b26a9"
 #define TOKEN_CHAR_UUID          "beb5483e-36e1-4688-b7f5-ea07361b26aa"
 #define COMMIT_CHAR_UUID         "beb5483e-36e1-4688-b7f5-ea07361b26ab"
+#define STATUS_CHAR_UUID         "beb5483e-36e1-4688-b7f5-ea07361b26ac"
+#define RESET_CHAR_UUID          "beb5483e-36e1-4688-b7f5-ea07361b26ad"
 
 static String provSsid = "";
 static String provPass = "";
 static String provToken = "";
 static bool provisionCommitReceived = false;
+static NimBLECharacteristic* pStatusChar = nullptr;
 
 class ProvCallbacks: public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pCharacteristic) {
@@ -31,6 +35,12 @@ class ProvCallbacks: public NimBLECharacteristicCallbacks {
             if (value == "1" || value == "true" || value == "commit") {
                 LOG(APP_LOG_LEVEL_INFO, "BLE", "Commit command received.");
                 provisionCommitReceived = true;
+            }
+        } else if (uuid == RESET_CHAR_UUID) {
+            if (value == "RESET") {
+                LOG(APP_LOG_LEVEL_INFO, "BLE", "Factory Reset command received via BLE. Erasing NVS...");
+                nvs_flash_erase();
+                esp_restart();
             }
         }
     }
@@ -72,6 +82,12 @@ void BleProvisioning::init() {
 
     NimBLECharacteristic* pCommitChar = pService->createCharacteristic(COMMIT_CHAR_UUID, NIMBLE_PROPERTY::WRITE);
     pCommitChar->setCallbacks(callbacks);
+
+    pStatusChar = pService->createCharacteristic(STATUS_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    pStatusChar->setValue("WAITING");
+
+    NimBLECharacteristic* pResetChar = pService->createCharacteristic(RESET_CHAR_UUID, NIMBLE_PROPERTY::WRITE);
+    pResetChar->setCallbacks(callbacks);
 
     pService->start();
     
@@ -115,4 +131,12 @@ bool BleProvisioning::isProvisioned() {
         prefs.end();
     }
     return hasWifi;
+}
+
+void BleProvisioning::updateStatus(const char* status) {
+    if (pStatusChar) {
+        pStatusChar->setValue(status);
+        pStatusChar->notify();
+        LOG(APP_LOG_LEVEL_INFO, "BLE", "Status updated: %s", status);
+    }
 }

@@ -48,3 +48,12 @@ data class DeviceDiagnostics(
     val wifiRSSI: Int = 0,
     val restartReason: String = ""
 )
+
+data class DeviceEvent(
+    val id: String = "",
+    val timestamp: Long = 0,
+    val severity: String = "",
+    val category: String = "",
+    val code: String = "",
+    val message: String = ""
+)

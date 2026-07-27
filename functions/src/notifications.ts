@@ -25,7 +25,7 @@ export async function canSend(
   uid: string,
   type: NotificationType
 ): Promise<boolean> {
-  const lastRef = db.ref(`pump_system/config/notification_last_sent/${uid}`);
+  const lastRef = db.ref(`users/${uid}/notification_last_sent`);
   const snap = await lastRef.get();
   const last: LastSent = snap.val() || {};
   const now = Math.floor(Date.now() / 1000);
@@ -42,6 +42,6 @@ export async function recordSent(
   uid: string,
   type: NotificationType
 ): Promise<void> {
-  const lastRef = db.ref(`pump_system/config/notification_last_sent/${uid}`);
+  const lastRef = db.ref(`users/${uid}/notification_last_sent`);
   await lastRef.update({ [type]: Math.floor(Date.now() / 1000) });
 }
