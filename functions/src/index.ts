@@ -1,69 +1,28 @@
 /**
  * Smart Water Pump Controller — Cloud Functions
- * Sends email notifications for high-risk events: dry-run, low tank, pump started.
+ * Sends FCM push notifications for high-risk events: dry-run, overflow, low tank, pump started.
  *
- * Setup: firebase functions:secrets:set RESEND_API_KEY
- * Optional: create .env in functions/ with RESEND_FROM_EMAIL=...
+ * No email dependencies. Requires Firebase Cloud Messaging enabled on the project.
+ * Users must store their FCM token at: /users/{uid}/notification_prefs/fcmTokens/{tokenId}
  */
 
 import * as admin from "firebase-admin";
-import { onValueWritten } from "firebase-functions/v2/database";
-import { defineSecret } from "firebase-functions/params";
+import { onValueWritten, onValueDeleted } from "firebase-functions/v2/database";
 import { logger } from "firebase-functions";
-import { Resend } from "resend";
 import { canSend, recordSent } from "./notifications";
 
 admin.initializeApp();
 
 const db = admin.database();
 
-const resendApiKey = defineSecret("RESEND_API_KEY");
-
-interface PumpStatus {
-  water_level_percent: number;
-  is_running: boolean;
-  flow_rate_lpm: number;
-  is_error: boolean;
-  is_overflow_error?: boolean;  // Phase 2: max runtime exceeded
-}
-
 interface NotificationConfig {
   enabled?: boolean;
-  email?: string;
-  fcmTokens?: Record<string, string>;  // deviceId -> FCM token for push notifications
+  fcmTokens?: Record<string, string>;  // tokenId -> FCM token
   dryRunAlert?: boolean;
   lowLevelAlert?: boolean;
   lowLevelThreshold?: number;
   pumpStartedAlert?: boolean;
-  overflowAlert?: boolean;  // Phase 2: max runtime overflow
-}
-
-
-async function sendEmail(
-  apiKey: string,
-  to: string,
-  subject: string,
-  html: string
-): Promise<boolean> {
-  const resend = new Resend(apiKey);
-  const from = process.env.RESEND_FROM_EMAIL || "Smart Water Pump <onboarding@resend.dev>";
-
-  try {
-    const { error } = await resend.emails.send({
-      from,
-      to,
-      subject,
-      html,
-    });
-    if (error) {
-      logger.error("Resend error:", error);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    logger.error("Email send failed:", err);
-    return false;
-  }
+  overflowAlert?: boolean;
 }
 
 async function sendPush(
@@ -86,7 +45,7 @@ async function sendPush(
     } else {
       const result = await messaging.sendEachForMulticast({ ...base, tokens });
       if (result.failureCount > 0) {
-        result.responses.forEach((r, i) => {
+        result.responses.forEach((r: any, i: number) => {
           if (!r.success) logger.warn("FCM send failed for token", i, r.error?.message);
         });
       }
@@ -97,135 +56,123 @@ async function sendPush(
 }
 
 async function getActiveNotificationConfigs(): Promise<Array<{ uid: string; config: NotificationConfig }>> {
-  const snap = await db.ref("pump_system/config/notifications_by_user").get();
-  const all = snap.val() as Record<string, NotificationConfig> | null;
-  if (!all) return [];
+  const snap = await db.ref("users").get();
+  const allUsers = snap.val() as Record<string, { notification_prefs?: NotificationConfig }> | null;
+  if (!allUsers) return [];
 
-  return Object.entries(all)
-    .map(([uid, cfg]) => ({ uid, config: cfg || {} }))
+  return Object.entries(allUsers)
+    .map(([uid, data]) => ({ uid, config: data.notification_prefs || {} }))
     .filter(({ config }) => {
       if (!config.enabled) return false;
-      const hasEmail = !!config.email;
-      const hasPush = config.fcmTokens && Object.keys(config.fcmTokens).length > 0;
-      return hasEmail || hasPush;
+      return config.fcmTokens && Object.keys(config.fcmTokens).length > 0;
     });
 }
 
-export const onStatusChange = onValueWritten(
+const getFcmTokens = (config: NotificationConfig): string[] =>
+  config.fcmTokens ? Object.values(config.fcmTokens).filter(Boolean) : [];
+
+export const onDeviceUpdated = onValueWritten(
   {
-    ref: "/pump_system/status",
+    ref: "/devices/{deviceId}",
     region: "asia-southeast1",
-    secrets: [resendApiKey],
   },
-  async (event) => {
-    const after = event.data.after.val() as PumpStatus | null;
-    const before = event.data.before?.val() as PumpStatus | null;
+  async (event: any) => {
+    const after = event.data.after.val();
+    const before = event.data.before?.val();
 
     if (!after) return;
+
+    // Extract data from V2 schema
+    const waterLevel = after.telemetry?.waterLevel ?? 0;
+    const flowRate = after.telemetry?.flowRate ?? 0;
+    const isRunning = after.shadow?.reported?.pumpState ?? false;
+    const wasRunning = before?.shadow?.reported?.pumpState ?? false;
+
+    // Check for recent error events
+    const eventsMap = after.events as Record<string, any> | undefined;
+    const latestEvent = eventsMap
+      ? Object.values(eventsMap).sort((a, b) => b.timestamp - a.timestamp)[0]
+      : null;
+    const isDryRunError = latestEvent?.code === "DRY_RUN";
+    const isOverflowError = latestEvent?.code === "OVERFLOW";
 
     const configs = await getActiveNotificationConfigs();
     if (!configs.length) return;
 
-    const apiKey = resendApiKey.value();
-    if (!apiKey) {
-      logger.warn("RESEND_API_KEY not set — skipping email");
-      return;
-    }
-
-    const pushTokens = (config: NotificationConfig): string[] =>
-      config.fcmTokens ? Object.values(config.fcmTokens).filter(Boolean) : [];
-
     for (const { uid, config } of configs) {
+      // Check if user owns this device
+      const userDevicesSnap = await db.ref(`users/${uid}/devices/${event.params.deviceId}`).get();
+      if (!userDevicesSnap.exists()) continue;
+
       const threshold = config.lowLevelThreshold ?? 20;
-      const tokens = pushTokens(config);
+      const tokens = getFcmTokens(config);
+      if (tokens.length === 0) continue;
 
-      // 1. Dry-Run Lockout (highest priority)
-      if (after.is_error && (config.dryRunAlert ?? true)) {
+      // 1. Dry-Run Lockout
+      if (isDryRunError && (config.dryRunAlert ?? true)) {
         if (await canSend(db, uid, "dryRun")) {
-          const body = `No flow detected. Tank: ${after.water_level_percent}%. Check pump and water source.`;
-          let delivered = false;
-          if (config.email && apiKey) {
-            const sent = await sendEmail(
-              apiKey,
-              config.email,
-              "⚠ Smart Water Pump — Dry-Run Lockout Active",
-              `<h2>Dry-Run Protection Triggered</h2><p>The pump has shut down due to no flow. Flow: ${after.flow_rate_lpm.toFixed(1)} LPM, Tank: ${after.water_level_percent}%.</p><p><strong>Action:</strong> Check the pump and water source. Acknowledge in the dashboard to resume.</p>`
-            );
-            if (sent) delivered = true;
-          }
-          if (tokens.length > 0) {
-            await sendPush(tokens, "⚠ Dry-Run Lockout", body, "dryRun");
-            delivered = true;
-          }
-          if (delivered) await recordSent(db, uid, "dryRun");
+          await sendPush(
+            tokens,
+            "⚠ Dry-Run Lockout",
+            `No flow detected. Tank: ${waterLevel}%. Check pump and water source.`,
+            "dryRun"
+          );
+          await recordSent(db, uid, "dryRun");
         }
       }
 
-      // 1b. Overflow (max runtime exceeded) — Phase 2
-      if (after.is_overflow_error && (config.overflowAlert ?? true)) {
+      // 2. Overflow Protection
+      if (isOverflowError && (config.overflowAlert ?? true)) {
         if (await canSend(db, uid, "overflow")) {
-          const body = `Max runtime exceeded. Tank: ${after.water_level_percent}%. Check tank and sensor.`;
-          let delivered = false;
-          if (config.email && apiKey) {
-            const sent = await sendEmail(
-              apiKey,
-              config.email,
-              "⚠ Smart Water Pump — Overflow Protection Triggered",
-              `<h2>Max Runtime / Overflow Protection Triggered</h2><p>The pump has shut down. Tank: ${after.water_level_percent}%, Flow: ${after.flow_rate_lpm.toFixed(1)} LPM.</p><p><strong>Action:</strong> Check the tank and ultrasonic sensor. Acknowledge in the dashboard to resume.</p>`
-            );
-            if (sent) delivered = true;
-          }
-          if (tokens.length > 0) {
-            await sendPush(tokens, "⚠ Overflow Protection", body, "overflow");
-            delivered = true;
-          }
-          if (delivered) await recordSent(db, uid, "overflow");
+          await sendPush(
+            tokens,
+            "⚠ Overflow Protection",
+            `Max runtime exceeded. Tank: ${waterLevel}%. Check tank and sensor.`,
+            "overflow"
+          );
+          await recordSent(db, uid, "overflow");
         }
       }
 
-      // 2. Low tank level warning
-      if (after.water_level_percent <= threshold && (config.lowLevelAlert ?? true)) {
+      // 3. Low tank level
+      if (waterLevel <= threshold && (config.lowLevelAlert ?? true)) {
         if (await canSend(db, uid, "lowLevel")) {
-          const body = `Water at ${after.water_level_percent}% (threshold: ${threshold}%).`;
-          let delivered = false;
-          if (config.email && apiKey) {
-            const sent = await sendEmail(
-              apiKey,
-              config.email,
-              `⚠ Smart Water Pump — Low Tank Level (${after.water_level_percent}%)`,
-              `<h2>Low Tank Level Warning</h2><p>Water level is at <strong>${after.water_level_percent}%</strong>. Pump: ${after.is_running ? "Running" : "Stopped"}, Flow: ${after.flow_rate_lpm.toFixed(1)} LPM.</p>`
-            );
-            if (sent) delivered = true;
-          }
-          if (tokens.length > 0) {
-            await sendPush(tokens, `⚠ Low Tank (${after.water_level_percent}%)`, body, "lowLevel");
-            delivered = true;
-          }
-          if (delivered) await recordSent(db, uid, "lowLevel");
+          await sendPush(
+            tokens,
+            `⚠ Low Tank (${waterLevel}%)`,
+            `Water at ${waterLevel}% (threshold: ${threshold}%). Pump: ${isRunning ? "Running" : "Stopped"}.`,
+            "lowLevel"
+          );
+          await recordSent(db, uid, "lowLevel");
         }
       }
 
-      // 3. Pump just started (transition from off → on)
-      if ((config.pumpStartedAlert ?? true) && after.is_running && before && !before.is_running) {
+      // 4. Pump just started
+      if ((config.pumpStartedAlert ?? true) && isRunning && !wasRunning) {
         if (await canSend(db, uid, "pumpStarted")) {
-          const body = `Tank: ${after.water_level_percent}%, Flow: ${after.flow_rate_lpm.toFixed(1)} LPM`;
-          let delivered = false;
-          if (config.email && apiKey) {
-            const sent = await sendEmail(
-              apiKey,
-              config.email,
-              "▶ Smart Water Pump — Pump Started",
-              `<h2>Pump Started</h2><p>The pump is now running. Tank: ${after.water_level_percent}%, Flow: ${after.flow_rate_lpm.toFixed(1)} LPM.</p>`
-            );
-            if (sent) delivered = true;
-          }
-          if (tokens.length > 0) {
-            await sendPush(tokens, "▶ Pump Started", body, "pumpStarted");
-            delivered = true;
-          }
-          if (delivered) await recordSent(db, uid, "pumpStarted");
+          await sendPush(
+            tokens,
+            "▶ Pump Started",
+            `Tank: ${waterLevel}%, Flow: ${flowRate.toFixed(1)} LPM`,
+            "pumpStarted"
+          );
+          await recordSent(db, uid, "pumpStarted");
         }
       }
+    }
+  }
+);
+
+export const onDeviceUnclaimed = onValueDeleted(
+  {
+    ref: "/users/{uid}/devices/{deviceId}",
+    region: "asia-southeast1",
+  },
+  async (event: any) => {
+    const deviceId = event.params.deviceId;
+    if (deviceId) {
+      logger.info(`Device ${deviceId} unclaimed by user ${event.params.uid}. Deleting device node.`);
+      await db.ref(`/devices/${deviceId}`).remove();
     }
   }
 );

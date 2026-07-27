@@ -9,9 +9,12 @@ import kotlinx.coroutines.launch
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.schedulers.Schedulers
+import com.smartflow.data.FirebaseCloudStore
+import com.google.firebase.auth.FirebaseAuth
 
 class ProvisioningViewModel(
-    private val bleClient: BleProvisioningClient
+    private val bleClient: BleProvisioningClient,
+    private val cloudStore: FirebaseCloudStore
 ) : ViewModel() {
 
     private val _provisioningState = MutableStateFlow<ProvisioningState>(ProvisioningState.Idle)
@@ -40,8 +43,25 @@ class ProvisioningViewModel(
         provisionDisposable = bleClient.provisionDevice(macAddress, ssid, pass)
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
-            .subscribe({ token ->
-                _provisioningState.value = ProvisioningState.Success(token)
+            .subscribe({ update ->
+                if (update.startsWith("TOKEN:")) {
+                    val deviceId = update.removePrefix("TOKEN:")
+                    val uid = FirebaseAuth.getInstance().currentUser?.uid
+                    if (uid != null) {
+                        viewModelScope.launch {
+                            try {
+                                cloudStore.claimDevice(uid, deviceId)
+                                _provisioningState.value = ProvisioningState.Success(deviceId)
+                            } catch (e: Exception) {
+                                _provisioningState.value = ProvisioningState.Error("Failed to claim device: ${e.message}")
+                            }
+                        }
+                    } else {
+                        _provisioningState.value = ProvisioningState.Error("Not logged in")
+                    }
+                } else {
+                    _provisioningState.value = ProvisioningState.ProvisioningUpdate(update)
+                }
             }, { error ->
                 _provisioningState.value = ProvisioningState.Error("Provisioning failed: ${error.message}")
             })
@@ -59,6 +79,7 @@ sealed class ProvisioningState {
     object Scanning : ProvisioningState()
     data class DeviceFound(val macAddress: String) : ProvisioningState()
     object Provisioning : ProvisioningState()
+    data class ProvisioningUpdate(val message: String) : ProvisioningState()
     data class Success(val claimToken: String) : ProvisioningState()
     data class Error(val message: String) : ProvisioningState()
 }
