@@ -303,9 +303,11 @@ void executePumpLogic() {
 
     // Common safety checks for MANUAL and COUNTDOWN
     if (!cfgBypassLevelSensor && !allowStartFromSensors) {
-      if (isRunning) {
+      if (isRunning || pumpMode == "COUNTDOWN") {
         lastFaultCode = (!remoteSensorStable || !levelFreshOk) ? "COMM_LOSS" : "STALE_LEVEL";
         lastFaultMessage = "No fresh/stable level data. Pump stopped (failsafe).";
+      }
+      if (isRunning) {
         setPump(false);
       }
       if (pumpMode == "COUNTDOWN") {
@@ -315,10 +317,12 @@ void executePumpLogic() {
     }
 
     if (isLevelSensorError && !cfgBypassLevelSensor) {
-      if (isRunning) {
+      if (isRunning || pumpMode == "COUNTDOWN") {
         LOG(LOG_LEVEL_ERROR, pumpMode.c_str(), "Level sensor error — stopping (fail-safe).");
         lastFaultCode    = "LEVEL_SENSOR";
         lastFaultMessage = "Level sensor offline: pump stopped (fail-safe).";
+      }
+      if (isRunning) {
         setPump(false);
       }
       if (pumpMode == "COUNTDOWN") {
