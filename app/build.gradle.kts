@@ -59,7 +59,7 @@ dependencies {
     implementation("com.google.firebase:firebase-database")
     
     // BLE (RxAndroidBle)
-    implementation("com.polidea.rxandroidble3:rxandroidble:3.0.1")
+    implementation("com.polidea.rxandroidble3:rxandroidble:3.0.0")
     implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
     implementation("io.reactivex.rxjava3:rxjava:3.1.5")
 
