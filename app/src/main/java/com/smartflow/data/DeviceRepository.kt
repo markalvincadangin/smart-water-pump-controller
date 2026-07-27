@@ -11,4 +11,12 @@ class DeviceRepository(private val cloudStore: FirebaseCloudStore) {
     suspend fun setPumpState(deviceId: String, isOn: Boolean, mode: String = "MANUAL") {
         cloudStore.updateDesiredShadow(deviceId, ShadowState(pumpState = isOn, mode = mode))
     }
+
+    fun getEventsStream(deviceId: String): Flow<List<DeviceEvent>> {
+        return cloudStore.streamEvents(deviceId)
+    }
+
+    suspend fun unclaimDevice(uid: String, deviceId: String) {
+        cloudStore.unclaimDevice(uid, deviceId)
+    }
 }

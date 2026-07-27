@@ -14,6 +14,8 @@ class BleProvisioningClient(private val rxBleClient: RxBleClient) {
     private val CHAR_PASS_UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26a9")
     private val CHAR_TOKEN_UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26aa")
     private val CHAR_COMMIT_UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26ab")
+    private val CHAR_STATUS_UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26ac")
+    private val CHAR_RESET_UUID  = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26ad")
 
     fun scanForDevices(): Observable<String> {
         return rxBleClient.scanBleDevices()
@@ -22,20 +24,36 @@ class BleProvisioningClient(private val rxBleClient: RxBleClient) {
             .distinct()
     }
 
-    fun provisionDevice(macAddress: String, ssid: String, pass: String): Single<String> {
+    fun provisionDevice(macAddress: String, ssid: String, pass: String): Observable<String> {
         val device = rxBleClient.getBleDevice(macAddress)
         return device.establishConnection(false)
-            .flatMapSingle { connection ->
-                readCharacteristic(connection, CHAR_TOKEN_UUID)
-                    .flatMap { tokenBytes ->
-                        val token = String(tokenBytes, Charsets.UTF_8)
-                        writeCharacteristic(connection, CHAR_SSID_UUID, ssid)
-                            .flatMap { writeCharacteristic(connection, CHAR_PASS_UUID, pass) }
-                            .flatMap { writeCharacteristic(connection, CHAR_COMMIT_UUID, "1") }
-                            .map { token }
+            .flatMapObservable { connection ->
+                connection.setupNotification(CHAR_STATUS_UUID)
+                    .flatMap { notificationObservable ->
+                        val tokenSingle = readCharacteristic(connection, CHAR_TOKEN_UUID)
+                            .flatMap { tokenBytes ->
+                                val token = String(tokenBytes, Charsets.UTF_8)
+                                writeCharacteristic(connection, CHAR_SSID_UUID, ssid)
+                                    .flatMap { writeCharacteristic(connection, CHAR_PASS_UUID, pass) }
+                                    .flatMap { writeCharacteristic(connection, CHAR_COMMIT_UUID, "1") }
+                                    .map { "TOKEN:$token" }
+                            }
+                        
+                        Observable.merge(
+                            tokenSingle.toObservable(),
+                            notificationObservable.map { bytes -> String(bytes, Charsets.UTF_8) }
+                        )
                     }
             }
+    }
+
+    fun sendFactoryReset(macAddress: String): Single<ByteArray> {
+        val device = rxBleClient.getBleDevice(macAddress)
+        return device.establishConnection(false)
             .firstOrError()
+            .flatMap { connection ->
+                writeCharacteristic(connection, CHAR_RESET_UUID, "RESET")
+            }
     }
 
     private fun writeCharacteristic(
