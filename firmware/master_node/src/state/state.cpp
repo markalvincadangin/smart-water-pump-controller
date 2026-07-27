@@ -5,7 +5,9 @@ FirebaseData   fbdo;
 FirebaseAuth   auth;
 FirebaseConfig config;
 Preferences    prefs;
-uint8_t        gLogLevel = 2;
+uint8_t        gLogLevel = APP_LOG_LEVEL_INFO;
+
+DeviceLifecycle deviceLifecycle = DeviceLifecycle::UNCLAIMED;
 
 int   cfgTankEmptyCm         = TANK_EMPTY_CM;
 int   cfgTankFullCm          = TANK_FULL_CM;

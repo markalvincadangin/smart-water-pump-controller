@@ -17,6 +17,8 @@ public:
     void begin(unsigned long baud) {
         ::Serial.begin(baud);
     }
+    
+    void logEvent(int level, const char* comp, const char* fmt, ...);
 };
 
 extern AppLogger app_logger;
