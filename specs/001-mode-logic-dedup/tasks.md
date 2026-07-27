@@ -10,8 +10,8 @@
 
 **Purpose**: Cross-module groundwork and validation setup.
 
-- [ ] T001 Review constitution gate — confirm all applicable principles pass
-- [ ] T002 [P] Read current behavior in `firmware/master_node/src/safety/safety_pump.cpp` (no code changes)
+- [x] T001 Review constitution gate — confirm all applicable principles pass
+- [x] T002 [P] Read current behavior in `firmware/master_node/src/safety/safety_pump.cpp` (no code changes)
 
 **Checkpoint**: Constitution gate ✅ — implementation phases may begin
 
@@ -44,7 +44,7 @@
 
 - [x] T050 End-to-end validation: Trace the new enum returns in `executePumpLogic` to ensure they actually turn the pump off and do not cause logic loops.
 - [x] T051 [P] Update `docs/specs/firmware_operational_rules.md` to reflect the deduplicated rules for MANUAL and COUNTDOWN.
-- [ ] T052 Commit: `refactor(firmware): deduplicate mode gate logic and decouple safety execution` — Conventional Commits format
+- [x] T052 Commit: `refactor(firmware): deduplicate mode gate logic and decouple safety execution` — Conventional Commits format
 
 ---
 
