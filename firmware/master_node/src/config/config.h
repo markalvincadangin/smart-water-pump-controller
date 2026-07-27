@@ -159,20 +159,20 @@
 #define Serial app_logger
 
 // Logging levels and shared logger macro.
-#define LOG_LEVEL_ERROR   0
-#define LOG_LEVEL_WARN    1
-#define LOG_LEVEL_INFO    2
-#define LOG_LEVEL_DEBUG   3
-#define LOG_LEVEL_VERBOSE 4
+#define APP_LOG_LEVEL_ERROR   0
+#define APP_LOG_LEVEL_WARN    1
+#define APP_LOG_LEVEL_INFO    2
+#define APP_LOG_LEVEL_DEBUG   3
+#define APP_LOG_LEVEL_VERBOSE 4
 
 // Keep verbose level compiled in so debug_log_level can raise verbosity at runtime.
-#define LOG_COMPILE_FLOOR LOG_LEVEL_VERBOSE
+#define LOG_COMPILE_FLOOR APP_LOG_LEVEL_VERBOSE
 
 extern uint8_t gLogLevel;
 
 #define LOG(level, comp, fmt, ...) do { \
   if ((level) <= LOG_COMPILE_FLOOR && (level) <= gLogLevel) { \
-    app_logger.printf("[%s] " fmt "\n", comp, ##__VA_ARGS__); \
+    app_logger.logEvent(level, comp, fmt, ##__VA_ARGS__); \
   } \
 } while(0)
 

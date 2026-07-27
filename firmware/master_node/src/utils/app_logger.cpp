@@ -6,6 +6,9 @@
 // config.h rebinds Serial to app_logger for application code; restore the core symbol here.
 #undef Serial
 
+#include <stdarg.h>
+#include "../cloud/cloud_manager.h"
+
 #if defined(__has_include)
 #if __has_include(<Syslog.h>)
 #include <Syslog.h>
@@ -59,4 +62,20 @@ size_t AppLogger::write(const uint8_t *buffer, size_t size) {
         n += write(*buffer++);
     }
     return n;
+}
+
+void AppLogger::logEvent(int level, const char* comp, const char* fmt, ...) {
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    this->printf("[%s] %s\n", comp, buf);
+    
+    // Only push to cloud if it's an error or warning, to avoid spamming the events node.
+    if (level <= APP_LOG_LEVEL_WARN) {
+        String levelStr = (level == APP_LOG_LEVEL_ERROR) ? "ERROR" : "WARN";
+        CloudManager::pushEventLog(levelStr, comp, buf);
+    }
 }

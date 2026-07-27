@@ -5,7 +5,7 @@
 
 void PumpDriver::init() {
     PumpHal::init();
-    LOG(LOG_LEVEL_INFO, "PUMP_DRV", "Pump Driver Initialized");
+    LOG(APP_LOG_LEVEL_INFO, "PUMP_DRV", "Pump Driver Initialized");
 }
 
 void PumpDriver::turnOn() {

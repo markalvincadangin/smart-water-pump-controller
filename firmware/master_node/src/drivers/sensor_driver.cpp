@@ -7,7 +7,7 @@
 void SensorDriver::init() {
     UltrasonicHal::init();
     FlowMeterHal::init();
-    LOG(LOG_LEVEL_INFO, "SENS_DRV", "Sensor Driver Initialized");
+    LOG(APP_LOG_LEVEL_INFO, "SENS_DRV", "Sensor Driver Initialized");
 }
 
 int SensorDriver::getWaterLevelPercent() {

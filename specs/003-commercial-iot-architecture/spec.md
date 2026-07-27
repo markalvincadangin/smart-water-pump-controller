@@ -26,6 +26,13 @@ The architecture is guided by the following core quality attributes when making 
 
 ---
 
+## Clarifications
+
+### Session 2026-07-27
+- Q: Which mobile framework should we finalize for the client application? → A: Native Android (Kotlin + Jetpack Compose) to maximize BLE API stability.
+
+---
+
 ## Constitution Check *(mandatory gate)*
 
 | Principle | Applicable? | Notes |
@@ -75,7 +82,7 @@ Firmware is updated wirelessly via a dedicated OTA Manager subsystem that verifi
 - **FR-009**: Device MUST capture and report rich diagnostics to the cloud (e.g., Free Heap, CPU Usage, Flash Usage, RSSI, Watchdog counts, Restart reason).
 - **FR-010**: System MUST define a structured Event Logging model (`eventId`, `timestamp`, `severity`, `category`, `code`, `message`).
 - **FR-011**: NVS Persistence MUST be explicitly mapped (e.g., WiFi, Device ID, settings, thresholds, claim token) ensuring the ESP32 operates autonomously offline.
-- **FR-012**: Android Client MUST be built natively using Jetpack Compose and adhere to the MVVM architectural pattern (Presentation → ViewModel → Repository → Cloud Store).
+- **FR-012**: Android Client MUST be built natively using Kotlin and Jetpack Compose and adhere to the MVVM architectural pattern (Presentation → ViewModel → Repository → Cloud Store). This native approach was selected over cross-platform options to ensure maximum reliability when interfacing with low-level BLE APIs during headless provisioning.
 - **FR-013**: Architecture MUST define Architectural Decision Records (ADRs) to document why specific technologies (e.g., ESP-IDF, Firebase, Jetpack Compose) were chosen.
 
 ### Future Production Hardening

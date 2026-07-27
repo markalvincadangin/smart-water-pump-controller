@@ -8,17 +8,36 @@
 #include "../../drivers/pump_driver.h"
 #include "../../drivers/sensor_driver.h"
 #include "../../persistence/persistence.h"
-#include "../../connectivity/connectivity_cloud.h"
+#include "../../network/wifi_manager.h"
+#include "../../network/ble_provisioning.h"
+#include "../../cloud/cloud_manager.h"
 #include "../../utils/time_utils.h"
+
+String Bootloader::getBootReasonString() {
+  esp_reset_reason_t reason = esp_reset_reason();
+  switch (reason) {
+    case ESP_RST_POWERON:  return "Power-on";
+    case ESP_RST_EXT:      return "External reset";
+    case ESP_RST_SW:       return "Software reset";
+    case ESP_RST_PANIC:    return "Exception/panic";
+    case ESP_RST_INT_WDT:  return "Interrupt watchdog";
+    case ESP_RST_TASK_WDT: return "Task watchdog";
+    case ESP_RST_WDT:      return "Other watchdog";
+    case ESP_RST_DEEPSLEEP:return "Deep sleep wake";
+    case ESP_RST_BROWNOUT: return "Brownout";
+    case ESP_RST_SDIO:     return "SDIO reset";
+    default:               return "Unknown";
+  }
+}
 
 void Bootloader::executeSetup() {
   Serial.begin(115200);
   Serial.println("\n====================================");
-  LOG(LOG_LEVEL_INFO, "SYS", " SmartFlow");
+  LOG(APP_LOG_LEVEL_INFO, "SYS", " SmartFlow");
   Serial.println("====================================");
 
   bootReasonStr = getBootReasonString();
-  LOG(LOG_LEVEL_INFO, "BOOT", "Reset reason: %s", bootReasonStr.c_str());
+  LOG(APP_LOG_LEVEL_INFO, "BOOT", "Reset reason: %s", bootReasonStr.c_str());
 
   // String heap-fragmentation mitigation (reserve once at boot)
   pumpMode.reserve(12);
@@ -34,13 +53,13 @@ void Bootloader::executeSetup() {
   Rs485Comm::init();
   SensorDriver::init();
   
-  LOG(LOG_LEVEL_INFO, "INIT", "GPIO configured. Pump OFF.");
-  LOG(LOG_LEVEL_INFO, "INIT", "RS-485 UART2 initialized (115200 8N1).");
+  LOG(APP_LOG_LEVEL_INFO, "INIT", "GPIO configured. Pump OFF.");
+  LOG(APP_LOG_LEVEL_INFO, "INIT", "RS-485 UART2 initialized (115200 8N1).");
 
   checkCrashLoop();
   if (inSafeMode) {
-    LOG(LOG_LEVEL_INFO, "SAFE MODE", "Skipping WiFi, Firebase, and sensor init.");
-    LOG(LOG_LEVEL_INFO, "SAFE MODE", "Will auto-clear after 1 hour or full power cycle.");
+    LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Skipping WiFi, Firebase, and sensor init.");
+    LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Will auto-clear after 1 hour or full power cycle.");
     return;
   }
 
@@ -48,7 +67,7 @@ void Bootloader::executeSetup() {
   loadStateFromNVS();
 
   if (STARTUP_STABILIZE_MS > 0) {
-    LOG(LOG_LEVEL_INFO, "INIT", "Stabilization delay (%lums)...", (unsigned long)STARTUP_STABILIZE_MS);
+    LOG(APP_LOG_LEVEL_INFO, "INIT", "Stabilization delay (%lums)...", (unsigned long)STARTUP_STABILIZE_MS);
     unsigned long t0 = millis();
     while ((millis() - t0) < (unsigned long)STARTUP_STABILIZE_MS) {
       delay(1);
@@ -67,11 +86,21 @@ void Bootloader::executeSetup() {
   esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
 #endif
   esp_task_wdt_add(NULL);
-  LOG(LOG_LEVEL_ERROR, "INIT", "Watchdog: %ds timeout, task registered (before WiFi).", WDT_TIMEOUT_SEC);
+  LOG(APP_LOG_LEVEL_ERROR, "INIT", "Watchdog: %ds timeout, task registered (before WiFi).", WDT_TIMEOUT_SEC);
 
-  connectWiFi();
+  WifiManager::init();
 
-  if (WiFi.status() == WL_CONNECTED) {
+  if (!BleProvisioning::isProvisioned()) {
+    deviceLifecycle = DeviceLifecycle::PROVISIONING;
+    BleProvisioning::init();
+    LOG(APP_LOG_LEVEL_INFO, "INIT", "Device UNCLAIMED. Entered PROVISIONING mode.");
+  } else {
+    deviceLifecycle = DeviceLifecycle::ONLINE;
+    LOG(APP_LOG_LEVEL_INFO, "INIT", "Device CLAIMED. Entered ONLINE mode.");
+    WifiManager::connect();
+  }
+
+  if (WifiManager::isConnected()) {
     configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
     struct tm timeinfo;
     if (getLocalTime(&timeinfo, 5000)) {
@@ -81,31 +110,28 @@ void Bootloader::executeSetup() {
         ntpEpochSecAtLastSync = (uint32_t)nowEpoch;
         ntpLastSyncMs = millis();
       }
-      LOG(LOG_LEVEL_INFO, "NTP", "Time synced: %04d-%02d-%02d %02d:%02d (PHT)", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+      LOG(APP_LOG_LEVEL_INFO, "NTP", "Time synced: %04d-%02d-%02d %02d:%02d (PHT)", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                     timeinfo.tm_hour, timeinfo.tm_min);
     } else {
-      LOG(LOG_LEVEL_ERROR, "NTP", "Sync failed. Sleep mode disabled until next WiFi connect.");
+      LOG(APP_LOG_LEVEL_ERROR, "NTP", "Sync failed. Sleep mode disabled until next WiFi connect.");
     }
   } else {
-    LOG(LOG_LEVEL_INFO, "NTP", "No WiFi. Sleep mode disabled.");
+    LOG(APP_LOG_LEVEL_INFO, "NTP", "No WiFi. Sleep mode disabled.");
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    initFirebase();
-  } else {
-    LOG(LOG_LEVEL_INFO, "FIREBASE", "Skipped — no WiFi. Will init when WiFi connects.");
+  if (deviceLifecycle == DeviceLifecycle::ONLINE) {
+      CloudManager::init();
   }
 
   unsigned long nowInit = millis();
   lastSensorMs        = nowInit;
   lastFirebaseMs      = nowInit;
   lastDeviceConfigMs  = 0;
-  lastWifiRetryMs     = 0;
   lastRssiLogMs       = nowInit;
   lastLevelWriteMs    = nowInit;
   lastUptimeWriteMs   = nowInit;
   lastHeapDiagMs      = nowInit;
   minFreeHeapObserved = ESP.getFreeHeap();
 
-  LOG(LOG_LEVEL_INFO, "INIT", "Boot complete. Entering main loop.");
+  LOG(APP_LOG_LEVEL_INFO, "INIT", "Boot complete. Entering main loop.");
 }

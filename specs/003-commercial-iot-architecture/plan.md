@@ -140,25 +140,46 @@ app/
 
 ---
 
-## Phase 2: Epic 2 - Cloud Integration (Future)
+## Phase 2: Epic 2 - Cloud Integration (Done)
 
 **Purpose**: Connect the firmware to the cloud using the new Device Shadow and Provisioning mechanics.
 
-- [ ] Implement BLE Provisioning flow in `network/`.
-- [ ] Implement Device Claiming logic.
-- [ ] Implement Device Shadow sync (`desired` / `reported`) in `cloud/`.
-- [ ] Deprecate direct RTDB writes for telemetry in favor of structured payloads.
+### Architecture Decisions (Epic 2)
+- **BLE Stack**: Use `h2zero/NimBLE-Arduino` for memory efficiency instead of the standard ESP32 BLE library.
+- **Device ID**: Derived from the ESP32 MAC address (e.g., `SF-1A2B3C`) for uniqueness.
+- **Provisioning Flow**: Device advertises over BLE -> Mobile App connects and provides SSID/Password/ClaimToken -> Device saves to NVS and transitions to ONLINE.
+
+### Implementation Tasks
+- [ ] Implement `network/wifi_manager.h/cpp` to handle Wi-Fi connection and RSSI polling (decoupled from cloud).
+- [ ] Implement `network/ble_provisioning.h/cpp` using NimBLE to expose GATT characteristics for credentials.
+- [ ] Implement `cloud/device_shadow.h/cpp` to handle the `desired` vs `reported` state contract.
+- [ ] Implement `cloud/cloud_manager.h/cpp` to orchestrate Firebase RTDB syncing to `/devices/<device_id>/...`.
+- [ ] Update `core/lifecycle/bootloader.cpp` and `main.cpp` to integrate BLE Provisioning and Cloud Sync.
+- [ ] Delete `connectivity/connectivity_cloud.h/cpp` and deprecate V1 dashboard direct RTDB telemetry.
 
 ---
 
-## Phase 3: Epic 3 - Android Application (Future)
+## Phase 3: Epic 3 - Android Application (Active)
 
 **Purpose**: Replace the Next.js dashboard with a native Jetpack Compose application.
 
-- [ ] Scaffolding: Setup MVVM Android project.
-- [ ] Implement BLE Provisioning client flow.
-- [ ] Implement Dashboard UI bound to Device Shadow repository.
-- [ ] Implement Device Settings and Claiming UI.
+### Architecture Decisions (Epic 3)
+- **Framework**: Native Android using Jetpack Compose (Declarative UI).
+- **Architecture**: MVVM (Model-View-ViewModel).
+- **Cloud Backend**: Firebase Realtime Database SDK for Android.
+- **Provisioning**: Android BLE Scanner & GATT client to send Wi-Fi credentials to the ESP32.
+
+### Implementation Tasks
+- [ ] Initialize Gradle Android Project (`app/` directory) with Jetpack Compose.
+- [ ] Configure Firebase Android SDK and dependencies (Coroutines, ViewModel, Navigation).
+- [ ] Implement `DeviceRepository` to sync with Firebase RTDB (`/devices/<id>`).
+- [ ] Implement `BleProvisioningClient` to scan for `SmartFlow-<ID>` and write SSID/Pass/Token over GATT.
+- [ ] Implement UI:
+  - `LoginScreen` (Firebase Auth)
+  - `DeviceListScreen` (Claimed devices)
+  - `ProvisioningScreen` (BLE Flow)
+  - `DashboardScreen` (Telemetry read, Shadow write for Pump State)
+- [ ] Archive `dashboard/` directory to `archive/dashboard/` (keep for reference when building Compose UI).
 
 ---
 
