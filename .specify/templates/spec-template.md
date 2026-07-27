@@ -118,7 +118,7 @@ source: hand-authored  # hand-authored | auto-generated
   Don't leave empty sections with placeholder text.
 ============================================================ -->
 
-<!-- if applicable: Firmware touches firmware/platformio_smart_water_pump_controller/ or firmware/platformio_sensor_node/ -->
+<!-- if applicable: Firmware touches firmware/master_node/ or firmware/sensor_node/ -->
 ## Firmware Behavior *(if applicable)*
 
 <!--

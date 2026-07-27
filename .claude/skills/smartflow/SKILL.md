@@ -204,7 +204,7 @@ Typography:  Geist (UI) + Geist Mono (values), self-hosted from /public/fonts/
 ```
 
 **Rebranding rule:** Replace "Smart Water Pump Controller" with "SmartFlow" in all
-user-visible strings. Do NOT rename the Arduino sketch folder or primary `.ino` file.
+user-visible strings.
 
 For full design token system, read: `references/brand_design.md`
 
@@ -265,19 +265,10 @@ uint32_t readAndResetFlowPulses() {
 ```
 smart-water-pump-controller/  (repo root)
 ├── firmware/
-│   ├── arduino_smart_water_pump_controller/   ← ESP32 Arduino (open in Arduino IDE)
-│   │   ├── arduino_smart_water_pump_controller.ino  ← Main (do NOT rename)
-│   │   ├── 01_config.ino
-│   │   ├── 02_rs485_comm.ino
-│   │   ├── 03_safety_pump.ino
-│   │   ├── 04_persistence.ino
-│   │   ├── 05_connectivity_cloud.ino
-│   │   └── smart_water_pump_controller_shared.h
-│   ├── platformio_smart_water_pump_controller/ ← ESP32 PlatformIO (VS Code)
-│   ├── arduino_sensor_node/                    ← NodeMCU Arduino
-│   ├── platformio_sensor_node/                 ← NodeMCU PlatformIO
-│   ├── test_master_node/                       ← ESP32 test sketches (Phase 5)
-│   └── test_sensor_node/                       ← NodeMCU test sketches (Phase 5)
+│   ├── master_node/             ← ESP32 PlatformIO (VS Code)
+│   ├── sensor_node/             ← NodeMCU PlatformIO (VS Code)
+│   ├── test_master_node/        ← ESP32 test sketches (Phase 5)
+│   └── test_sensor_node/        ← NodeMCU test sketches (Phase 5)
 ├── dashboard/
 │   ├── app/          ← Next.js App Router pages
 │   ├── components/   ← UI components

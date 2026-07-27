@@ -31,7 +31,7 @@ This folder contains production operations runbooks for SmartFlow.
 
 ## Source-of-Truth Notes
 
-- Firmware contracts: `firmware/platformio_smart_water_pump_controller/src/**` and `firmware/platformio_sensor_node/src/**`
+- Firmware contracts: `firmware/master_node/src/**` and `firmware/sensor_node/src/**`
 - Dashboard contracts: `dashboard/lib/types.ts` and `dashboard/app/api/health/route.ts`
 - Access control rules: `database.rules.json`
 

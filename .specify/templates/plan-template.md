@@ -32,8 +32,8 @@
 ## Technical Context
 
 **Modules affected** *(check all that apply)*:
-- [ ] Firmware Master — `firmware/platformio_smart_water_pump_controller/`
-- [ ] Firmware Sensor Node — `firmware/platformio_sensor_node/`
+- [ ] Firmware Master — `firmware/master_node/`
+- [ ] Firmware Sensor Node — `firmware/sensor_node/`
 - [ ] Dashboard — `dashboard/` (Next.js 15, TypeScript, TailwindCSS, Firebase SDK)
 - [ ] Cloud Functions — `functions/` (TypeScript, Firebase Functions v7)
 - [ ] Admin Scripts — `scripts/`
@@ -73,13 +73,13 @@ specs/[###-feature]/
 
 ```text
 # Firmware Master (if applicable)
-firmware/platformio_smart_water_pump_controller/src/
+firmware/master_node/src/
 ├── main.cpp             # State machine, pump control, watchdog
 ├── rs485_master.cpp/.h  # RS-485 frame encoding/decoding
 └── firebase_control.cpp # RTDB polling, setPump() gate
 
 # Firmware Sensor Node (if applicable)
-firmware/platformio_sensor_node/src/
+firmware/sensor_node/src/
 ├── main.cpp             # Sensor loop, RS-485 slave response
 └── sensors.cpp/.h       # JSN-SR04T, YF-G1 readings
 
@@ -150,8 +150,8 @@ functions/src/__tests__/ # Jest
 <!-- Firmware implementation phase — include if firmware is touched -->
 ## Phase 2: Firmware Implementation *(if applicable)*
 
-**Build command**: `cd firmware/platformio_smart_water_pump_controller && pio run`
-**Sensor node**: `cd firmware/platformio_sensor_node && pio run`
+**Build command**: `cd firmware/master_node && pio run`
+**Sensor node**: `cd firmware/sensor_node && pio run`
 **Validation**: Hardware serial monitor — document expected log output (no CI automation available)
 
 - [ ] [FW-001] [describe task — be specific to file and function]

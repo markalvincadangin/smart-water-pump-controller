@@ -30,7 +30,7 @@ The ESP32 master reads water level from the remote NodeMCU sensor node over RS-4
 
 ### ESP32 Hardcoded Defaults (Wrong)
 ```cpp
-// firmware/platformio_smart_water_pump_controller/src/config/config.h
+// firmware/master_node/src/config/config.h
 #define TANK_EMPTY_CM   122  // ❌ obsolete, doesn't match actual setup
 #define TANK_FULL_CM     8   // ❌ wrong
 ```
@@ -46,7 +46,7 @@ The ESP32 master reads water level from the remote NodeMCU sensor node over RS-4
 
 ### Conversion Formula (Correct, but using wrong inputs)
 ```cpp
-// firmware/platformio_smart_water_pump_controller/src/rs485/rs485_comm.cpp:170-174
+// firmware/master_node/src/rs485/rs485_comm.cpp:170-174
 float rangeCm = cfgTankEmptyCm - cfgTankFullCm;  // 122 - 8 = 114 (WRONG)
 float pct = 100.0f * (cfgTankEmptyCm - dist) / rangeCm;
 // pct = 100 * (122 - 70.5) / 114 = 45% ❌
@@ -198,9 +198,9 @@ The ESP32 firmware **already supports reading calibration from RTDB**. It's been
 - Integration guide: `docs/operations/CALIBRATION_FIX_INTEGRATION.md`
 
 **Firmware source (unchanged, but showing why fix works):**
-- Config load: `firmware/platformio_smart_water_pump_controller/src/connectivity/connectivity_cloud.cpp:148-171`
-- Conversion: `firmware/platformio_smart_water_pump_controller/src/rs485/rs485_comm.cpp:170-174`
-- Sensor defaults: `firmware/platformio_sensor_node/src/config/config.h:39-47`
+- Config load: `firmware/master_node/src/connectivity/connectivity_cloud.cpp:148-171`
+- Conversion: `firmware/master_node/src/rs485/rs485_comm.cpp:170-174`
+- Sensor defaults: `firmware/sensor_node/src/config/config.h:39-47`
 
 **RTDB schema:**
 - `docs/operations/FIRMWARE_CONFIG_FROM_DATABASE.md`

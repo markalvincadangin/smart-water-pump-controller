@@ -4,8 +4,8 @@ Date: 2026-04-02 (last updated: 2026-04-03 Final scan alignment)
 
 Scope:
 
-- Master Node: ESP32 controller firmware in `firmware/platformio_smart_water_pump_controller/`
-- Sensor Node: NodeMCU firmware in `firmware/platformio_sensor_node/`
+- Master Node: ESP32 controller firmware in `firmware/master_node/`
+- Sensor Node: NodeMCU firmware in `firmware/sensor_node/`
 
 Purpose:
 
