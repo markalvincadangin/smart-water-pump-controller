@@ -1,7 +1,7 @@
 ## Firmware implementation plan — Architecture vNext
 
 Targets:
-- **ESP32 master**: `firmware/platformio_smart_water_pump_controller/src/*` and `firmware/arduino_smart_water_pump_controller/*`
+- **ESP32 master**: `firmware/master_node/src/*` and `firmware/arduino_smart_water_pump_controller/*`
 - **ESP8266 sensor node**: unchanged behavior (still provides LVL/FLOW/ERR over RS-485), only referenced for end-to-end tests
 
 Source of truth:

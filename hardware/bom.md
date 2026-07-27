@@ -62,8 +62,8 @@ Important:
 ## 6) Firmware Pin Baseline (As Deployed)
 
 Source of truth:
-- firmware/platformio_smart_water_pump_controller/src/config/config.h
-- firmware/platformio_sensor_node/src/config/config.h
+- firmware/master_node/src/config/config.h
+- firmware/sensor_node/src/config/config.h
 
 ESP32 master pins:
 - RELAY_PIN = GPIO4

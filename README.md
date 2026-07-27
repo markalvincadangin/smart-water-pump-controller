@@ -70,7 +70,7 @@ Power chain (always active, independent of firmware):
 3. Click Upload
 
 # Option 2: PlatformIO
-cd firmware/platformio_smart_water_pump_controller && pio run -t upload
+cd firmware/master_node && pio run -t upload
 ```
 
 **Flash ESP8266 tank sensor:**
@@ -168,8 +168,8 @@ smart-water-pump-controller/
 ├── firmware/
 │   ├── arduino_smart_water_pump_controller/    ← ESP32 master (Arduino IDE)
 │   ├── arduino_sensor_node/                    ← ESP8266 tank node (Arduino IDE)
-│   ├── platformio_smart_water_pump_controller/ ← ESP32 master (PlatformIO)
-│   ├── platformio_sensor_node/                 ← ESP8266 tank node (PlatformIO)
+│   ├── master_node/ ← ESP32 master (PlatformIO)
+│   ├── sensor_node/                 ← ESP8266 tank node (PlatformIO)
 │   └── README.md                               ← Hardware pinout & calibration
 ├── dashboard/
 │   ├── app/                    ← Next.js App Router pages
@@ -296,7 +296,7 @@ We welcome contributions focused on safety, reliability, and maintainability.
 - Start here: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Key requirement: preserve fail-safe behavior (pump OFF on fault/ambiguity)
 - Validate before PR:
-  - Firmware: `pio run -d firmware/platformio_smart_water_pump_controller` and `pio run -d firmware/platformio_sensor_node`
+  - Firmware: `pio run -d firmware/master_node` and `pio run -d firmware/sensor_node`
   - Dashboard: `cd dashboard && npm run validate`
 
 ---

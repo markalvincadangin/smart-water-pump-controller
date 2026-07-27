@@ -96,7 +96,7 @@ Location timezone: PHT = UTC+8
 ```
 smartflow/  (repo root)
 ├── firmware/
-│   ├── platformio_smart_water_pump_controller/   ← ESP32 master (ACTIVE)
+│   ├── master_node/                              ← ESP32 master (ACTIVE)
 │   │   ├── src/
 │   │   │   ├── main.cpp
 │   │   │   ├── config/config.h                  ← all compile-time constants + LOG macro
@@ -107,7 +107,7 @@ smartflow/  (repo root)
 │   │   │   ├── connectivity/connectivity_cloud.h + .cpp
 │   │   │   └── utils/time_utils.h               ← elapsedMillis32, millisDeadlineReached, addMillisSaturated
 │   │   └── platformio.ini
-│   ├── platformio_sensor_node/                   ← NodeMCU sensor (ACTIVE)
+│   ├── sensor_node/                              ← NodeMCU sensor (ACTIVE)
 │   │   ├── src/
 │   │   │   ├── main.cpp
 │   │   │   ├── config/config.h
@@ -117,7 +117,6 @@ smartflow/  (repo root)
 │   │   │   ├── ota/ota_wifi.h + .cpp
 │   │   │   └── utils/
 │   │   └── platformio.ini
-│   └── arduino_*/                               ← REFERENCE ONLY — do not edit
 ├── dashboard/                                    ← Next.js 14 App Router PWA
 │   ├── app/                                      ← pages (App Router)
 │   ├── components/                               ← UI components
