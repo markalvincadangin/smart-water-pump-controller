@@ -50,3 +50,11 @@ RS-485 serial communication frames and Firebase RTDB schema modifications MUST m
 - **Amendments**: Any change to these principles requires formal review, physical risk assessment, updated field documentation, and an explicit version bump.
 
 **Version**: 1.0.0 | **Ratified**: 2026-07-25 | **Last Amended**: 2026-07-25
+
+### VII. C++ Naming Conventions
+To maintain consistency across the C++ embedded projects (`firmware/master_node/` and `sensor_node/`), the following standard conventions MUST be used:
+- **Files & Directories**: `snake_case` (e.g., `pump_hal.cpp`, `water_level_service.cpp`).
+- **Classes & Structs**: `PascalCase` (e.g., `PumpHal`, `WaterLevelService`).
+- **Functions & Methods**: `camelCase` (e.g., `executeLogic`, `init`).
+- **Variables**: `camelCase` (e.g., `waterLevelPct`, `isRunning`).
+- **Constants & Macros**: `UPPER_SNAKE_CASE` (e.g., `PIN_RELAY`, `TANK_EMPTY_CM`).

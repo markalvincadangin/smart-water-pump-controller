@@ -1,21 +1,22 @@
 #include "pump_app.h"
 
-#include "../state/state.h"
-#include "../safety/safety_pump.h"
-#include "../utils/time_utils.h"
+#include "../../state/state.h"
+#include "../../safety/safety_pump.h"
+#include "../../utils/time_utils.h"
+#include "../../config/config.h"
 
-void app_checkCountdownExpiry() {
+void PumpApp::checkCountdownExpiry() {
   if (!isCountdownActive || pumpMode != "COUNTDOWN") return;
   uint32_t now = millis();
   if (countdownEndMs != 0 && millisDeadlineReached(now, countdownEndMs)) {
-    LOG(LOG_LEVEL_INFO, "COUNTDOWN", "Timer expired. Pump stopped. Mode stays COUNTDOWN.");
+    LOG(APP_LOG_LEVEL_INFO, "COUNTDOWN", "Timer expired. Pump stopped. Mode stays COUNTDOWN.");
     isCountdownActive = false;
     countdownEndMs    = 0;
     // Keep COUNTDOWN mode active; user must explicitly start a new timer.
   }
 }
 
-void app_executePumpLogic() {
+void PumpApp::executeLogic() {
   // Suspend control decisions until the first valid level sample.
   if (waterLevelPct < 0) return;
 
@@ -41,7 +42,7 @@ void app_executePumpLogic() {
     manualRuntimeWarning = status.overflowNearThreshold;
     if (manualRuntimeWarning && !manualRuntimeWarnLogged) {
       manualRuntimeWarnLogged = true;
-      LOG(LOG_LEVEL_WARN, "SAFETY", "[WARN] Manual runtime reached 90%% of limit (%d min).", cfgMaxPumpRuntimeMin);
+      LOG(APP_LOG_LEVEL_WARN, "SAFETY", "[WARN] Manual runtime reached 90%% of limit (%d min).", cfgMaxPumpRuntimeMin);
     }
   }
 
@@ -127,7 +128,7 @@ void app_executePumpLogic() {
 
     if (isLevelSensorError && !cfgBypassLevelSensor) {
       if (isRunning || pumpMode == "COUNTDOWN") {
-        LOG(LOG_LEVEL_ERROR, pumpMode.c_str(), "Level sensor error — stopping (fail-safe).");
+        LOG(APP_LOG_LEVEL_ERROR, pumpMode.c_str(), "Level sensor error — stopping (fail-safe).");
         lastFaultCode    = "LEVEL_SENSOR";
         lastFaultMessage = "Level sensor offline: pump stopped (fail-safe).";
       }
@@ -141,7 +142,7 @@ void app_executePumpLogic() {
     }
 
     if (!cfgBypassLevelSensor && waterLevelPct >= cfgPumpStopLevel) {
-      LOG(LOG_LEVEL_INFO, pumpMode.c_str(), "Tank full (%d%%). Stopping pump.", waterLevelPct);
+      LOG(APP_LOG_LEVEL_INFO, pumpMode.c_str(), "Tank full (%d%%). Stopping pump.", waterLevelPct);
       setPump(false);
       if (pumpMode == "COUNTDOWN") {
         isCountdownActive = false; countdownEndMs = 0;
@@ -160,7 +161,7 @@ void app_executePumpLogic() {
 
   if (isSleeping) {
     if (isRunning && waterLevelPct >= cfgPumpStopLevel) {
-      LOG(LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Stopping pump.", waterLevelPct);
+      LOG(APP_LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Stopping pump.", waterLevelPct);
       setPump(false);
     }
     return;
@@ -173,7 +174,7 @@ void app_executePumpLogic() {
   // HARD SAFETY: stale or unstable comm => pump OFF and block start.
   if (!allowStartFromSensors) {
     if (isRunning) {
-      LOG(LOG_LEVEL_ERROR, "AUTO", "No fresh/stable level data — stopping pump (fail-safe).");
+      LOG(APP_LOG_LEVEL_ERROR, "AUTO", "No fresh/stable level data — stopping pump (fail-safe).");
       lastFaultCode = (!remoteSensorStable || !levelFreshOk) ? "COMM_LOSS" : "STALE_LEVEL";
       lastFaultMessage = "No fresh/stable level data: controller stopped pump (failsafe).";
       setPump(false);
@@ -185,10 +186,10 @@ void app_executePumpLogic() {
     if (pumpOffStartMs > 0 && elapsedMillis32(nowMsPump, pumpOffStartMs) < MIN_PUMP_OFF_TIME_MS) {
       return;
     }
-    LOG(LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Starting pump.", waterLevelPct);
+    LOG(APP_LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Starting pump.", waterLevelPct);
     setPump(true);
   } else if (isRunning && waterLevelPct >= cfgPumpStopLevel) {
-    LOG(LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Stopping pump.", waterLevelPct);
+    LOG(APP_LOG_LEVEL_INFO, "AUTO", "Water at %d%%. Stopping pump.", waterLevelPct);
     setPump(false);
   }
 }

@@ -1,7 +1,7 @@
 #include "safety_pump.h"
 
 #include "../state/state.h"
-#include "../connectivity/connectivity_cloud.h"
+#include "../drivers/pump_driver.h"
 #include "../utils/time_utils.h"
 
 void setPump(bool on) {
@@ -10,15 +10,19 @@ void setPump(bool on) {
   if (on && !isRunning) {
     totalPumpCycles++;
     pumpOnSinceMs = millis();
-    LOG(LOG_LEVEL_INFO, "PUMP", "Relay ENERGIZED. Pump is now ON.");
+    LOG(APP_LOG_LEVEL_INFO, "PUMP", "Relay ENERGIZED. Pump is now ON.");
   }
   if (!on && isRunning && pumpOnSinceMs > 0) {
     totalPumpRunSec += (millis() - pumpOnSinceMs) / 1000UL;
     pumpOnSinceMs = 0;
-    LOG(LOG_LEVEL_INFO, "PUMP", "Relay DE-ENERGIZED. Pump is now OFF.");
+    LOG(APP_LOG_LEVEL_INFO, "PUMP", "Relay DE-ENERGIZED. Pump is now OFF.");
   }
 
-  digitalWrite(RELAY_PIN, on ? LOW : HIGH);
+  if (on) {
+      PumpDriver::turnOn();
+  } else {
+      PumpDriver::turnOff();
+  }
   isRunning = on;
   if (!on) {
     pumpOffStartMs = millis();
@@ -34,8 +38,7 @@ void checkLevelSensorFailure(int sensorReading) {
     levelSensorFailCount++;
     if (levelSensorFailCount >= cfgLevelSensorFailureThreshold && !isLevelSensorError) {
       isLevelSensorError = true;
-      LOG(LOG_LEVEL_ERROR, "SENSOR", "[ERROR] Ultrasonic (level) failure: %d consecutive timeouts.", levelSensorFailCount);
-      pushFirebaseErrorLog("ERROR", "SENSOR_ULTRASONIC", "Ultrasonic (level) failure: consecutive timeouts.");
+      LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[ERROR] Ultrasonic (level) failure: %d consecutive timeouts.", levelSensorFailCount);
     }
     if (isLevelSensorError && cfgAutoBypassOnSensorFail && !cfgBypassLevelSensor) {
       if (levelSensorFailStartMs == 0) levelSensorFailStartMs = millis();
@@ -43,13 +46,13 @@ void checkLevelSensorFailure(int sensorReading) {
         cfgBypassLevelSensor = true;
         autoBypassWasEngaged = true;
         autoBypassActive = true;
-        LOG(LOG_LEVEL_ERROR, "AUTO-BYPASS", "Enabled after sustained sensor failure.");
+        LOG(APP_LOG_LEVEL_ERROR, "AUTO-BYPASS", "Enabled after sustained sensor failure.");
       }
     }
   } else {
     levelLastValidMs = millis();
     if (isLevelSensorError) {
-      LOG(LOG_LEVEL_ERROR, "SENSOR", "[INFO] Ultrasonic (level) recovered. Error cleared.");
+      LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[INFO] Ultrasonic (level) recovered. Error cleared.");
     }
     levelSensorFailCount = 0;
     isLevelSensorError = false;
@@ -59,7 +62,7 @@ void checkLevelSensorFailure(int sensorReading) {
       levelAnchorPct = sensorReading;
       flowVolumeAddedL = 0.0f;
       estimatedLevelPct = (float)sensorReading;
-      LOG(LOG_LEVEL_INFO, "ESTIMATE", "Anchor reset to recovered sensor reading.");
+      LOG(APP_LOG_LEVEL_INFO, "ESTIMATE", "Anchor reset to recovered sensor reading.");
     } else {
       levelAnchorPct = sensorReading;
     }
@@ -67,7 +70,7 @@ void checkLevelSensorFailure(int sensorReading) {
       cfgBypassLevelSensor = false;
       autoBypassWasEngaged = false;
       autoBypassActive = false;
-      LOG(LOG_LEVEL_INFO, "AUTO-BYPASS", "Sensor recovered. Bypass auto-disabled.");
+      LOG(APP_LOG_LEVEL_INFO, "AUTO-BYPASS", "Sensor recovered. Bypass auto-disabled.");
     }
   }
 }
@@ -78,7 +81,7 @@ void checkFlowSensorStuck() {
     flowStuckStartMs = 0;
     if (isFlowSensorError) {
       isFlowSensorError = false;
-      LOG(LOG_LEVEL_ERROR, "SENSOR", "[INFO] Flow sensor error cleared (bypass active).");
+      LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[INFO] Flow sensor error cleared (bypass active).");
     }
     return;
   }
@@ -93,13 +96,12 @@ void checkFlowSensorStuck() {
         lastFaultMessage = "Flow sensor reading abnormal (stuck-high while pump OFF).";
         flowStuckHighEventCount++;
         flowStuckHighEventCountWin++;
-        LOG(LOG_LEVEL_ERROR, "SENSOR", "[ERROR] Flow stuck-high: %.1f LPM while pump OFF for >%ds.", flowRateLpm, (int)(FLOW_STUCK_TIMEOUT_MS / 1000));
-        pushFirebaseErrorLog("ERROR", "SENSOR_FLOW", "Flow stuck-high while pump OFF.");
+        LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[ERROR] Flow stuck-high: %.1f LPM while pump OFF for >%ds.", flowRateLpm, (int)(FLOW_STUCK_TIMEOUT_MS / 1000));
       }
     }
   } else {
     if (isFlowSensorError) {
-      LOG(LOG_LEVEL_ERROR, "SENSOR", "[INFO] Flow sensor recovered. Error cleared.");
+      LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[INFO] Flow sensor recovered. Error cleared.");
       isFlowSensorError = false;
     }
     flowStuckTimerActive = false;
@@ -129,8 +131,7 @@ OverflowStatus checkOverflowProtection() {
   if (elapsed >= maxRuntimeMs) {
     isOverflowError = true;
     pumpAutoStartTracking = false;
-    LOG(LOG_LEVEL_ERROR, "SAFETY", "[ERROR] Max runtime exceeded (%d min). Pump stopped.", cfgMaxPumpRuntimeMin);
-    pushFirebaseErrorLog("CRITICAL", "SAFETY_OVERFLOW", "Max runtime exceeded. Pump stopped.");
+    LOG(APP_LOG_LEVEL_ERROR, "SAFETY", "[ERROR] Max runtime exceeded (%d min). Pump stopped.", cfgMaxPumpRuntimeMin);
     return {SafetyDecision::STOP_OVERFLOW, nearThreshold};
   }
   return {SafetyDecision::OK, nearThreshold};
@@ -146,7 +147,7 @@ SafetyDecision checkDryRunProtection() {
       isDryRunError = false;
       lastFaultCode = "";
       lastFaultMessage = "";
-      LOG(LOG_LEVEL_INFO, "SAFETY", "Flow bypass active. Clearing dry-run lockout.");
+      LOG(APP_LOG_LEVEL_INFO, "SAFETY", "Flow bypass active. Clearing dry-run lockout.");
     }
     return SafetyDecision::OK;
   }
@@ -173,20 +174,19 @@ SafetyDecision checkDryRunProtection() {
     if (!dryRunTimerActive) {
       dryRunTimerActive = true;
       dryRunStartMs = millis();
-      LOG(LOG_LEVEL_WARN, "SAFETY", "[WARN] Dry-run condition detected. Timer started.");
+      LOG(APP_LOG_LEVEL_WARN, "SAFETY", "[WARN] Dry-run condition detected. Timer started.");
     } else {
       uint32_t elapsedDr = elapsedMillis32(millis(), dryRunStartMs);
       if (elapsedDr >= dryRunTimeoutMs) {
         isDryRunError = true;
         // HARD SAFETY: always stop the pump regardless of mode.
-        LOG(LOG_LEVEL_ERROR, "SAFETY", "[ERROR] DRY-RUN LOCKOUT. Pump stopped; waiting for acknowledge.");
-        pushFirebaseErrorLog("CRITICAL", "SAFETY_DRY_RUN", "DRY-RUN LOCKOUT. Pump stopped.");
+        LOG(APP_LOG_LEVEL_ERROR, "SAFETY", "[ERROR] DRY-RUN LOCKOUT. Pump stopped; waiting for acknowledge.");
         return SafetyDecision::STOP_DRYRUN;
       }
     }
   } else {
     if (dryRunTimerActive) {
-      LOG(LOG_LEVEL_INFO, "SAFETY", "[INFO] Flow restored. Dry-run timer reset.");
+      LOG(APP_LOG_LEVEL_INFO, "SAFETY", "[INFO] Flow restored. Dry-run timer reset.");
     }
     dryRunTimerActive = false;
     dryRunStartMs = 0;
