@@ -13,8 +13,11 @@ import com.polidea.rxandroidble3.RxBleClient
 import com.smartflow.data.BleProvisioningClient
 import com.smartflow.data.DeviceRepository
 import com.smartflow.data.FirebaseCloudStore
+import com.smartflow.data.AccountSession
+import com.smartflow.data.DurableAccountState
 import com.smartflow.presentation.DashboardScreen
 import com.smartflow.presentation.DeviceListScreen
+import com.smartflow.presentation.DeviceOwnershipScreen
 import com.smartflow.presentation.LoginScreen
 import com.smartflow.presentation.ProvisioningScreen
 import com.smartflow.viewmodel.DashboardViewModel
@@ -25,6 +28,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+
+private fun hasEligibleAccount(): Boolean {
+    return AccountSession.state(FirebaseAuth.getInstance().currentUser) == DurableAccountState.ELIGIBLE
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -62,7 +69,7 @@ fun AppNavigation(
 ) {
     val navController = rememberNavController()
     val auth = FirebaseAuth.getInstance()
-    val startDestination = if (auth.currentUser != null) "device_list" else "login"
+    val startDestination = if (hasEligibleAccount()) "device_list" else "login"
 
     NavHost(navController = navController, startDestination = startDestination) {
         composable("login") {
@@ -76,7 +83,7 @@ fun AppNavigation(
         }
         
         composable("device_list") {
-            val uid = auth.currentUser?.uid
+            val uid = auth.currentUser?.uid?.takeIf { hasEligibleAccount() }
             if (uid != null) {
                 val devicesFlow = deviceRepository.getUserDevicesStream(uid)
                 val claimedDevices by devicesFlow.collectAsState(initial = null)
@@ -105,7 +112,8 @@ fun AppNavigation(
                         },
                         onAddNewDevice = {
                             navController.navigate("provisioning")
-                        }
+                        },
+                        onManageOwnership = { deviceId -> navController.navigate("device_ownership/$deviceId") }
                     )
                 }
             } else {
@@ -135,6 +143,22 @@ fun AppNavigation(
             val firebaseRepo = com.smartflow.data.repository.FirebaseDeviceRepository(deviceId)
             val viewModel = DashboardViewModel(firebaseRepo)
             DashboardScreen(viewModel = viewModel)
+        }
+
+        composable("device_ownership/{deviceId}") { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
+            DeviceOwnershipScreen(
+                deviceId = deviceId,
+                onStartTransfer = { recipientUid -> cloudStore.startOwnershipTransfer(deviceId, recipientUid) },
+                onRelease = { cloudStore.releaseDevice(deviceId) },
+                onCancelPairing = { cloudStore.cancelOwnershipPairing(deviceId) },
+                onRequestWifiRecovery = { cloudStore.requestWifiReprovision(deviceId) },
+                onOpenProvisioning = {
+                    navController.navigate("provisioning") {
+                        popUpTo("device_ownership/$deviceId") { inclusive = true }
+                    }
+                },
+            )
         }
     }
 }

@@ -11,6 +11,7 @@
 #include "../../network/wifi_manager.h"
 #include "../../network/ble_provisioning.h"
 #include "../../cloud/cloud_manager.h"
+#include "../../safety/safety_pump.h"
 #include "../../utils/time_utils.h"
 
 String Bootloader::getBootReasonString() {
@@ -28,6 +29,49 @@ String Bootloader::getBootReasonString() {
     case ESP_RST_SDIO:     return "SDIO reset";
     default:               return "Unknown";
   }
+}
+
+namespace {
+bool applyScopedWifiReprovisionRequest(const String& requestId) {
+  if (requestId.length() == 0) return false;
+  if (!prefs.begin(NVS_STATE_NAMESPACE, false)) {
+    LOG(APP_LOG_LEVEL_ERROR, "REPROVISION", "Unable to inspect Wi-Fi recovery request.");
+    return false;
+  }
+  const bool alreadyApplied = prefs.getString("reprov_req_id", "") == requestId;
+  prefs.end();
+  if (alreadyApplied) return false;
+
+  // This is deliberately the first state-changing action. Do not replace it
+  // with a direct relay call: setPump() keeps safety/accounting state coherent.
+  setPump(false);
+  LOG(APP_LOG_LEVEL_WARN, "REPROVISION", "Applying scoped Wi-Fi recovery request.");
+  if (!clearNetworkEnrollment()) return false;
+
+  if (!prefs.begin(NVS_STATE_NAMESPACE, false)) {
+    LOG(APP_LOG_LEVEL_ERROR, "REPROVISION", "Enrollment cleared but request marker could not be saved.");
+    // Enrollment is already gone, so the caller must still reboot into BLE.
+    return true;
+  }
+  prefs.putString("reprov_req_id", requestId);
+  prefs.end();
+  LOG(APP_LOG_LEVEL_INFO, "REPROVISION", "Enrollment cleared; BLE provisioning will start.");
+  return true;
+}
+
+void applyOneTimeReprovisionRequest() {
+  const char* requestId = SMARTFLOW_REPROVISION_REQUEST_ID;
+  if (requestId[0] == '\0') return;
+  applyScopedWifiReprovisionRequest(String(requestId));
+}
+} // namespace
+
+bool Bootloader::applyWifiReprovisionRequest(const String& requestId) {
+  if (!applyScopedWifiReprovisionRequest(requestId)) return false;
+  LOG(APP_LOG_LEVEL_WARN, "REPROVISION", "Restarting into BLE provisioning after authorized recovery.");
+  delay(50);
+  esp_restart();
+  return true; // Unreachable, keeps the API testable on non-ESP targets.
 }
 
 void Bootloader::executeSetup() {
@@ -56,10 +100,20 @@ void Bootloader::executeSetup() {
   LOG(APP_LOG_LEVEL_INFO, "INIT", "GPIO configured. Pump OFF.");
   LOG(APP_LOG_LEVEL_INFO, "INIT", "RS-485 UART2 initialized (115200 8N1).");
 
+  applyOneTimeReprovisionRequest();
+
   checkCrashLoop();
   if (inSafeMode) {
     LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Skipping WiFi, Firebase, and sensor init.");
     LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Will auto-clear after 1 hour or full power cycle.");
+#ifdef ENABLE_OTA
+    // Keep the pump fail-off, but allow an authenticated local recovery update
+    // using already-stored credentials. The regular application, sensors, and
+    // cloud services remain disabled while Safe Mode is latched.
+    WifiManager::init();
+    WifiManager::connect();
+    LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Wi-Fi recovery path enabled for OTA.");
+#endif
     return;
   }
 

@@ -10,10 +10,11 @@ import com.smartflow.domain.ConnectionState
 import com.smartflow.domain.DeviceConfig
 import com.smartflow.domain.DeviceShadow
 import com.smartflow.domain.Telemetry
+import com.smartflow.data.AccountSession
+import com.smartflow.data.DurableAccountState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.tasks.await
 
 interface DeviceRepository {
     val telemetryFlow: StateFlow<Telemetry>
@@ -64,7 +65,11 @@ class FirebaseDeviceRepository(
     override suspend fun initializeAuth() {
         try {
             _connectionFlow.value = ConnectionState.CONNECTING
-            auth.signInAnonymously().await()
+            if (AccountSession.state(auth.currentUser) != DurableAccountState.ELIGIBLE) {
+                Log.w("FirebaseDeviceRepository", "A durable account is required before device access")
+                _connectionFlow.value = ConnectionState.DISCONNECTED
+                return
+            }
             startObserving()
         } catch (e: Exception) {
             Log.e("FirebaseDeviceRepository", "Auth failed", e)

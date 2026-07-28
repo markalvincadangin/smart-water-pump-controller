@@ -55,6 +55,8 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.7.2"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-database")
+    implementation("com.google.firebase:firebase-functions-ktx")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
     
     // BLE (RxAndroidBle)
     implementation("com.polidea.rxandroidble3:rxandroidble:1.19.1")
