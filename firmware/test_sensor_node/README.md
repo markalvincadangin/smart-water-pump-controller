@@ -243,7 +243,7 @@ To transition from test firmware to production firmware:
 - **Pin mapping:** `hardware/wiring_notes.md`
 - **Sensor datasheets:** `hardware/`
 - **RS-485 protocol:** `docs/specs/rs485_protocol.md`
-- **SmartFlow skill:** `.github/skills/smartflow/SKILL.md`
+- **Firmware operational rules:** `docs/specs/firmware_operational_rules.md`
 
 ---
 

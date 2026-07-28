@@ -34,7 +34,10 @@ app/google-services.json
 !.vscode/settings.json
 **/.vscode/*
 !/.vscode/settings.json
-.cursor/
+.cursor/*
+!.cursor/skills/
+!.cursor/rules/
+!.cursor/mcp.json
 *.swp
 *.swo
 .DS_Store

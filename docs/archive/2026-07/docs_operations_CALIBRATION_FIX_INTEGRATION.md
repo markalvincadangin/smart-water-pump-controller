@@ -179,4 +179,4 @@ If for any reason the fix causes issues, revert in RTDB:
 - **Distance-to-percent formula:** [`firmware/platformio_smart_water_pump_controller/src/rs485/rs485_comm.cpp:170-174`](../../../firmware/platformio_smart_water_pump_controller/src/rs485/rs485_comm.cpp)
 - **Sensor config:** [`firmware/platformio_sensor_node/src/config/config.h:39-47`](../../../firmware/platformio_sensor_node/src/config/config.h)
 - **RTDB Device Config Schema:** [`docs/operations/FIRMWARE_CONFIG_FROM_DATABASE.md`](FIRMWARE_CONFIG_FROM_DATABASE.md)
-- **SmartFlow Skill:** [`.github/skills/smartflow/SKILL.md`](../../skills/smartflow/SKILL.md)
+- **Firmware operational rules:** [`docs/specs/firmware_operational_rules.md`](../../specs/firmware_operational_rules.md)
