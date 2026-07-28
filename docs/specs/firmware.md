@@ -159,7 +159,7 @@ The firmware must always satisfy:
 
 ### Cloud contract (Firebase RTDB)
 
-**Status (ESP32 → cloud)**: `/pump_system/status`
+**Status (ESP32 → cloud)**: `/devices/{device_id}/telemetry` and `/devices/{device_id}/shadow/reported`
 
 Core fields:
 
@@ -188,7 +188,7 @@ Core fields:
 - `estimated_level_pct` / `level_estimate_active` / `flow_volume_added_l`
 - `level_last_valid_age_sec` / `level_sensor_health_pct` (dashboard diagnostic metrics)
 
-**Control (cloud → ESP32)**: `/pump_system/control`
+**Control (cloud → ESP32)**: `/devices/{device_id}/shadow/desired`
 
 - `mode`: AUTO | MANUAL | COUNTDOWN
 - `manual_desired`: bool (persistent intent)
@@ -197,10 +197,16 @@ Core fields:
 - `clear_error`: bool (one-shot — clears DRY_RUN and OVERFLOW lockouts)
 - `countdown_start`: bool (one-shot)
 - `countdown_duration_min`: int (1–120)
-- `countdown_add_time` + `countdown_add_min`: one-shot time extension
 - `bypass_level_sensor`: bool (persistent)
 - `bypass_flow_sensor`: bool (persistent — added Phase 1)
 - `reboot_request_id`: int (monotonic token)
+
+**Configuration (cloud → ESP32)**: `/devices/{device_id}/settings`
+
+- `pump_start_level_pct`: int (threshold to turn ON)
+- `pump_stop_level_pct`: int (threshold to turn OFF)
+- `dry_run_threshold_lpm`: float
+- `max_pump_runtime_min`: int
 
 ### Hardware assumptions (deployment-critical)
 

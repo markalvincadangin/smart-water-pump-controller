@@ -84,8 +84,17 @@ void CloudManager::readSettings() {
         FirebaseJson json = fbdo_cloud.to<FirebaseJson>();
         FirebaseJsonData jd;
 
-        // E.g. tankHeight, lowThreshold. To be handled properly later by DeviceShadow or State.
-        // For now just reading.
+        json.get(jd, "pump_start_level_pct");
+        if (jd.success) cfgPumpStartLevel = jd.intValue;
+
+        json.get(jd, "pump_stop_level_pct");
+        if (jd.success) cfgPumpStopLevel = jd.intValue;
+
+        json.get(jd, "dry_run_threshold_lpm");
+        if (jd.success) cfgDryRunThresholdLpm = jd.floatValue;
+
+        json.get(jd, "max_pump_runtime_min");
+        if (jd.success) cfgMaxPumpRuntimeMin = jd.intValue;
     }
 }
 
@@ -123,20 +132,44 @@ void CloudManager::readShadow() {
         FirebaseJson json = fbdo_cloud.to<FirebaseJson>();
         FirebaseJsonData jd;
         
-        bool pumpState = false;
         String mode = "";
-        bool clearError = false;
-
-        json.get(jd, "pumpState");
-        if (jd.success) pumpState = jd.boolValue;
+        bool manual_desired = false;
+        bool countdown_start = false;
+        int countdown_duration_min = 0;
+        bool emergency_stop = false;
+        bool reset_stop = false;
+        bool clear_error = false;
+        bool bypass_level_sensor = false;
+        bool bypass_flow_sensor = false;
 
         json.get(jd, "mode");
         if (jd.success) mode = jd.stringValue;
 
-        json.get(jd, "clearError");
-        if (jd.success) clearError = jd.boolValue;
+        json.get(jd, "manual_desired");
+        if (jd.success) manual_desired = jd.boolValue;
 
-        DeviceShadow::evaluateDesired(pumpState, mode, clearError);
+        json.get(jd, "countdown_start");
+        if (jd.success) countdown_start = jd.boolValue;
+
+        json.get(jd, "countdown_duration_min");
+        if (jd.success) countdown_duration_min = jd.intValue;
+
+        json.get(jd, "emergency_stop");
+        if (jd.success) emergency_stop = jd.boolValue;
+
+        json.get(jd, "reset_stop");
+        if (jd.success) reset_stop = jd.boolValue;
+
+        json.get(jd, "clear_error");
+        if (jd.success) clear_error = jd.boolValue;
+
+        json.get(jd, "bypass_level_sensor");
+        if (jd.success) bypass_level_sensor = jd.boolValue;
+
+        json.get(jd, "bypass_flow_sensor");
+        if (jd.success) bypass_flow_sensor = jd.boolValue;
+
+        DeviceShadow::evaluateDesired(mode, manual_desired, countdown_start, countdown_duration_min, emergency_stop, reset_stop, clear_error, bypass_level_sensor, bypass_flow_sensor);
     }
 }
 
@@ -144,8 +177,9 @@ void CloudManager::pushTelemetry() {
     String path = "/devices/" + deviceId + "/telemetry";
     FirebaseJson json;
     
-    json.set("waterLevel", waterLevelPct);
-    json.set("flowRate", flowRateLpm);
+    json.set("water_level_percent", waterLevelPct);
+    json.set("flow_rate_lpm", flowRateLpm);
+    json.set("ultrasonic_last_good_cm", (double)(ultrasonicLastGoodCmX10 / 10.0));
 
     Firebase.RTDB.updateNode(&fbdo_cloud, path.c_str(), &json);
 }
