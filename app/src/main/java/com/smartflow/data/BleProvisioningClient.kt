@@ -27,7 +27,7 @@ class BleProvisioningClient(private val rxBleClient: RxBleClient) {
     fun provisionDevice(macAddress: String, ssid: String, pass: String): Observable<String> {
         val device = rxBleClient.getBleDevice(macAddress)
         return device.establishConnection(false)
-            .flatMapObservable { connection ->
+            .flatMap { connection ->
                 connection.setupNotification(CHAR_STATUS_UUID)
                     .flatMap { notificationObservable ->
                         val tokenSingle = readCharacteristic(connection, CHAR_TOKEN_UUID)

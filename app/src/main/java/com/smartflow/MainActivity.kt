@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation(bleProvisioningClient, deviceRepository)
+                    AppNavigation(bleProvisioningClient, deviceRepository, cloudStore)
                 }
             }
         }
@@ -54,7 +54,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation(
     bleProvisioningClient: BleProvisioningClient,
-    deviceRepository: DeviceRepository
+    deviceRepository: DeviceRepository,
+    cloudStore: FirebaseCloudStore
 ) {
     val navController = rememberNavController()
     val auth = FirebaseAuth.getInstance()
@@ -86,7 +87,7 @@ fun AppNavigation(
         }
         
         composable("provisioning") {
-            val viewModel = ProvisioningViewModel(bleProvisioningClient)
+            val viewModel = ProvisioningViewModel(bleProvisioningClient, cloudStore)
             ProvisioningScreen(
                 viewModel = viewModel,
                 onProvisioningSuccess = {
@@ -99,7 +100,7 @@ fun AppNavigation(
         
         composable("dashboard/{deviceId}") { backStackEntry ->
             val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
-            val viewModel = DashboardViewModel(deviceRepository, deviceId)
+            val viewModel = DashboardViewModel(deviceRepository, deviceId, bleProvisioningClient)
             DashboardScreen(viewModel = viewModel)
         }
     }
