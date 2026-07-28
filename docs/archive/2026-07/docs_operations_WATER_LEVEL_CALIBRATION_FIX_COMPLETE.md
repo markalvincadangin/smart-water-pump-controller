@@ -205,8 +205,8 @@ The ESP32 firmware **already supports reading calibration from RTDB**. It's been
 **RTDB schema:**
 - `docs/operations/FIRMWARE_CONFIG_FROM_DATABASE.md`
 
-**SmartFlow skill:**
-- `.github/skills/smartflow/SKILL.md` (confirmed field calibration: 120/30 cm)
+**Calibration context:**
+- Field calibration reference: tank_empty_cm 120 / tank_full_cm 30 (see RTDB config docs below)
 
 ---
 

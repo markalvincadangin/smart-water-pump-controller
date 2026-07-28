@@ -2,74 +2,115 @@ package com.smartflow.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.smartflow.data.Device
-import com.smartflow.data.DeviceEvent
-import com.smartflow.data.DeviceRepository
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.smartflow.data.repository.DeviceRepository
+import com.smartflow.domain.ControlMode
+import com.smartflow.domain.DashboardUiState
+import com.smartflow.domain.DeviceConfig
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import com.google.firebase.auth.FirebaseAuth
-import com.smartflow.data.BleProvisioningClient
-import io.reactivex.rxjava3.schedulers.Schedulers
 
 class DashboardViewModel(
-    private val deviceRepository: DeviceRepository,
-    private val deviceId: String,
-    private val bleClient: BleProvisioningClient? = null,
-    private val deviceMacAddress: String? = null
+    private val repository: DeviceRepository
 ) : ViewModel() {
 
-    private val _deviceState = MutableStateFlow<Device?>(null)
-    val deviceState: StateFlow<Device?> = _deviceState
-
-    private val _eventsState = MutableStateFlow<List<DeviceEvent>>(emptyList())
-    val eventsState: StateFlow<List<DeviceEvent>> = _eventsState
+    val uiState: StateFlow<DashboardUiState> = combine(
+        repository.telemetryFlow,
+        repository.shadowFlow,
+        repository.configFlow,
+        repository.connectionFlow
+    ) { telemetry, shadow, config, connection ->
+        val currentMode = when (shadow.reported.runMode) {
+            "MANUAL", "MANUAL_ON", "MANUAL_OFF", "MANUAL_COOLDOWN" -> ControlMode.MANUAL
+            "COUNTDOWN" -> ControlMode.COUNTDOWN
+            else -> ControlMode.AUTO
+        }
+        
+        DashboardUiState(
+            isPumpRunning = shadow.reported.isRunning,
+            mode = currentMode,
+            lockoutActive = shadow.reported.isError || shadow.reported.isOverflowError,
+            waterLevelPct = telemetry.waterLevel,
+            flowRateLpm = telemetry.flowRate,
+            connectionStatus = connection,
+            config = config,
+            countdownRemainingSec = shadow.reported.countdownRemainingSec,
+            bypassLevelSensor = shadow.desired.bypassLevelSensor,
+            bypassFlowSensor = shadow.desired.bypassFlowSensor
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = DashboardUiState()
+    )
 
     init {
         viewModelScope.launch {
-            deviceRepository.getDeviceStream(deviceId).collectLatest { device ->
-                _deviceState.value = device
-            }
-        }
-        viewModelScope.launch {
-            deviceRepository.getEventsStream(deviceId).collectLatest { events ->
-                _eventsState.value = events.sortedByDescending { it.timestamp }
-            }
+            repository.initializeAuth()
         }
     }
 
-    fun togglePump(currentState: Boolean) {
-        viewModelScope.launch {
-            deviceRepository.setPumpState(deviceId, !currentState)
-        }
+    fun setPumpPower(on: Boolean) {
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
+            mode = uiState.value.mode.name,
+            manualDesired = on
+        )
+        repository.updateDesiredState(desired)
     }
 
-    fun factoryReset(onSuccess: () -> Unit, onError: (String) -> Unit = {}) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) {
-            onError("Not logged in")
-            return
-        }
-        viewModelScope.launch {
-            // 1. Send BLE RESET to erase NVS and reboot device (best-effort)
-            val mac = deviceMacAddress
-            if (bleClient != null && mac != null) {
-                try {
-                    bleClient.sendFactoryReset(mac)
-                        .subscribeOn(Schedulers.io())
-                        .blockingGet() // Wait for write to complete
-                } catch (e: Exception) {
-                    // BLE device may be out of range — log and continue with Firebase unclaim
-                }
-            }
-            // 2. Remove Firebase ownership claim (triggers Cloud Function to wipe device node)
-            try {
-                deviceRepository.unclaimDevice(uid, deviceId)
-                onSuccess()
-            } catch (e: Exception) {
-                onError("Failed to unclaim device: ${e.message}")
-            }
-        }
+    fun setControlMode(mode: ControlMode) {
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
+            mode = mode.name,
+            manualDesired = uiState.value.isPumpRunning,
+            countdownStart = false // Reset countdown start when switching modes
+        )
+        repository.updateDesiredState(desired)
+    }
+
+    fun triggerEmergencyStop() {
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
+            mode = ControlMode.MANUAL.name,
+            emergencyStop = true
+        )
+        repository.updateDesiredState(desired)
+    }
+    
+    fun startCountdown(durationMin: Int) {
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
+            mode = ControlMode.COUNTDOWN.name,
+            countdownStart = true,
+            countdownDurationMin = durationMin
+        )
+        repository.updateDesiredState(desired)
+    }
+    
+    fun clearErrors() {
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
+            mode = uiState.value.mode.name,
+            clearError = true,
+            resetStop = true
+        )
+        repository.updateDesiredState(desired)
+    }
+
+    fun updateConfig(config: DeviceConfig) {
+        repository.updateConfig(config)
+    }
+
+    fun updateBypass(bypassLevel: Boolean, bypassFlow: Boolean) {
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
+            mode = uiState.value.mode.name,
+            bypassLevelSensor = bypassLevel,
+            bypassFlowSensor = bypassFlow
+        )
+        repository.updateDesiredState(desired)
     }
 }

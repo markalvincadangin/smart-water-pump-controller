@@ -1,0 +1,42 @@
+---
+description: SmartFlow docs source of truth and mandatory Spec Kit lifecycle
+alwaysApply: true
+---
+
+# SmartFlow
+
+## Source of truth
+
+For work in `firmware/**`, `app/**`, `functions/**`, `docs/**`, and `specs/**`:
+
+1. **`docs/specs/`** — canonical current-state specifications ([README](docs/specs/README.md)).
+2. **Other `docs/`** — operations, audit, ADR, archive; use when specs or feature plans reference them.
+3. **`.specify/memory/constitution.md`** — non-negotiable safety principles.
+4. **`specs/[###-feature]/`** — Spec Kit feature artifacts (not under `docs/specs/`).
+
+Do not duplicate normative content across files; cross-reference the owner listed in `docs/specs/README.md`.
+
+## Spec Kit lifecycle (mandatory)
+
+All non-trivial work MUST use Spec Kit. Do not implement without an active feature under `specs/`.
+
+1. `/speckit-specify` — feature spec  
+2. `/speckit-clarify` — ambiguities (when needed)  
+3. `/speckit-plan` — technical plan  
+4. `/speckit-tasks` — tasks  
+5. `/speckit-implement` — implementation  
+
+Optional gates: `/speckit-analyze`, `/speckit-checklist`, `/speckit-converge`. Brownfield: `/speckit-brownfield-*` when scanning or bootstrapping existing code.
+
+When behavior changes, update the owning `docs/specs/` file in the same change set.
+
+## Always-on behavior
+
+- Prioritize safety and reliability for pump-control behavior.
+- Use additive, backward-compatible schema and protocol updates.
+- Keep edits tightly scoped; avoid unrelated rewrites.
+- Preserve traceability in `docs/audit/` and feature specs under `specs/`.
+
+## Trigger terms
+
+SmartFlow, ESP32, NodeMCU, RS-485, Firebase RTDB, dry-run, overflow, run_mode, JSN-SR04T, YF-G1, C-01, C-02, H-02, H-03, H-04, H-05, H-06, H-07, M-01, M-02, M-03, M-05, M-06.

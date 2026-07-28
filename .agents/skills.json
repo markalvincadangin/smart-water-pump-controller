@@ -1,0 +1,7 @@
+{
+  "entries": [
+    { "path": "../.cursor/skills" },
+    { "path": "../.claude/skills" },
+    { "path": "../.agents/skills" }
+  ]
+}

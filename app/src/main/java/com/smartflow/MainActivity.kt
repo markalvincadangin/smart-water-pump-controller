@@ -100,7 +100,8 @@ fun AppNavigation(
         
         composable("dashboard/{deviceId}") { backStackEntry ->
             val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
-            val viewModel = DashboardViewModel(deviceRepository, deviceId, bleProvisioningClient)
+            val firebaseRepo = com.smartflow.data.repository.FirebaseDeviceRepository(deviceId)
+            val viewModel = DashboardViewModel(firebaseRepo)
             DashboardScreen(viewModel = viewModel)
         }
     }
