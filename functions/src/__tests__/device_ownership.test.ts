@@ -93,4 +93,15 @@ describe("ownership contract validation", () => {
     )).toBeUndefined();
     expect(ownershipFixtures.claimed.devices[DEVICE_ID]).not.toHaveProperty("maintenance");
   });
+
+  it("reuses an active owner Wi-Fi recovery request on retry", () => {
+    const first = planWifiReprovision(
+      ownershipFixtures.claimed, DEVICE_ID, OWNER_UID, "recovery-1", "n".repeat(32), 1_000,
+    )!;
+    const retry = planWifiReprovision(
+      first, DEVICE_ID, OWNER_UID, "recovery-2", "m".repeat(32), 2_000,
+    )!;
+    expect(retry.devices[DEVICE_ID].maintenance.activeWifiReprovisionRequestId).toBe("recovery-1");
+    expect(Object.keys(retry.devices[DEVICE_ID].maintenance.requests)).toEqual(["recovery-1"]);
+  });
 });
