@@ -159,6 +159,20 @@ The firmware must always satisfy:
 
 ### Cloud contract (Firebase RTDB)
 
+#### Stable device authorization
+
+The master authenticates as the stable Firebase UID `device:{device_id}`. On each boot it obtains a Firebase custom token from the regional `bootstrapDevice` HTTPS function by presenting its immutable device ID, current NTP timestamp, single-use nonce, and a per-device HMAC proof. The device-specific bootstrap secret is compiled from ignored local configuration; its backend counterpart lives only in Google Cloud Secret Manager.
+
+The firmware must fail closed when its bootstrap configuration, trust root, NTP time, HTTPS validation, or token exchange is unavailable: it may not fall back to anonymous sign-in or unauthenticated RTDB access. RTDB rules allow a device principal to read only its own configuration/control paths and write only its own telemetry, status, reported shadow, events, diagnostics, and permitted metadata. Ownership remains an Android-user concern and is separate from device authentication.
+
+Device metadata uses `deviceAuthUid` (not a transient Firebase UID). The Cloud Function establishes that field before device writes; firmware may only retain its immutable MAC-derived device ID and does not persist a Firebase access/refresh token or anonymous UID in NVS.
+
+#### Ownership pairing boundary
+
+The authoritative owner is `/devices/{device_id}/ownership/ownerUid`; the legacy-compatible `metadata/claimedByUid` and `/users/{uid}/devices/{device_id}` index are written atomically only by trusted backend code. Android clients do not write those paths directly. After `get_token`, firmware creates a fresh BLE-local proof, publishes only its SHA-256 verifier at `/devices/{device_id}/pairing/current`, and never persists or logs the raw proof. The verifier is single-use and expires after five minutes. Android may claim only through the regional `claimDevice` callable after the final BLE `provisioned` status and only while authenticated as a non-anonymous, durable account (Google or verified email/password).
+
+The BLE `reset` command is a scoped local reprovisioning operation, not a factory erase. Its first state-changing action is `setPump(false)`; it clears only local Wi-Fi credentials and enrollment material, then restarts into BLE provisioning. It retains safety latches, pump configuration, counters, cloud ownership, and immutable device identity.
+
 **Status (ESP32 → cloud)**: `/devices/{device_id}/telemetry` and `/devices/{device_id}/shadow/reported`
 
 Core fields:

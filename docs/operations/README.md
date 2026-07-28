@@ -28,6 +28,7 @@ This folder contains production operations runbooks for SmartFlow.
 - [troubleshooting.md](troubleshooting.md): Symptoms and corrective actions.
 - [safety.md](safety.md): Electrical and operational safety controls.
 - [dependency_patching_plan.md](dependency_patching_plan.md): Ongoing dependency and security maintenance workflow.
+- [provisioning_ota_recovery.md](provisioning_ota_recovery.md): Per-device bootstrap, authenticated OTA, and recovery safety boundary.
 
 ## Source-of-Truth Notes
 

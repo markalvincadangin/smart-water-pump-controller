@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Provisioning & Wireless Flashing
+# Specification Quality Checklist: Provisioning, Ownership & Wireless Flashing
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-07-28
@@ -32,3 +32,4 @@
 ## Notes
 
 - Clarification session (2026-07-28) removed the Android App-to-Firebase OTA requirement to focus exclusively on local dev environment OTA for active development.
+- Revision (2026-07-28): durable user ownership, server-authorized claiming, and non-transferable local reset were added. The feature remains implementation-agnostic while defining account and ownership outcomes.

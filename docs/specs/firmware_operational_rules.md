@@ -16,7 +16,22 @@ source: hand-authored
 
 For hardware architecture, build targets, RS-485 protocol, and RTDB schema see [`docs/specs/firmware.md`](./firmware.md).
 
-This is the single source document for implemented firmware behavior: modes, safety, cloud connectivity, WiFi recovery, restart/safe-mode behavior, and command semantics.
+This is the single source document for implemented firmware behavior: modes, safety, cloud connectivity, WiFi recovery, BLE provisioning, restart/safe-mode behavior, and command semantics.
+
+## BLE Provisioning
+
+An unprovisioned controller advertises a provisioning-only BLE service. It exposes one command characteristic (write and write-without-response) and one response characteristic (notify). The service is for onboarding and maintenance only; pump control remains on the cloud control path after provisioning.
+
+- Commands and responses are JSON objects with protocol version `v: 1` and a request ID `id`.
+- Supported commands are `scan_wifi`, `get_token`, `connect_wifi`, and `reset`. Malformed, unsupported, or concurrent requests produce structured error responses.
+- Wi-Fi scanning emits `scan_start`, one or more `network` results (including BSSID, RSSI, and authentication mode), then `scan_complete`.
+- `connect_wifi` persists the supplied credentials, starts association without blocking the BLE write callback, then emits `connecting`, `connected`, and `provisioned` only after association succeeds. Connection failures emit a `TIMEOUT` error after 20 seconds and leave the device available for retry.
+- The `get_token` response includes the canonical cloud device identifier (`SF-…`). The Android app uses that identifier—not the opaque provisioning token—to claim the device in RTDB.
+- On successful provisioning, the controller initializes cloud services and keeps BLE alive briefly so the final notification can be delivered before deinitializing BLE.
+
+## Local Development OTA
+
+The ESP32 master uses a dual-slot OTA partition table (`smartflow_ota.csv`) so an incoming development image is staged in the inactive application slot. The `esp32dev_ota` environment enables ArduinoOTA and accepts uploads on the local network after Wi-Fi is connected. A USB flash is required once when migrating an already-flashed device to this partition layout; subsequent development uploads use OTA.
 
 ## 1. Mode Model
 
