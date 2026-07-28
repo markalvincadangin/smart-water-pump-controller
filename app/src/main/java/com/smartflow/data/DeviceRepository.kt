@@ -19,4 +19,8 @@ class DeviceRepository(private val cloudStore: FirebaseCloudStore) {
     suspend fun unclaimDevice(uid: String, deviceId: String) {
         cloudStore.unclaimDevice(uid, deviceId)
     }
+
+    fun getUserDevicesStream(uid: String): Flow<List<String>> {
+        return cloudStore.observeUserDevices(uid)
+    }
 }

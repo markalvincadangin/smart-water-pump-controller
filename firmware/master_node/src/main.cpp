@@ -1,6 +1,10 @@
 #include <Arduino.h>
 #include <esp_task_wdt.h>
 
+#ifdef ENABLE_OTA
+#include <ArduinoOTA.h>
+#endif
+
 #include "config/config.h"
 #include "state/state.h"
 #include "rs485/rs485_comm.h"
@@ -105,6 +109,10 @@ void loop() {
               }
               LOG(APP_LOG_LEVEL_INFO, "NTP", "Time synced (post-reconnect).");
           }
+#ifdef ENABLE_OTA
+          ArduinoOTA.begin();
+          LOG(APP_LOG_LEVEL_INFO, "OTA", "ArduinoOTA initialized and listening");
+#endif
       }
       
       // Update RSSI occasionally
@@ -247,6 +255,12 @@ void loop() {
     esp_light_sleep_start();
     esp_task_wdt_reset();
   }
+
+#ifdef ENABLE_OTA
+  if (WifiManager::isConnected()) {
+      ArduinoOTA.handle();
+  }
+#endif
 
   delay(1);
 }
