@@ -26,8 +26,8 @@ int  cfgSleepEmergencyLevel  = SLEEP_DEFAULT_EMERGENCY_LVL;
 int  cfgLevelSensorFailureThreshold = SENSOR_FAILURE_THRESHOLD;
 int  cfgIdleSensorIntervalMs   = IDLE_SENSOR_INTERVAL_MS_DEF;
 int  cfgIdleFirebaseIntervalMs = IDLE_FIREBASE_INTERVAL_MS_DEF;
-bool cfgBypassLevelSensor      = false;
-bool cfgBypassFlowSensor       = false;   // bypass dry-run + flow-stuck checks
+bool cfgBypassLevelSensor      = true;
+bool cfgBypassFlowSensor       = true;   // bypass dry-run + flow-stuck checks
 
 float flowRateLpm             = 0.0f;
 int   waterLevelPct           = -1;

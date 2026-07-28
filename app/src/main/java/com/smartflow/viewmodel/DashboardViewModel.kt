@@ -53,7 +53,8 @@ class DashboardViewModel(
     }
 
     fun setPumpPower(on: Boolean) {
-        val desired = com.smartflow.domain.ShadowDesired(
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
             mode = uiState.value.mode.name,
             manualDesired = on
         )
@@ -61,15 +62,18 @@ class DashboardViewModel(
     }
 
     fun setControlMode(mode: ControlMode) {
-        val desired = com.smartflow.domain.ShadowDesired(
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
             mode = mode.name,
-            manualDesired = uiState.value.isPumpRunning
+            manualDesired = uiState.value.isPumpRunning,
+            countdownStart = false // Reset countdown start when switching modes
         )
         repository.updateDesiredState(desired)
     }
 
     fun triggerEmergencyStop() {
-        val desired = com.smartflow.domain.ShadowDesired(
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
             mode = ControlMode.MANUAL.name,
             emergencyStop = true
         )
@@ -77,7 +81,8 @@ class DashboardViewModel(
     }
     
     fun startCountdown(durationMin: Int) {
-        val desired = com.smartflow.domain.ShadowDesired(
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
             mode = ControlMode.COUNTDOWN.name,
             countdownStart = true,
             countdownDurationMin = durationMin
@@ -86,7 +91,8 @@ class DashboardViewModel(
     }
     
     fun clearErrors() {
-        val desired = com.smartflow.domain.ShadowDesired(
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
             mode = uiState.value.mode.name,
             clearError = true,
             resetStop = true
@@ -99,7 +105,8 @@ class DashboardViewModel(
     }
 
     fun updateBypass(bypassLevel: Boolean, bypassFlow: Boolean) {
-        val desired = com.smartflow.domain.ShadowDesired(
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
             mode = uiState.value.mode.name,
             bypassLevelSensor = bypassLevel,
             bypassFlowSensor = bypassFlow
