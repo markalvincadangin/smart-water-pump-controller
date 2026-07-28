@@ -53,6 +53,27 @@ class FirebaseCloudStore {
         database.child("users").child(uid).child("devices").child(deviceId).removeValue().await()
     }
 
+    fun observeUserDevices(uid: String): Flow<List<String>> = callbackFlow {
+        val ref = database.child("users").child(uid).child("devices")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val devices = mutableListOf<String>()
+                for (child in snapshot.children) {
+                    if (child.getValue(Boolean::class.java) == true) {
+                        child.key?.let { devices.add(it) }
+                    }
+                }
+                trySend(devices.toList())
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                close(error.toException())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
     fun streamEvents(deviceId: String): Flow<List<DeviceEvent>> = callbackFlow {
         val ref = database.child("devices").child(deviceId).child("events").orderByChild("timestamp").limitToLast(50)
         val eventsList = mutableListOf<DeviceEvent>()

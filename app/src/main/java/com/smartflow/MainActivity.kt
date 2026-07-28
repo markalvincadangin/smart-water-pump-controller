@@ -22,6 +22,9 @@ import com.smartflow.viewmodel.ProvisioningViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 
 class MainActivity : ComponentActivity() {
 
@@ -73,17 +76,46 @@ fun AppNavigation(
         }
         
         composable("device_list") {
-            // Mock list for now, ideally fetched from a user's claimed devices list
-            val claimedDevices = listOf("SmartFlow-123", "SmartFlow-456")
-            DeviceListScreen(
-                devices = claimedDevices,
-                onDeviceSelected = { deviceId ->
-                    navController.navigate("dashboard/$deviceId")
-                },
-                onAddNewDevice = {
-                    navController.navigate("provisioning")
+            val uid = auth.currentUser?.uid
+            if (uid != null) {
+                val devicesFlow = deviceRepository.getUserDevicesStream(uid)
+                val claimedDevices by devicesFlow.collectAsState(initial = null)
+
+                LaunchedEffect(claimedDevices) {
+                    if (claimedDevices != null && claimedDevices!!.isEmpty()) {
+                        navController.navigate("provisioning") {
+                            popUpTo("device_list") { inclusive = true }
+                        }
+                    }
                 }
-            )
+
+                if (claimedDevices == null) {
+                    // Loading state
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = androidx.compose.ui.Alignment.Center
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator()
+                    }
+                } else if (claimedDevices!!.isNotEmpty()) {
+                    DeviceListScreen(
+                        devices = claimedDevices!!,
+                        onDeviceSelected = { deviceId ->
+                            navController.navigate("dashboard/$deviceId")
+                        },
+                        onAddNewDevice = {
+                            navController.navigate("provisioning")
+                        }
+                    )
+                }
+            } else {
+                // If uid is null, fallback to login
+                LaunchedEffect(Unit) {
+                    navController.navigate("login") {
+                        popUpTo("device_list") { inclusive = true }
+                    }
+                }
+            }
         }
         
         composable("provisioning") {
