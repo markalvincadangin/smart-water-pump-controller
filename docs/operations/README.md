@@ -29,6 +29,7 @@ This folder contains production operations runbooks for SmartFlow.
 - [safety.md](safety.md): Electrical and operational safety controls.
 - [dependency_patching_plan.md](dependency_patching_plan.md): Ongoing dependency and security maintenance workflow.
 - [provisioning_ota_recovery.md](provisioning_ota_recovery.md): Per-device bootstrap, authenticated OTA, and recovery safety boundary.
+- [account_auth_setup.md](account_auth_setup.md): Firebase/Android OAuth and verified email/password setup checklist.
 
 ## Source-of-Truth Notes
 
