@@ -20,6 +20,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.smartflow.domain.ConnectionState
+import com.smartflow.presentation.theme.CyanPrimary
 import com.smartflow.presentation.theme.EmeraldSecondary
 import com.smartflow.presentation.theme.GrayText
 
