@@ -19,7 +19,7 @@ Because of this, we have rigorous testing requirements.
 
 ### 1. Read the Safety Rules
 
-Review [.github/skills/smartflow/SKILL.md](.github/skills/smartflow/SKILL.md) — especially section "Non-Negotiable Safety Rules."
+Review [docs/specs/firmware_operational_rules.md](docs/specs/firmware_operational_rules.md) and related specs under `docs/specs/`.
 
 Key principles:
 - ✅ **Fail toward pump OFF** — Any ambiguity = stop the pump

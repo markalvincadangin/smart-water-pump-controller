@@ -33,9 +33,11 @@ The following content types have exactly one home. Do not add them elsewhere:
 
 ## Document Governance
 
-- **Edits**: All changes are in-place edits to existing files. Do not create new spec files for topics that fit an existing owner — add a section or subsection instead.
-- **New feature specs**: Use `/speckit.specify` → `.specify/specs/[feature]/spec.md`. Do not add feature specs to this folder.
-- **Historical and superseded documentation**: `docs/archive/`
+- **Source of truth:** This folder (`docs/specs/`) plus supporting material under `docs/` (operations, audit, ADR) as referenced here. Agents and contributors MUST treat these files as canonical for current implementation behavior.
+- **Feature development:** ALWAYS use the Spec Kit lifecycle (`/speckit-specify` → clarify if needed → `/speckit-plan` → `/speckit-tasks` → `/speckit-implement`). Artifacts live under `specs/[###-feature-name]/` — never as new files in this folder.
+- **Edits:** All changes are in-place edits to existing files. Do not create new spec files for topics that fit an existing owner — add a section or subsection instead.
+- **When code changes behavior:** Update the owning spec file here in the same PR/change set.
+- **Historical and superseded documentation:** `docs/archive/`
 - **Architectural reference plans** (shipped work): `docs/plans/` — read-only design artifacts, not active spec-kit workflows
-- **Active known issues**: `docs/audit/firmware_known_issues_2026-04-02.md`
-- **Field runbooks**: `docs/operations/`
+- **Active known issues:** `docs/audit/firmware_known_issues_2026-04-02.md`
+- **Field runbooks:** `docs/operations/`
