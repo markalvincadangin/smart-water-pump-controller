@@ -190,6 +190,20 @@ export function planWifiReprovision(
   const device = next.devices?.[id];
   if (!device || device.ownership?.ownerUid !== ownerUid || device.ownership?.state !== "claimed") return;
 
+  const activeRequestId = device.maintenance?.activeWifiReprovisionRequestId;
+  const activeRequest = typeof activeRequestId === "string"
+    ? device.maintenance?.requests?.[activeRequestId]
+    : undefined;
+  // A callable retry must not create a second, independently actionable reset.
+  // The caller receives the existing request details from the transaction result.
+  if (activeRequest?.action === "WIFI_REPROVISION" &&
+      activeRequest?.requestedByUid === ownerUid &&
+      activeRequest?.status === "pending" &&
+      typeof activeRequest?.expiresAtMs === "number" &&
+      activeRequest.expiresAtMs > nowMs) {
+    return next;
+  }
+
   const request = {
     action: "WIFI_REPROVISION",
     requestedByUid: ownerUid,
@@ -468,8 +482,19 @@ export const requestWifiReprovision = onCall({ region: REGION }, async (request)
     if (!root || typeof root !== "object") return;
     return planWifiReprovision(root, id, caller.uid, requestId, nonce, nowMs);
   });
-  if (!result.committed) throw new HttpsError("permission-denied", "Device ownership required");
-  return { requestId, expiresAtMs: nowMs + WINDOW_MS };
+  const resolvedDevice = (result.snapshot.val() as Record<string, any> | null)?.devices?.[id];
+  const resolvedRequestId = resolvedDevice?.maintenance?.activeWifiReprovisionRequestId;
+  const resolvedRequest = typeof resolvedRequestId === "string"
+    ? resolvedDevice?.maintenance?.requests?.[resolvedRequestId]
+    : undefined;
+  if (resolvedRequest?.action !== "WIFI_REPROVISION" ||
+      resolvedRequest?.requestedByUid !== caller.uid ||
+      resolvedRequest?.status !== "pending" ||
+      typeof resolvedRequest?.expiresAtMs !== "number" ||
+      resolvedRequest.expiresAtMs <= nowMs) {
+    throw new HttpsError("permission-denied", "Device ownership required");
+  }
+  return { requestId: resolvedRequestId, expiresAtMs: resolvedRequest.expiresAtMs };
 });
 
 /** Atomically binds an unclaimed device to the durable user holding the active BLE proof. */
