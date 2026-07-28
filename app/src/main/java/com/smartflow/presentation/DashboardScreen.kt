@@ -12,7 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.collectAsState
 import com.smartflow.domain.ConnectionState
 import com.smartflow.presentation.components.*
 import com.smartflow.presentation.theme.AmberWarning
@@ -26,7 +26,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     modifier: Modifier = Modifier
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsState()
     var showConfig by remember { mutableStateOf(false) }
 
     Scaffold(
