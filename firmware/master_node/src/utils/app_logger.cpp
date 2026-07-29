@@ -62,11 +62,17 @@ size_t AppLogger::write(uint8_t c) {
 }
 
 size_t AppLogger::write(const uint8_t *buffer, size_t size) {
-    size_t n = 0;
-    while (size--) {
-        n += write(*buffer++);
+    if (!buffer || size == 0) {
+        return 0;
     }
-    return n;
+
+    // Dispatch the complete record to every sink.  Besides avoiding one virtual
+    // call per character, this makes the logger's buffer-oriented contract
+    // explicit: sinks receive the same bytes in the same order.
+    for (auto sink : sinks) {
+        sink->write(buffer, size);
+    }
+    return size;
 }
 
 void AppLogger::logEvent(int level, const char* comp, const char* fmt, ...) {
@@ -84,7 +90,28 @@ void AppLogger::logEvent(int level, const char* comp, const char* fmt, ...) {
     s = s % 60;
     ms = ms % 1000;
 
-    this->printf("[%02lu:%02lu:%02lu.%03lu] [%s] %s\n", h, m, s, ms, comp, buf);
+    // Do not use Print::printf() here.  Some Arduino core builds route that
+    // helper through a non-overridden Print path, which bypasses registered
+    // sinks.  Formatting first and explicitly calling this class's write()
+    // guarantees Serial, TCP, and future sinks observe the identical record.
+    char entry[384];
+    const int entryLength = snprintf(
+        entry,
+        sizeof(entry),
+        "[%02lu:%02lu:%02lu.%03lu] [%s] %s\n",
+        h,
+        m,
+        s,
+        ms,
+        comp ? comp : "LOG",
+        buf);
+    if (entryLength > 0) {
+        const size_t bytesToWrite = static_cast<size_t>(
+            entryLength < static_cast<int>(sizeof(entry))
+                ? entryLength
+                : sizeof(entry) - 1);
+        write(reinterpret_cast<const uint8_t*>(entry), bytesToWrite);
+    }
     
     // Only push to cloud if it's an error or warning, to avoid spamming the events node.
     if (level <= APP_LOG_LEVEL_WARN) {

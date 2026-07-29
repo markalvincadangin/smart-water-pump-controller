@@ -20,7 +20,14 @@ type PairingVerifier = {
   expiresAtMs?: number;
   purpose?: "claim" | "transfer" | "release";
   consumedAtMs?: number;
+  claimantUid?: string;
+  claimAuditId?: string;
   recipientUid?: string;
+};
+
+type PairingReservation = {
+  verifier: PairingVerifier;
+  claimAuditId: string;
 };
 
 /** Stable, client-visible codes for the ownership claim boundary. */
@@ -37,8 +44,155 @@ export type ClaimResultCode = typeof CLAIM_RESULT_CODES[keyof typeof CLAIM_RESUL
 
 const pairingHash = (proof: string): string => crypto.createHash("sha256").update(proof, "utf8").digest("hex");
 
+/**
+ * Reserves the one-time pairing verifier with RTDB's server ETag compare-and-set
+ * API. The Admin SDK transaction client may call its handler with an empty local
+ * cache before it has fetched this narrow path; aborting in that state prevented
+ * a valid verifier from ever reaching the server. ETags make the read and write
+ * explicitly server-authoritative and preserve single-claim semantics.
+ */
+async function reservePairingVerifier(
+  deviceId: string,
+  callerUid: string,
+  proof: string,
+  proposedAuditId: string,
+  nowMs: number,
+): Promise<PairingReservation> {
+  const databaseUrl = admin.app().options.databaseURL?.replace(/\/$/, "");
+  const credential = admin.app().options.credential as
+    | { getAccessToken?: () => Promise<{ access_token?: string }> }
+    | undefined;
+  const token = credential?.getAccessToken
+    ? await credential.getAccessToken()
+    : undefined;
+  const accessToken = token?.access_token;
+  if (!databaseUrl || !accessToken) {
+    logger.error("Unable to obtain a server credential for pairing reservation", { deviceId });
+    throw new HttpsError("internal", "CLAIM_UNAVAILABLE");
+  }
+
+  const verifierUrl = `${databaseUrl}/devices/${encodeURIComponent(deviceId)}/pairing/current.json`;
+  const expectedProofHash = pairingHash(proof);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const read = await fetch(verifierUrl, {
+      headers: { Authorization: `Bearer ${accessToken}`, "X-Firebase-ETag": "true" },
+    });
+    if (!read.ok) {
+      logger.error("Unable to read pairing verifier", { deviceId, status: read.status });
+      throw new HttpsError("internal", "CLAIM_UNAVAILABLE");
+    }
+    const verifier = await read.json() as PairingVerifier | null;
+    const etag = read.headers.get("etag");
+    if (!verifier || !etag || verifier.purpose !== "claim") {
+      throw new HttpsError("failed-precondition", "CLAIM_UNAVAILABLE");
+    }
+    if (typeof verifier.expiresAtMs !== "number" || verifier.expiresAtMs <= nowMs) {
+      throw new HttpsError("deadline-exceeded", "EXPIRED_PAIRING");
+    }
+    if (verifier.proofHash !== expectedProofHash) {
+      throw new HttpsError("failed-precondition", "CLAIM_UNAVAILABLE");
+    }
+    if (verifier.consumedAtMs) {
+      if (verifier.claimantUid === callerUid && typeof verifier.claimAuditId === "string") {
+        return { verifier, claimAuditId: verifier.claimAuditId };
+      }
+      throw new HttpsError("already-exists", "ALREADY_CLAIMED");
+    }
+
+    const reserved: PairingVerifier = {
+      ...verifier,
+      consumedAtMs: nowMs,
+      claimantUid: callerUid,
+      claimAuditId: proposedAuditId,
+    };
+    const write = await fetch(verifierUrl, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "if-match": etag,
+      },
+      body: JSON.stringify(reserved),
+    });
+    if (write.ok) return { verifier: reserved, claimAuditId: proposedAuditId };
+    if (write.status !== 412) {
+      logger.error("Unable to reserve pairing verifier", { deviceId, status: write.status });
+      throw new HttpsError("internal", "CLAIM_UNAVAILABLE");
+    }
+  }
+
+  throw new HttpsError("aborted", "CLAIM_UNAVAILABLE");
+}
+
+/**
+ * Creates or returns the single active Wi-Fi reprovision request using a
+ * server-authoritative ETag compare-and-set on the individual device record.
+ *
+ * A root Admin SDK transaction can invoke its handler with an empty local
+ * cache. For a recovery request that turns BLE back on, treating that cache
+ * miss as an authorization failure made the callable intermittently unusable.
+ * The narrow device CAS also protects concurrent status/telemetry writes: a
+ * stale read receives 412 and is retried with the current device record.
+ */
+async function reserveWifiReprovisionRequest(
+  deviceId: string,
+  ownerUid: string,
+  requestId: string,
+  nonce: string,
+  nowMs: number,
+): Promise<Record<string, any> | undefined> {
+  const databaseUrl = admin.app().options.databaseURL?.replace(/\/$/, "");
+  const credential = admin.app().options.credential as
+    | { getAccessToken?: () => Promise<{ access_token?: string }> }
+    | undefined;
+  const token = credential?.getAccessToken ? await credential.getAccessToken() : undefined;
+  const accessToken = token?.access_token;
+  if (!databaseUrl || !accessToken) {
+    logger.error("Unable to obtain a server credential for Wi-Fi reprovision reservation", { deviceId });
+    throw new HttpsError("internal", "WIFI_REPROVISION_UNAVAILABLE");
+  }
+
+  const deviceUrl = `${databaseUrl}/devices/${encodeURIComponent(deviceId)}.json`;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const read = await fetch(deviceUrl, {
+      headers: { Authorization: `Bearer ${accessToken}`, "X-Firebase-ETag": "true" },
+    });
+    if (!read.ok) {
+      logger.error("Unable to read device for Wi-Fi reprovision reservation", { deviceId, status: read.status });
+      throw new HttpsError("internal", "WIFI_REPROVISION_UNAVAILABLE");
+    }
+    const currentDevice = await read.json() as Record<string, any> | null;
+    const etag = read.headers.get("etag");
+    if (!currentDevice || !etag) return undefined;
+
+    const plannedRoot = planWifiReprovision({ devices: { [deviceId]: currentDevice } }, deviceId, ownerUid, requestId, nonce, nowMs);
+    const nextDevice = plannedRoot?.devices?.[deviceId] as Record<string, any> | undefined;
+    if (!nextDevice) return undefined;
+
+    // An owner retry of a still-pending request is intentionally idempotent.
+    if (JSON.stringify(nextDevice) === JSON.stringify(currentDevice)) return currentDevice;
+
+    const write = await fetch(deviceUrl, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "if-match": etag,
+      },
+      body: JSON.stringify(nextDevice),
+    });
+    if (write.ok) return nextDevice;
+    if (write.status !== 412) {
+      logger.error("Unable to reserve Wi-Fi reprovision request", { deviceId, status: write.status });
+      throw new HttpsError("internal", "WIFI_REPROVISION_UNAVAILABLE");
+    }
+  }
+
+  throw new HttpsError("aborted", "WIFI_REPROVISION_UNAVAILABLE");
+}
+
 function requireDurableAccount(auth: DurableAuth | undefined): DurableAuth {
-  if (!auth || !auth.uid || auth.isAnonymous || auth.role === "device") {
+  if (!auth || !auth.uid || !auth.provider || auth.isAnonymous || auth.role === "device") {
     throw new HttpsError("permission-denied", "DURABLE_ACCOUNT_REQUIRED");
   }
   if (auth.provider === "password" && !auth.emailVerified) {
@@ -47,15 +201,34 @@ function requireDurableAccount(auth: DurableAuth | undefined): DurableAuth {
   return auth;
 }
 
-function callableDurableAuth(request: { auth?: { uid: string; token: Record<string, unknown> } }): DurableAuth {
-  const token = request.auth?.token;
-  return requireDurableAccount(request.auth ? {
-    uid: request.auth.uid,
-    emailVerified: token?.email_verified === true,
-    provider: (token?.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider,
-    isAnonymous: (token?.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider === "anonymous",
-    role: typeof token?.role === "string" ? token.role : undefined,
-  } : undefined);
+/**
+ * Resolves the caller from Firebase Auth's current server record, not only the
+ * callable token. A deleted user can retain a locally cached FirebaseUser (and
+ * sometimes an unexpired ID token) briefly; accepting that token would allow a
+ * reset test or revoked account to claim a device. The Admin lookup makes every
+ * ownership boundary authoritative at the time of the request.
+ */
+async function callableDurableAuth(request: { auth?: { uid: string; token: Record<string, unknown> } }): Promise<DurableAuth> {
+  if (!request.auth) return requireDurableAccount(undefined);
+
+  try {
+    const user = await admin.auth().getUser(request.auth.uid);
+    const provider = user.providerData.find((entry) => entry.providerId !== "firebase")?.providerId;
+    return requireDurableAccount({
+      uid: user.uid,
+      emailVerified: user.emailVerified,
+      provider,
+      isAnonymous: (request.auth.token.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider === "anonymous",
+      role: typeof user.customClaims?.role === "string" ? user.customClaims.role : undefined,
+    });
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.warn("Rejected durable callable for unavailable Firebase Auth user", {
+      uid: request.auth.uid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new HttpsError("permission-denied", "DURABLE_ACCOUNT_REQUIRED");
+  }
 }
 
 function requirePairingProof(value: unknown): string {
@@ -286,6 +459,99 @@ export function planDeviceClaim(
   return next;
 }
 
+/**
+ * Pure planner for the server-authorized transfer/release transition. The
+ * callable validates the prospective recipient before invoking this function;
+ * this function then keeps every RTDB mutation in one deterministic update.
+ */
+export function planOwnershipPairing(
+  root: Record<string, any>,
+  id: string,
+  callerUid: string,
+  purpose: "transfer" | "release",
+  requestId: string,
+  nonce: string,
+  nowMs: number,
+  recipientUid?: string,
+): Record<string, any> | undefined {
+  if (purpose === "transfer" && (!recipientUid || recipientUid === callerUid)) return;
+  const next = structuredClone(root) as Record<string, any>;
+  const device = next.devices?.[id];
+  if (!device || device.ownership?.ownerUid !== callerUid) return;
+
+  const activeRequestId = device.ownership?.ownershipPairingRequestId as string | undefined;
+  const activeExpiresAtMs = (device.ownership?.ownershipPairingExpiresAtMs ?? device.ownership?.transferExpiresAtMs) as number | undefined;
+  if ((device.ownership?.state === "transfer_pending" || device.ownership?.state === "release_pending") &&
+      typeof activeExpiresAtMs === "number" && activeExpiresAtMs <= nowMs) {
+    const activeRequest = activeRequestId ? device.maintenance?.requests?.[activeRequestId] : undefined;
+    if (activeRequest?.status === "pending") {
+      device.maintenance.requests[activeRequestId!] = { ...activeRequest, status: "expired", completedAtMs: nowMs };
+    }
+    device.maintenance = {
+      ...(device.maintenance ?? {}),
+      audit: {
+        ...(device.maintenance?.audit ?? {}),
+        [`${activeRequestId ?? "ownership"}-expired`]: {
+          action: "OWNERSHIP_PAIRING", actorUid: callerUid, outcome: "expired", createdAtMs: nowMs, requestId: activeRequestId ?? null,
+        },
+      },
+    };
+    device.ownershipAudit = {
+      ...(device.ownershipAudit ?? {}),
+      [`${activeRequestId ?? "ownership"}-expired`]: { type: "ownership_pairing_expired", actorUid: callerUid, createdAtMs: nowMs },
+    };
+    device.ownership = {
+      ...device.ownership,
+      state: "claimed", ownershipPairingRequestId: null, ownershipPairingExpiresAtMs: null,
+      transferId: null, pendingRecipientUid: null, transferExpiresAtMs: null, updatedAtMs: nowMs,
+    };
+  }
+  if (device.ownership?.state !== "claimed") return;
+
+  const expiresAtMs = nowMs + OWNERSHIP_PAIRING_WINDOW_MS;
+  const request = {
+    action: "OWNERSHIP_PAIRING", purpose, requestedByUid: callerUid, recipientUid: recipientUid ?? null,
+    issuedAtMs: nowMs, expiresAtMs, nonce, status: "pending",
+  };
+  device.ownership = {
+    ...device.ownership,
+    state: purpose === "transfer" ? "transfer_pending" : "release_pending",
+    ownershipPairingRequestId: requestId, ownershipPairingExpiresAtMs: expiresAtMs,
+    ...(purpose === "transfer" ? { transferId: requestId, pendingRecipientUid: recipientUid, transferExpiresAtMs: expiresAtMs } : {}),
+    updatedAtMs: nowMs,
+  };
+  device.maintenance = {
+    ...(device.maintenance ?? {}),
+    requests: { ...(device.maintenance?.requests ?? {}), [requestId]: request },
+    audit: { ...(device.maintenance?.audit ?? {}), [requestId]: { action: request.action, purpose, actorUid: callerUid, outcome: "requested", createdAtMs: nowMs, requestId } },
+  };
+  device.ownershipAudit = { ...(device.ownershipAudit ?? {}), [requestId]: { type: `${purpose}_started`, actorUid: callerUid, recipientUid: recipientUid ?? null, createdAtMs: nowMs } };
+  return next;
+}
+
+export function planOwnershipPairingCancellation(
+  root: Record<string, any>, id: string, callerUid: string, nowMs: number,
+): Record<string, any> | undefined {
+  const next = structuredClone(root) as Record<string, any>;
+  const device = next.devices?.[id];
+  const requestId = device?.ownership?.ownershipPairingRequestId as string | undefined;
+  if (!device || !requestId || device.ownership?.ownerUid !== callerUid ||
+      (device.ownership?.state !== "transfer_pending" && device.ownership?.state !== "release_pending")) return;
+  const request = device.maintenance?.requests?.[requestId];
+  if (!request || request.status !== "pending") return;
+  device.maintenance = {
+    ...(device.maintenance ?? {}),
+    requests: { ...(device.maintenance?.requests ?? {}), [requestId]: { ...request, status: "cancelled", completedAtMs: nowMs } },
+    audit: { ...(device.maintenance?.audit ?? {}), [`${requestId}-cancelled`]: { action: "OWNERSHIP_PAIRING", actorUid: callerUid, outcome: "cancelled", createdAtMs: nowMs, requestId } },
+  };
+  device.ownership = {
+    ...device.ownership, state: "claimed", ownershipPairingRequestId: null, ownershipPairingExpiresAtMs: null,
+    transferId: null, pendingRecipientUid: null, transferExpiresAtMs: null, updatedAtMs: nowMs,
+  };
+  device.ownershipAudit = { ...(device.ownershipAudit ?? {}), [`${requestId}-cancelled`]: { type: "ownership_pairing_cancelled", actorUid: callerUid, createdAtMs: nowMs } };
+  return next;
+}
+
 async function beginOwnershipPairing(
   id: string,
   callerUid: string,
@@ -306,66 +572,10 @@ async function beginOwnershipPairing(
   if (!requestId) throw new HttpsError("internal", "OWNERSHIP_PAIRING_UNAVAILABLE");
   const nowMs = Date.now();
   const expiresAtMs = nowMs + OWNERSHIP_PAIRING_WINDOW_MS;
+  const nonce = crypto.randomBytes(24).toString("base64url");
   const result = await admin.database().ref().transaction((root: Record<string, any> | null) => {
-    const next = root && typeof root === "object" ? structuredClone(root) as Record<string, any> : {};
-    const device = next.devices?.[id];
-    if (!device || device.ownership?.ownerUid !== callerUid) return;
-    const activeRequestId = device.ownership?.ownershipPairingRequestId as string | undefined;
-    const activeExpiresAtMs = (device.ownership?.ownershipPairingExpiresAtMs ?? device.ownership?.transferExpiresAtMs) as number | undefined;
-    if ((device.ownership?.state === "transfer_pending" || device.ownership?.state === "release_pending") &&
-        typeof activeExpiresAtMs === "number" && activeExpiresAtMs <= nowMs) {
-      const activeRequest = activeRequestId ? device.maintenance?.requests?.[activeRequestId] : undefined;
-      if (activeRequest && activeRequest.status === "pending") {
-        device.maintenance.requests[activeRequestId!] = { ...activeRequest, status: "expired", completedAtMs: nowMs };
-      }
-      device.maintenance.audit = {
-        ...(device.maintenance?.audit ?? {}),
-        [`${activeRequestId ?? "ownership"}-expired`]: {
-          action: "OWNERSHIP_PAIRING", actorUid: callerUid, outcome: "expired", createdAtMs: nowMs, requestId: activeRequestId ?? null,
-        },
-      };
-      device.ownershipAudit = {
-        ...(device.ownershipAudit ?? {}),
-        [`${activeRequestId ?? "ownership"}-expired`]: { type: "ownership_pairing_expired", actorUid: callerUid, createdAtMs: nowMs },
-      };
-      device.ownership = {
-        ...device.ownership,
-        state: "claimed",
-        ownershipPairingRequestId: null,
-        ownershipPairingExpiresAtMs: null,
-        transferId: null,
-        pendingRecipientUid: null,
-        transferExpiresAtMs: null,
-        updatedAtMs: nowMs,
-      };
-    }
-    if (device.ownership?.state !== "claimed") return;
-    const request = {
-      action: "OWNERSHIP_PAIRING",
-      purpose,
-      requestedByUid: callerUid,
-      recipientUid: recipientUid ?? null,
-      issuedAtMs: nowMs,
-      expiresAtMs,
-      nonce: crypto.randomBytes(24).toString("base64url"),
-      status: "pending",
-    };
-    device.ownership = {
-      ...device.ownership,
-      state: purpose === "transfer" ? "transfer_pending" : "release_pending",
-      ownershipPairingRequestId: requestId,
-      ownershipPairingExpiresAtMs: expiresAtMs,
-      ...(purpose === "transfer" ? { transferId: requestId, pendingRecipientUid: recipientUid, transferExpiresAtMs: expiresAtMs } : {}),
-      updatedAtMs: nowMs,
-    };
-    device.maintenance = {
-      ...(device.maintenance ?? {}),
-      requests: { ...(device.maintenance?.requests ?? {}), [requestId]: request },
-      audit: { ...(device.maintenance?.audit ?? {}), [requestId]: { action: request.action, purpose, actorUid: callerUid, outcome: "requested", createdAtMs: nowMs, requestId } },
-    };
-    device.ownershipAudit = { ...(device.ownershipAudit ?? {}), [requestId]: { type: `${purpose}_started`, actorUid: callerUid, recipientUid: recipientUid ?? null, createdAtMs: nowMs } };
-    next.devices = { ...(next.devices ?? {}), [id]: device };
-    return next;
+    if (!root || typeof root !== "object") return;
+    return planOwnershipPairing(root, id, callerUid, purpose, requestId, nonce, nowMs, recipientUid);
   });
   if (!result.committed) throw new HttpsError("failed-precondition", "OWNERSHIP_PAIRING_UNAVAILABLE");
   return { requestId, expiresAtMs };
@@ -472,17 +682,13 @@ export const setDeviceBootstrapState = onCall({ region: REGION }, async (request
 });
 
 export const requestWifiReprovision = onCall({ region: REGION }, async (request) => {
-  const caller = callableDurableAuth(request);
+  const caller = await callableDurableAuth(request);
   const id = deviceId((request.data as { deviceId?: unknown }).deviceId);
   const requestId = admin.database().ref(`devices/${id}/maintenance/requests`).push().key;
   if (!requestId) throw new HttpsError("internal", "Unable to create request ID");
   const nowMs = Date.now();
   const nonce = crypto.randomBytes(24).toString("base64url");
-  const result = await admin.database().ref().transaction((root: Record<string, any> | null) => {
-    if (!root || typeof root !== "object") return;
-    return planWifiReprovision(root, id, caller.uid, requestId, nonce, nowMs);
-  });
-  const resolvedDevice = (result.snapshot.val() as Record<string, any> | null)?.devices?.[id];
+  const resolvedDevice = await reserveWifiReprovisionRequest(id, caller.uid, requestId, nonce, nowMs);
   const resolvedRequestId = resolvedDevice?.maintenance?.activeWifiReprovisionRequestId;
   const resolvedRequest = typeof resolvedRequestId === "string"
     ? resolvedDevice?.maintenance?.requests?.[resolvedRequestId]
@@ -499,7 +705,7 @@ export const requestWifiReprovision = onCall({ region: REGION }, async (request)
 
 /** Atomically binds an unclaimed device to the durable user holding the active BLE proof. */
 export const claimDevice = onCall({ region: REGION }, async (request) => {
-  const caller = callableDurableAuth(request);
+  const caller = await callableDurableAuth(request);
   const data = request.data as { deviceId?: unknown; pairingProof?: unknown };
   const id = deviceId(data.deviceId);
   const proof = requirePairingProof(data.pairingProof);
@@ -507,22 +713,44 @@ export const claimDevice = onCall({ region: REGION }, async (request) => {
   const auditId = admin.database().ref(`devices/${id}/ownershipAudit`).push().key;
   if (!auditId) throw new HttpsError("internal", "CLAIM_UNAVAILABLE");
 
-  const result = await admin.database().ref().transaction((root: Record<string, any> | null) => {
-    if (!root) return;
-    return planDeviceClaim(root, id, caller.uid, proof, auditId, nowMs);
-  });
-  if (!result.committed) {
-    const device = (await admin.database().ref(`devices/${id}`).get()).val() as { ownership?: { ownerUid?: string; state?: string }; pairing?: { current?: PairingVerifier } } | null;
-    if (device?.ownership?.ownerUid && device.ownership?.state === "claimed") throw new HttpsError("already-exists", "ALREADY_CLAIMED");
-    const verifier = device?.pairing?.current;
-    if (verifier?.expiresAtMs && verifier.expiresAtMs <= nowMs) throw new HttpsError("deadline-exceeded", "EXPIRED_PAIRING");
-    throw new HttpsError("failed-precondition", "CLAIM_UNAVAILABLE");
+  // Reserve the static pairing verifier rather than transacting at the RTDB
+  // root or whole device record. The ESP32 updates status and telemetry often,
+  // and the verifier itself is the narrow single-claim boundary.
+  const deviceRef = admin.database().ref(`devices/${id}`);
+  const reservation = await reservePairingVerifier(id, caller.uid, proof, auditId, nowMs);
+  const claimAuditId = reservation.claimAuditId;
+  const device = (await deviceRef.get()).val() as {
+    ownership?: { ownerUid?: string; state?: string; claimedAtMs?: number; [key: string]: unknown };
+    metadata?: Record<string, unknown>;
+  } | null;
+  if (!device) throw new HttpsError("failed-precondition", "CLAIM_UNAVAILABLE");
+  if (device.ownership?.ownerUid && device.ownership.ownerUid !== caller.uid) throw new HttpsError("already-exists", "ALREADY_CLAIMED");
+  if (device.ownership?.ownerUid === caller.uid && device.ownership.state === "claimed") {
+    await admin.database().ref(`users/${caller.uid}/devices/${id}`).set(true);
+    return { deviceId: id, status: "claimed" as const, auditId: claimAuditId };
   }
-  return { deviceId: id, status: "claimed", auditId };
+
+  // The pairing reservation above is the one-time compare-and-set boundary.
+  // This multi-location update atomically establishes the authoritative owner,
+  // owner index, metadata, and audit record without racing live telemetry.
+  await admin.database().ref().update({
+    [`devices/${id}/ownership`]: {
+      ...(device.ownership ?? {}), ownerUid: caller.uid, state: "claimed",
+      claimedAtMs: device.ownership?.claimedAtMs ?? nowMs, updatedAtMs: nowMs,
+      ownershipPairingRequestId: null, ownershipPairingExpiresAtMs: null,
+      transferId: null, pendingRecipientUid: null, transferExpiresAtMs: null,
+    },
+    [`devices/${id}/metadata`]: { ...(device.metadata ?? {}), claimedByUid: caller.uid, updatedAtMs: nowMs },
+    [`devices/${id}/ownershipAudit/${claimAuditId}`]: {
+      type: "claimed", actorUid: caller.uid, previousOwnerUid: null, createdAtMs: nowMs,
+    },
+    [`users/${caller.uid}/devices/${id}`]: true,
+  });
+  return { deviceId: id, status: "claimed", auditId: claimAuditId };
 });
 
 export const startOwnershipTransfer = onCall({ region: REGION }, async (request) => {
-  const caller = callableDurableAuth(request);
+  const caller = await callableDurableAuth(request);
   const data = request.data as { deviceId?: unknown; recipientUid?: unknown };
   const id = deviceId(data.deviceId);
   if (typeof data.recipientUid !== "string") throw new HttpsError("invalid-argument", "INVALID_RECIPIENT");
@@ -530,29 +758,18 @@ export const startOwnershipTransfer = onCall({ region: REGION }, async (request)
 });
 
 export const releaseDevice = onCall({ region: REGION }, async (request) => {
-  const caller = callableDurableAuth(request);
+  const caller = await callableDurableAuth(request);
   const id = deviceId((request.data as { deviceId?: unknown }).deviceId);
   return beginOwnershipPairing(id, caller.uid, "release");
 });
 
 export const cancelOwnershipPairing = onCall({ region: REGION }, async (request) => {
-  const caller = callableDurableAuth(request);
+  const caller = await callableDurableAuth(request);
   const id = deviceId((request.data as { deviceId?: unknown }).deviceId);
   const nowMs = Date.now();
   const result = await admin.database().ref().transaction((root: Record<string, any> | null) => {
-    const next = root && typeof root === "object" ? structuredClone(root) as Record<string, any> : {};
-    const device = next.devices?.[id];
-    const requestId = device?.ownership?.ownershipPairingRequestId as string | undefined;
-    if (!device || !requestId || device.ownership?.ownerUid !== caller.uid ||
-        (device.ownership?.state !== "transfer_pending" && device.ownership?.state !== "release_pending")) return;
-    const request = device.maintenance?.requests?.[requestId];
-    if (!request || request.status !== "pending") return;
-    device.maintenance.requests[requestId] = { ...request, status: "cancelled", completedAtMs: nowMs };
-    device.maintenance.audit = { ...(device.maintenance.audit ?? {}), [`${requestId}-cancelled`]: { action: "OWNERSHIP_PAIRING", actorUid: caller.uid, outcome: "cancelled", createdAtMs: nowMs, requestId } };
-    device.ownership = { ...device.ownership, state: "claimed", ownershipPairingRequestId: null, ownershipPairingExpiresAtMs: null, transferId: null, pendingRecipientUid: null, transferExpiresAtMs: null, updatedAtMs: nowMs };
-    device.ownershipAudit = { ...(device.ownershipAudit ?? {}), [`${requestId}-cancelled`]: { type: "ownership_pairing_cancelled", actorUid: caller.uid, createdAtMs: nowMs } };
-    next.devices = { ...(next.devices ?? {}), [id]: device };
-    return next;
+    if (!root || typeof root !== "object") return;
+    return planOwnershipPairingCancellation(root, id, caller.uid, nowMs);
   });
   if (!result.committed) throw new HttpsError("failed-precondition", "NO_ACTIVE_OWNERSHIP_PAIRING");
   return { deviceId: id, status: "cancelled" };
@@ -563,7 +780,7 @@ export const cancelOwnershipPairing = onCall({ region: REGION }, async (request)
  * checks authoritative owner markers rather than the convenience user index.
  */
 export const checkAccountDeletionEligibility = onCall({ region: REGION }, async (request) => {
-  const caller = callableDurableAuth(request);
+  const caller = await callableDurableAuth(request);
   const devices = (await admin.database().ref("devices").get()).val() as Record<string, { ownership?: { ownerUid?: string } }> | null;
   const ownedDeviceCount = Object.values(devices ?? {}).filter((device) => device.ownership?.ownerUid === caller.uid).length;
   return { eligible: ownedDeviceCount === 0, ownedDeviceCount };

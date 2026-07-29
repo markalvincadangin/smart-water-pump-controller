@@ -19,7 +19,7 @@
         "ownershipAudit": { ".write": false },
         "pairing": {
           "current": {
-            ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId && newData.child('proofHash').isString() && !newData.hasChild('rawProof')"
+            ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId && newData.child('proofHash').isString() && !newData.child('rawProof').exists()"
           }
         },
         "status": {

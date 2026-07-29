@@ -171,7 +171,13 @@ Device metadata uses `deviceAuthUid` (not a transient Firebase UID). The Cloud F
 
 The authoritative owner is `/devices/{device_id}/ownership/ownerUid`; the legacy-compatible `metadata/claimedByUid` and `/users/{uid}/devices/{device_id}` index are written atomically only by trusted backend code. Android clients do not write those paths directly. After `get_token`, firmware creates a fresh BLE-local proof, publishes only its SHA-256 verifier at `/devices/{device_id}/pairing/current`, and never persists or logs the raw proof. The verifier is single-use and expires after five minutes. Android may claim only through the regional `claimDevice` callable after the final BLE `provisioned` status and only while authenticated as a non-anonymous, durable account (Google or verified email/password).
 
+`provisioned` ends the BLE exchange, not necessarily the user-visible setup flow. The device may intentionally close BLE while it joins Wi-Fi and completes cloud registration. The Android app must show a bounded cloud-registration wait state and retry the secure callable claim for up to 45 attempts at two-second intervals (90 seconds). A retry during that window must reuse the in-memory pairing proof and must not restart BLE scanning; the user may explicitly begin a new provisioning attempt only after that path is exhausted. The app must not use a direct RTDB ownership/readiness preflight as a substitute for the callable claim.
+
 The BLE `reset` command is a scoped local reprovisioning operation, not a factory erase. Its first state-changing action is `setPump(false)`; it clears only local Wi-Fi credentials and enrollment material, then restarts into BLE provisioning. It retains safety latches, pump configuration, counters, cloud ownership, and immutable device identity.
+
+#### Production diagnostics
+
+Production firmware publishes the `/devices/{device_id}/diagnostics` snapshot with `freeHeap`, `wifiRSSI`, and `restartReason`. Its cloud event history contains only WARN/ERROR records. The trusted `retainDeviceEvents` backend trigger atomically retains the newest 50 push-ID-ordered records, including repair of oversized histories left by an older firmware version. Firmware application code logs through the transport-independent `AppLogger`/`LogSink` boundary; development-only sinks may expose bounded local history and live diagnostics on a trusted LAN, but the TCP implementation is compile-time gated and is not a production support interface.
 
 **Status (ESP32 → cloud)**: `/devices/{device_id}/telemetry` and `/devices/{device_id}/shadow/reported`
 

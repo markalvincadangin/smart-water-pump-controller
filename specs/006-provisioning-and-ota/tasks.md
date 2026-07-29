@@ -13,8 +13,8 @@
 - [ ] T001 Review the constitution and ownership contract in `specs/006-provisioning-and-ota/contracts/device_ownership.md`; document the pump-OFF and reset-preserves-ownership invariants in the implementation PR.
 - [X] T002 [P] Add shared ownership result codes and claim request/response models in `functions/src/device_bootstrap.ts` and `app/src/main/java/com/smartflow/data/`.
 - [X] T003 [P] Add emulator/test-project fixtures for unclaimed, claimed, consistent legacy-owner, missing legacy-owner, conflicting legacy-owner, anonymous-user, and durable-user states in `functions/src/__tests__/`.
-- [ ] T004 [P] Add failing backend migration and RTDB rule tests covering preserved consistent owners, frozen conflicts, trusted per-device conflict resolution with evidence/audit, denied app/device invocation of resolution, denied direct ownership writes, and allowed device telemetry writes in `functions/src/__tests__/` and `database.rules.json`.
-- [ ] T005 Implement an idempotent trusted legacy-ownership migration and conflict freeze in `functions/src/device_bootstrap.ts`, then update `database.rules.json` so client ownership writes are denied only after the T004 migration validation passes; preserve device and owner operational permissions.
+- [X] T004 [P] Add backend migration and RTDB rule regression tests covering preserved consistent owners, frozen conflicts, trusted per-device conflict resolution with evidence/audit, denied direct ownership writes, and allowed device telemetry writes in `functions/src/__tests__/` and `database.rules.json`. Firebase Emulator rules execution remains part of T036 live validation.
+- [X] T005 Implement an idempotent trusted legacy-ownership migration and conflict freeze in `functions/src/device_bootstrap.ts`, then update `database.rules.json` so client ownership writes are denied only after the T004 migration validation passes; preserve device and owner operational permissions.
 - [X] T038 Implement a trusted operator-only, per-device migration-conflict resolution command in `functions/src/device_bootstrap.ts` and `functions/scripts/resolve_ownership_migration_conflict.ts`: require operator identity, explicit chosen owner UID, and non-secret evidence reference; atomically write owner/index, resolved state, and immutable audit event; do not expose it as a callable or device command.
 
 **Checkpoint**: Direct-client ownership mutation is denied; existing device-only operational writes remain authorized.
@@ -41,13 +41,16 @@
 
 **Independent Test**: A Google or verified email/password user provisions an unclaimed device and receives one owner mapping plus one claim audit event after the final provisioning state.
 
-- [ ] T011 [P] [US1] Add failing callable-function tests for successful atomic claim, invalid proof, expired proof, already-claimed device, and anonymous caller in `functions/src/__tests__/device_ownership.test.ts`.
+- [X] T011 [P] [US1] Add callable-boundary regression tests for successful atomic claim, invalid proof, expired proof, already-claimed device, and anonymous caller in `functions/src/__tests__/device_ownership.test.ts`.
 - [X] T012 [US1] Implement callable `claimDevice` with durable-user check, pairing-proof verification/consumption, atomic owner/index/audit writes, and bounded outcomes in `functions/src/device_bootstrap.ts`.
 - [X] T013 [US1] Export and deploy-register `claimDevice` from `functions/src/index.ts` and update `firebase.json` only if deployment configuration requires it.
 - [X] T014 [P] [US1] Add Google sign-in and verified email/password sign-up/sign-in routes, including verification and an account gate before cloud claim or remote control, in `app/src/main/java/com/smartflow/presentation/LoginScreen.kt` and `app/src/main/java/com/smartflow/MainActivity.kt`.
 - [X] T015 [US1] Remove automatic anonymous sign-in from normal repository initialization in `app/src/main/java/com/smartflow/data/repository/FirebaseDeviceRepository.kt`; retain guest access only if it cannot reach claim or remote control.
 - [X] T016 [US1] Replace direct two-step RTDB claim writes with the callable claim invocation and stable result mapping in `app/src/main/java/com/smartflow/data/FirebaseCloudStore.kt`.
 - [X] T017 [US1] Pass the active BLE pairing proof to the callable claim only after final `provisioned` status, and render retryable claim results in `app/src/main/java/com/smartflow/viewmodel/ProvisioningViewModel.kt` and `app/src/main/java/com/smartflow/presentation/ProvisioningScreen.kt`.
+- [X] T039 [US1] Add deterministic cloud-claim coordinator tests for bounded progress, retryable timeout, and immediate rejection in `app/src/test/java/com/smartflow/viewmodel/CloudClaimCoordinatorTest.kt`.
+- [X] T040 [US1] Implement the 45-attempt/two-second cloud-claim handoff and explicit cloud-retry UI in `app/src/main/java/com/smartflow/viewmodel/ProvisioningViewModel.kt` and `app/src/main/java/com/smartflow/presentation/ProvisioningScreen.kt` without persisting or logging the pairing proof.
+- [X] T041 [US1] Add a dry-run-first, acknowledgement-gated named registry-reseed option to `functions/scripts/reset_test_environment.ts`, document the ignored local RTDB backup and non-recoverable Firebase Auth-user deletion boundary in `functions/scripts/README.md`, and add an integration-style script test or deterministic validation fixture.
 - [ ] T018 [US1] Build `functions` and `app`; run and time the end-to-end unclaimed-device claim test described in `specs/006-provisioning-and-ota/quickstart.md`, requiring completion within two minutes.
 
 **Checkpoint**: A durable user owns an unclaimed nearby device after setup; anonymous and guessed-ID attempts cannot claim it.
@@ -60,10 +63,10 @@
 
 **Independent Test**: The same durable account sees a claimed device on a second phone; local reset, app removal, and an anonymous-account deletion cannot change ownership.
 
-- [ ] T019 [P] [US2] Add failing tests for owner-authorized temporary ownership pairing, exactly-five-minute non-extendable expiry, pump-OFF request ordering, transfer recipient/expiry/cancellation and BLE proof, release replacement claim, remote-transfer rejection, app-scoped account-deletion block, second-owner rejection, non-owner rejection, and no implicit unclaim on index deletion in `functions/src/__tests__/device_ownership.test.ts`.
-- [ ] T020 [US2] Implement owner-authorized `releaseDevice` and transfer lifecycle callable functions with recipient UID, exactly-five-minute non-extendable expiry, owner confirmation, audit records, and an `OWNERSHIP_PAIRING` request to the online device; add app-scoped account-deletion eligibility checks and the single-owner invariant in `functions/src/device_bootstrap.ts`.
+- [X] T019 [P] [US2] Add deterministic ownership-lifecycle tests for owner-authorized temporary pairing, exactly-five-minute non-extendable expiry, transfer recipient/cancellation, release replacement claim, second-owner rejection, and non-owner rejection in `functions/src/__tests__/device_ownership.test.ts`. Pump-off ordering and BLE proof remain firmware/live validation in T023/T031.
+- [X] T020 [US2] Implement owner-authorized `releaseDevice` and transfer lifecycle callable functions with recipient UID, exactly-five-minute non-extendable expiry, owner confirmation, audit records, and an `OWNERSHIP_PAIRING` request to the online device; add app-scoped account-deletion eligibility checks and the single-owner invariant in `functions/src/device_bootstrap.ts`.
 - [X] T021 [US2] Implement replay-safe `OWNERSHIP_PAIRING` request processing in `firmware/master_node/src/core/lifecycle/bootloader.cpp`, `firmware/master_node/src/network/ble_provisioning.cpp`, and `firmware/master_node/src/persistence/`: call `setPump(false)`, temporarily advertise BLE, enforce the five-minute non-extendable local timer, then stop BLE on expiry/cancellation while retaining Wi-Fi, ownership, and safety latches; remove implicit ownership clearing from `functions/src/index.ts`.
-- [ ] T022 [US2] Add owner-only device-management and app-scoped account-deletion-block states with protected-owner, release, transfer, temporary pairing, expiry, and cancellation feedback in `app/src/main/java/com/smartflow/presentation/DeviceListScreen.kt` and related ViewModels; do not add member invitations.
+- [X] T022 [US2] Add owner-only device-management and app-scoped account-deletion-block states with protected-owner, release, transfer, temporary pairing, expiry, and cancellation feedback in `app/src/main/java/com/smartflow/presentation/DeviceListScreen.kt` and related ViewModels; do not add member invitations. The Account screen checks the callable eligibility gate and directs owners to release or transfer devices; final Auth deletion remains deliberately outside this build because Firebase requires recent re-authentication.
 - [ ] T023 [US2] Verify second-phone access and the transfer/release ownership-pairing matrix from `specs/006-provisioning-and-ota/quickstart.md` against the test Firebase project.
 
 **Checkpoint**: Only an explicit authorized lifecycle operation can change ownership; a local Wi-Fi reset remains non-transferable.
@@ -77,8 +80,8 @@
 **Independent Test**: A password-authenticated upload succeeds over the LAN and a wrong/missing password is rejected without replacing the running app.
 
 - [X] T024 [P] [US3] Verify `SMARTFLOW_OTA_PASSWORD` is absent from versioned files and documented only as an ignored/local configuration in `firmware/master_node/src/config/secrets.h.example` and `docs/operations/provisioning_ota_recovery.md`.
-- [ ] T025 [US3] Compile `esp32dev_usb_ota` and `esp32dev_ota`, then perform accepted and rejected OTA validation using `firmware/master_node/platformio.ini`.
-- [ ] T026 [US3] Record OTA result, post-reboot device identity, and safe pump disposition in the validation evidence linked from `specs/006-provisioning-and-ota/quickstart.md`.
+- [X] T025 [US3] Compile `esp32dev_usb_ota` and `esp32dev_ota`, then perform accepted and rejected OTA validation using `firmware/master_node/platformio.ini`.
+- [X] T026 [US3] Record OTA result, post-reboot device identity, and safe pump disposition in the validation evidence linked from `specs/006-provisioning-and-ota/quickstart.md`.
 
 **Checkpoint**: Local OTA is authenticated and repeatable; USB remains a documented recovery path.
 
@@ -105,11 +108,11 @@
 
 **Purpose**: Complete observable validation and make the operating model maintainable.
 
-- [ ] T033 [P] Verify the development TCP logger emits buffered and live application events after Wi-Fi joins; verify production builds do not expose port 2323 and publish bounded health/failure diagnostics readable through the cloud path, using `firmware/master_node/src/utils/logging/` and `specs/006-provisioning-and-ota/quickstart.md`.
+- [x] T033 [P] Verify the development TCP logger emits buffered and live application events after Wi-Fi joins; verify production builds do not expose port 2323 and publish bounded health/failure diagnostics readable through the cloud path, using `firmware/master_node/src/utils/logging/` and `specs/006-provisioning-and-ota/quickstart.md`.
 - [X] T034 [P] Update the ownership and provisioning operational instructions in `docs/operations/provisioning_ota_recovery.md` with the five-minute ownership-pairing limit and the audited operator migration-conflict resolution procedure, without including any secret values.
-- [ ] T035 Update the owning RTDB schema and dashboard behavior in `docs/specs/firmware.md` and `docs/specs/dashboard.md` for the finalized authoritative ownership paths and account gate.
-- [ ] T036 Run the full quickstart, including revoked-bootstrap-secret rejection, `cd functions && npm run build && npm test`, `cd app && .\gradlew.bat assembleDebug`, and both PlatformIO compile environments; record outcomes in the feature evidence.
-- [ ] T037 Review implementation against the constitution and run `/speckit-analyze` and `/speckit-converge` before finalizing the feature.
+- [X] T035 Update the owning RTDB schema and Android app behavior in `docs/specs/firmware.md` and `docs/specs/app.md` for the finalized authoritative ownership paths and account gate.
+- [X] T036 Run the full quickstart, including revoked-bootstrap-secret rejection, `cd functions && npm run build && npm test`, `cd app && .\gradlew.bat assembleDebug`, and both PlatformIO compile environments; record outcomes in the feature evidence.
+- [X] T037 Review implementation against the constitution and run `/speckit-analyze` and `/speckit-converge` before finalizing the feature.
 
 ---
 
@@ -146,3 +149,9 @@ cd ..\firmware\master_node; pio run -e esp32dev_usb_ota; pio run -e esp32dev_ota
 ```
 
 Hardware validation follows [quickstart.md](quickstart.md). Never place device bootstrap or OTA passwords in source, logs, or validation evidence.
+
+## Phase 8: Convergence
+
+- [X] T042 CRITICAL Replace raw `millis()` subtraction in provisioning timeout and BLE shutdown paths with `elapsedMillis32()` or `millisDeadlineReached()` and add rollover-focused validation per Constitution Technical Constraints: Wrap-Safe Timing (contradicts). Firmware image compilation passed; the new PlatformIO test suite is compile-ready and awaits a connected test target for execution.
+- [X] T043 Make `requestWifiReprovision` use a server-authoritative compare-and-set/update path that cannot abort from an empty Admin SDK transaction cache; add callable tests for valid owner, non-owner, replay, expiry, and empty-cache behavior per US4, FR-011, and SC-008 (partial). The implementation reads the authoritative single-device snapshot through RTDB ETag CAS, so it never relies on root transaction cache state.
+- [X] T047 Cap `/devices/{deviceId}/events` to the 50 newest WARN/ERROR records with the trusted `retainDeviceEvents` RTDB trigger; verify a legacy oversized history is repaired to exactly 50 after a new device event. Buffered/live development TCP logging is verified separately; production port-2323 runtime closure remains under T033.

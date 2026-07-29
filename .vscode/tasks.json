@@ -1,0 +1,53 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "esp32IpAddress",
+      "type": "promptString",
+      "description": "Enter the IP address of the ESP32 (e.g., 192.168.1.100)",
+      "default": "192.168.1."
+    }
+  ],
+  "tasks": [
+    {
+      "label": "Run SmartFlow on Poco (Wireless)",
+      "type": "shell",
+      "command": "adb connect 192.168.1.23:36737 && .\\gradlew.bat app:installDebug && adb -s 192.168.1.23:36737 shell am start -n com.smartflow/.MainActivity",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "SmartFlow Logcat (Poco)",
+      "type": "shell",
+      "command": "adb -s 192.168.1.23:36737 logcat --pid=$(adb -s 192.168.1.23:36737 shell pidof -s com.smartflow)",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "Flash Firmware via OTA (ESP32)",
+      "type": "shell",
+      "command": "$env:SMARTFLOW_OTA_PASSWORD='smartflow@2026'; pio run -e esp32dev_ota -t upload --upload-port ${input:esp32IpAddress}",
+      "options": {
+        "cwd": "${workspaceFolder}/firmware/master_node"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    }
+  ]
+}

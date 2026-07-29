@@ -7,7 +7,8 @@ import com.smartflow.data.WifiNetwork
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.schedulers.Schedulers
@@ -19,7 +20,8 @@ import com.google.firebase.auth.FirebaseAuth
 
 class ProvisioningViewModel(
     private val bleClient: BleProvisioningClient,
-    private val cloudStore: FirebaseCloudStore
+    private val cloudStore: FirebaseCloudStore,
+    private val cloudClaimCoordinator: CloudClaimCoordinator = CloudClaimCoordinator(cloudStore::claimDevice)
 ) : ViewModel() {
 
     private val _provisioningState = MutableStateFlow<ProvisioningState>(ProvisioningState.Idle)
@@ -28,10 +30,14 @@ class ProvisioningViewModel(
     private var scanDisposable: Disposable? = null
     private var provisionDisposable: Disposable? = null
     private var wifiScanDisposable: Disposable? = null
+    private var cloudClaimJob: Job? = null
+    private var pendingCloudClaim: PendingCloudClaim? = null
 
     private val scannedNetworks = mutableMapOf<String, WifiNetwork>() // Deduplicate by SSID
 
     fun startScanning() {
+        cloudClaimJob?.cancel()
+        pendingCloudClaim = null
         _provisioningState.value = ProvisioningState.Scanning
         scanDisposable?.dispose()
         scanDisposable = bleClient.scanForDevices()
@@ -83,6 +89,8 @@ class ProvisioningViewModel(
     }
 
     fun provisionDevice(macAddress: String, ssid: String, pass: String) {
+        cloudClaimJob?.cancel()
+        pendingCloudClaim = null
         _provisioningState.value = ProvisioningState.Provisioning
         provisionDisposable?.dispose()
 
@@ -105,36 +113,8 @@ class ProvisioningViewModel(
                         // GATT disconnect cannot replace a successful claim with
                         // a provisioning error.
                         provisionDisposable?.dispose()
-                        val eligible = AccountSession.state(FirebaseAuth.getInstance().currentUser) == DurableAccountState.ELIGIBLE
-                        if (eligible && deviceId.isNotEmpty() && claimToken.isNotEmpty()) {
-                            viewModelScope.launch {
-                                try {
-                                    // Device custom-token bootstrap may complete just after the final
-                                    // BLE status. Retry only the bounded, idempotent callable claim.
-                                    var lastError: String? = null
-                                    var claimed = false
-                                    repeat(30) {
-                                        if (claimed) return@repeat
-                                        when (val result = cloudStore.claimDevice(deviceId, claimToken)) {
-                                            is OwnershipClaimResult.Claimed -> {
-                                                lastError = null
-                                                claimed = true
-                                            }
-                                            is OwnershipClaimResult.Retryable -> {
-                                                lastError = result.code
-                                                delay(1000)
-                                            }
-                                            is OwnershipClaimResult.Rejected -> {
-                                                throw IllegalStateException(claimFailureMessage(result.code))
-                                            }
-                                        }
-                                    }
-                                    if (!claimed) throw IllegalStateException(claimFailureMessage(lastError ?: "CLAIM_UNAVAILABLE"))
-                                    _provisioningState.value = ProvisioningState.Success(deviceId)
-                                } catch (e: Exception) {
-                                    _provisioningState.value = ProvisioningState.Error("Failed to claim device: ${e.message}")
-                                }
-                            }
+                        if (deviceId.isNotEmpty() && claimToken.isNotEmpty()) {
+                            claimNearbyDevice(deviceId, claimToken)
                         } else {
                             _provisioningState.value = ProvisioningState.Error("Sign in with Google or a verified email before claiming this device")
                         }
@@ -184,29 +164,52 @@ class ProvisioningViewModel(
     }
 
     private fun claimNearbyDevice(deviceId: String, proof: String) {
-        viewModelScope.launch {
+        pendingCloudClaim = PendingCloudClaim(deviceId, proof)
+        cloudClaimJob?.cancel()
+        cloudClaimJob = viewModelScope.launch {
             try {
-                var lastError: String? = null
-                repeat(30) {
-                    when (val result = cloudStore.claimDevice(deviceId, proof)) {
-                        is OwnershipClaimResult.Claimed -> {
-                            _provisioningState.value = ProvisioningState.Success(deviceId)
-                            return@launch
-                        }
-                        is OwnershipClaimResult.Retryable -> {
-                            lastError = result.code
-                            delay(1000)
-                        }
-                        is OwnershipClaimResult.Rejected -> {
-                            throw IllegalStateException(claimFailureMessage(result.code))
-                        }
+                if (AccountSession.refreshDurableState(FirebaseAuth.getInstance()) != DurableAccountState.ELIGIBLE) {
+                    pendingCloudClaim = null
+                    _provisioningState.value = ProvisioningState.Error(
+                        "Your sign-in session expired or is no longer eligible. Please sign in again before claiming this device."
+                    )
+                    return@launch
+                }
+                when (val outcome = cloudClaimCoordinator.claimWhenReady(deviceId, proof) { attempt, maxAttempts ->
+                    _provisioningState.value = ProvisioningState.WaitingForCloud(attempt, maxAttempts)
+                }) {
+                    is CloudClaimOutcome.Claimed -> {
+                        pendingCloudClaim = null
+                        _provisioningState.value = ProvisioningState.Success(outcome.deviceId)
+                    }
+                    is CloudClaimOutcome.Rejected -> {
+                        pendingCloudClaim = null
+                        _provisioningState.value = ProvisioningState.Error(claimFailureMessage(outcome.code))
+                    }
+                    is CloudClaimOutcome.TimedOut -> {
+                        _provisioningState.value = ProvisioningState.Error(
+                            message = cloudWaitTimeoutMessage(outcome.lastCode),
+                            canRetryCloudClaim = true
+                        )
                     }
                 }
-                throw IllegalStateException(claimFailureMessage(lastError ?: "CLAIM_UNAVAILABLE"))
+            } catch (_: CancellationException) {
+                // A new scan/provision request replaced this handoff; preserve its state.
             } catch (error: Exception) {
                 _provisioningState.value = ProvisioningState.Error("Failed to claim device: ${error.message}")
             }
         }
+    }
+
+    fun retryPendingCloudClaim() {
+        val claim = pendingCloudClaim
+        if (claim == null) {
+            _provisioningState.value = ProvisioningState.Error(
+                "The secure pairing window is no longer available. Start provisioning again."
+            )
+            return
+        }
+        claimNearbyDevice(claim.deviceId, claim.proof)
     }
 
     override fun onCleared() {
@@ -214,6 +217,7 @@ class ProvisioningViewModel(
         scanDisposable?.dispose()
         provisionDisposable?.dispose()
         wifiScanDisposable?.dispose()
+        cloudClaimJob?.cancel()
     }
 
     private fun claimFailureMessage(code: String): String = when (code) {
@@ -221,8 +225,15 @@ class ProvisioningViewModel(
         "EXPIRED_PAIRING" -> "The secure pairing window expired. Start provisioning again."
         "DURABLE_ACCOUNT_REQUIRED", "EMAIL_VERIFICATION_REQUIRED" -> "Sign in with Google or verify your email before claiming this device."
         "INVALID_PAIRING_PROOF" -> "The secure BLE pairing proof was rejected. Start provisioning again."
-        else -> "The device is connecting to SmartFlow Cloud. Please retry."
+        else -> "The device could not be claimed. Please try again."
     }
+
+    private fun cloudWaitTimeoutMessage(lastCode: String): String = when (lastCode) {
+        "CLAIM_UNAVAILABLE" -> "The device is still connecting to SmartFlow Cloud. Keep this screen open and retry cloud registration."
+        else -> "SmartFlow Cloud has not confirmed the device yet. Check the Wi-Fi connection, then retry cloud registration."
+    }
+
+    private data class PendingCloudClaim(val deviceId: String, val proof: String)
 }
 
 sealed class ProvisioningState {
@@ -234,6 +245,7 @@ sealed class ProvisioningState {
     object Provisioning : ProvisioningState()
     object OwnershipPairing : ProvisioningState()
     data class ProvisioningUpdate(val message: String) : ProvisioningState()
+    data class WaitingForCloud(val attempt: Int, val maxAttempts: Int) : ProvisioningState()
     data class Success(val claimToken: String) : ProvisioningState()
-    data class Error(val message: String) : ProvisioningState()
+    data class Error(val message: String, val canRetryCloudClaim: Boolean = false) : ProvisioningState()
 }

@@ -28,15 +28,17 @@ pio run -e esp32dev_ota
 
 ## Provisioning checks
 
-1. Clear only local Wi-Fi/provisioning enrollment on a test device.
-2. Android discovers the BLE service, receives streamed scan records, submits credentials, and displays progress.
-3. The app reports success only after the final `provisioned` status, not after Wi-Fi association alone.
-4. Confirm the device restarts and its RTDB updates use the stable `device:{deviceId}` authorization identity.
-5. During active BLE setup, confirm the app receives the locally exchanged pairing proof but no raw proof is readable from cloud data.
-6. Claim through the backend and verify exactly one owner index, owner marker, and audit event are created.
-7. Sign in with the same durable account on a second phone and confirm the device appears without repeating provisioning.
-8. Verify an anonymous user, a guessed device ID, expired proof, and a second user cannot change ownership. Verify the already-claimed result does not reveal the current owner.
-9. Record elapsed setup time from scan start to successful claim and verify it is no more than two minutes.
+1. For a fully fresh test, run the acknowledgement-gated test reset with the named device registry reseed option. Confirm that RTDB contains only `deviceRegistry/{deviceId}` with `state: active` and its non-secret Secret Manager reference; no owner, pairing, telemetry, user index, or prior Firebase Auth user may remain.
+2. Create or sign in to a durable Google or verified email/password account after the reset.
+3. OTA-upload a build with a new one-time reprovision request ID. Confirm it clears only local Wi-Fi/device enrollment, retains the immutable device ID and safety state, and advertises BLE.
+4. Android discovers the BLE service, receives streamed scan records, submits credentials, and displays progress.
+5. After BLE reports `provisioned`, confirm the app displays SmartFlow Cloud registration progress while it performs at most 45 authenticated callable-claim attempts at two-second intervals. It must not return to BLE scanning during this phase.
+6. Confirm the cloud claim creates exactly one owner index, owner marker, and audit event. If the bounded wait expires before the proof expires, confirm **Retry cloud registration** retries the callable claim without scanning; **Start provisioning again** is a separate action.
+7. Confirm the device restarts and its RTDB updates use the stable `device:{deviceId}` authorization identity.
+8. During active BLE setup, confirm the app receives the locally exchanged pairing proof but no raw proof is readable from cloud data.
+9. Sign in with the same durable account on a second phone and confirm the device appears without repeating provisioning.
+10. Verify an anonymous user, a guessed device ID, expired proof, and a second user cannot change ownership. Verify the already-claimed result does not reveal the current owner.
+11. Record elapsed setup time from scan start to successful claim and verify it is no more than two minutes.
 
 ## Legacy migration checks
 
@@ -63,5 +65,6 @@ pio run -e esp32dev_ota
 
 ## Diagnostics checks
 
-1. In a development build, connect to `<device-ip>:2323` and confirm a read-only log stream after Wi-Fi joins.
+1. In a development build, connect one TCP client to `<device-ip>:2323` after Wi-Fi joins. Confirm the `Buffered Logs` and `Live Logs` delimiters, at least one live application record, then disconnect. Reconnect after the previous client is closed and confirm the previous record is replayed before new live records. The console accepts one active client; a concurrent client is deliberately rejected.
 2. In a production build, confirm port 2323 is not listening and that safe diagnostics are visible through the cloud path.
+3. Generate more than 50 WARN/ERROR events and confirm the trusted `retainDeviceEvents` backend trigger leaves `/devices/{deviceId}/events` with only the 50 newest push-ID-ordered records; INFO/DEBUG records must not be uploaded.

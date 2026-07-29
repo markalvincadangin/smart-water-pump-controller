@@ -28,6 +28,20 @@ The response contains a Firebase custom token only. It does not return a service
 
 The backend stores each bootstrap secret in a per-device Google Cloud Secret Manager secret. An operator-only device registry stores only non-secret lifecycle metadata (`active` or `revoked`, creation time, revocation reason) and is not writable by devices or Android clients.
 
+### Fresh-test registry seed
+
+The destructive test reset may recreate exactly one explicitly requested registry record after deleting the RTDB root:
+
+`/deviceRegistry/{deviceId}`
+
+| Field | Type | Writer | Validation |
+|---|---|---|---|
+| `state` | string | Trusted reset script | Must be `active` |
+| `secretName` | string | Trusted reset script | Fully qualified Secret Manager resource name only; never a secret value |
+| `updatedAtMs` | number | Trusted reset script | Script-generated epoch milliseconds |
+
+This seed is bootstrap infrastructure, not a restored device record. It must not recreate `/devices/{deviceId}`, ownership, pairing, telemetry, maintenance data, or user indexes.
+
 ## Durable ownership and pairing
 
 `/devices/{deviceId}/ownership`

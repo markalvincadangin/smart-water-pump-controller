@@ -15,7 +15,8 @@ fun DeviceListScreen(
     devices: List<String>,
     onDeviceSelected: (String) -> Unit,
     onAddNewDevice: () -> Unit,
-    onManageOwnership: (String) -> Unit
+    onManageOwnership: (String) -> Unit,
+    onManageAccount: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp)
@@ -55,5 +56,9 @@ fun DeviceListScreen(
         ) {
             Text("Add New Device")
         }
+        TextButton(
+            onClick = onManageAccount,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        ) { Text("Account") }
     }
 }

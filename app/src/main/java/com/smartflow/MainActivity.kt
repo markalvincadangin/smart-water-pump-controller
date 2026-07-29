@@ -18,6 +18,7 @@ import com.smartflow.data.DurableAccountState
 import com.smartflow.presentation.DashboardScreen
 import com.smartflow.presentation.DeviceListScreen
 import com.smartflow.presentation.DeviceOwnershipScreen
+import com.smartflow.presentation.AccountManagementScreen
 import com.smartflow.presentation.LoginScreen
 import com.smartflow.presentation.ProvisioningScreen
 import com.smartflow.viewmodel.DashboardViewModel
@@ -28,6 +29,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 private fun hasEligibleAccount(): Boolean {
     return AccountSession.state(FirebaseAuth.getInstance().currentUser) == DurableAccountState.ELIGIBLE
@@ -83,9 +87,28 @@ fun AppNavigation(
         }
         
         composable("device_list") {
-            val uid = auth.currentUser?.uid?.takeIf { hasEligibleAccount() }
-            if (uid != null) {
-                val devicesFlow = deviceRepository.getUserDevicesStream(uid)
+            var sessionValidated by remember { mutableStateOf(false) }
+            var uid by remember { mutableStateOf<String?>(null) }
+
+            LaunchedEffect(Unit) {
+                if (AccountSession.refreshDurableState(auth) == DurableAccountState.ELIGIBLE) {
+                    uid = auth.currentUser?.uid
+                    sessionValidated = true
+                } else {
+                    navController.navigate("login") {
+                        popUpTo("device_list") { inclusive = true }
+                    }
+                }
+            }
+
+            if (!sessionValidated) {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) { androidx.compose.material3.CircularProgressIndicator() }
+            } else if (uid != null) {
+                val authenticatedUid = requireNotNull(uid)
+                val devicesFlow = deviceRepository.getUserDevicesStream(authenticatedUid)
                 val claimedDevices by devicesFlow.collectAsState(initial = null)
 
                 LaunchedEffect(claimedDevices) {
@@ -113,7 +136,8 @@ fun AppNavigation(
                         onAddNewDevice = {
                             navController.navigate("provisioning")
                         },
-                        onManageOwnership = { deviceId -> navController.navigate("device_ownership/$deviceId") }
+                        onManageOwnership = { deviceId -> navController.navigate("device_ownership/$deviceId") },
+                        onManageAccount = { navController.navigate("account") },
                     )
                 }
             } else {
@@ -158,6 +182,14 @@ fun AppNavigation(
                         popUpTo("device_ownership/$deviceId") { inclusive = true }
                     }
                 },
+            )
+        }
+
+        composable("account") {
+            AccountManagementScreen(
+                accountLabel = auth.currentUser?.email ?: auth.currentUser?.uid.orEmpty(),
+                onCheckDeletionEligibility = { cloudStore.checkAccountDeletionEligibility() },
+                onBack = { navController.popBackStack() },
             )
         }
     }

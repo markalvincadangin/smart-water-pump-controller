@@ -65,7 +65,7 @@ class FirebaseDeviceRepository(
     override suspend fun initializeAuth() {
         try {
             _connectionFlow.value = ConnectionState.CONNECTING
-            if (AccountSession.state(auth.currentUser) != DurableAccountState.ELIGIBLE) {
+            if (AccountSession.refreshDurableState(auth) != DurableAccountState.ELIGIBLE) {
                 Log.w("FirebaseDeviceRepository", "A durable account is required before device access")
                 _connectionFlow.value = ConnectionState.DISCONNECTED
                 return

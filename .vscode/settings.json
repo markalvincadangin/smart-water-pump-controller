@@ -11,5 +11,6 @@
         ".specify/scripts/bash/": true,
         ".specify/scripts/powershell/": true
     },
-    "java.configuration.updateBuildConfiguration": "automatic"
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "C_Cpp.default.compilerPath": ""
 }

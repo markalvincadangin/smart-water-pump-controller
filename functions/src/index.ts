@@ -7,7 +7,7 @@
  */
 
 import * as admin from "firebase-admin";
-import { onValueWritten } from "firebase-functions/v2/database";
+import { onValueCreated, onValueWritten } from "firebase-functions/v2/database";
 import { logger } from "firebase-functions";
 import { canSend, recordSent } from "./notifications";
 
@@ -27,6 +27,43 @@ admin.initializeApp();
 // Firebase injects the RTDB URL only in the Functions runtime. Resolve the
 // database lazily so local export discovery and deployment do not fail first.
 const db = () => admin.database();
+
+const MAX_DEVICE_EVENT_RECORDS = 50;
+
+/**
+ * Retains a bounded, server-authoritative diagnostic history for every device.
+ *
+ * Firmware can append WARN/ERROR records while disconnected/reconnecting, but
+ * pruning belongs to a trusted backend principal: it cannot be bypassed by a
+ * device request failure and it repairs histories created by older firmware.
+ */
+export const retainDeviceEvents = onValueCreated(
+  {
+    ref: "/devices/{deviceId}/events/{eventId}",
+    region: "asia-southeast1",
+  },
+  async (event) => {
+    const eventsRef = db().ref(`devices/${event.params.deviceId}/events`);
+
+    await eventsRef.transaction((current: unknown) => {
+      if (!current || typeof current !== "object" || Array.isArray(current)) {
+        return current;
+      }
+
+      const entries = Object.entries(current as Record<string, unknown>);
+      if (entries.length <= MAX_DEVICE_EVENT_RECORDS) {
+        return current;
+      }
+
+      // RTDB push IDs sort chronologically, so keeping the greatest keys keeps
+      // the newest records without trusting device-provided timestamps.
+      const newestEntries = entries
+        .sort(([left], [right]) => left.localeCompare(right))
+        .slice(-MAX_DEVICE_EVENT_RECORDS);
+      return Object.fromEntries(newestEntries);
+    }, undefined, false);
+  }
+);
 
 interface NotificationConfig {
   enabled?: boolean;

@@ -51,6 +51,7 @@ npm-debug.log*
 **/.pio/
 ip.txt
 graphify-out/
+functions/.local/
 
 
 # Publication hygiene

@@ -64,6 +64,8 @@ As a signed-in user, I want to use the mobile app to supply local Wi-Fi credenti
 2. **Given** a signed-in user submits valid Wi-Fi credentials, **When** the device joins the network and completes online registration, **Then** the app proceeds only after it receives the provisioning-complete signal.
 3. **Given** the device is unclaimed and the signed-in user proves local possession during setup, **When** the ownership claim completes, **Then** exactly one durable user is recorded as owner and the user can access the device.
 4. **Given** the device joins Wi-Fi but cannot complete online registration or ownership claim, **When** setup reaches its bounded timeout, **Then** the app shows a retryable failure rather than success.
+5. **Given** the device has sent the terminal BLE `provisioned` status and has intentionally stopped BLE to join SmartFlow Cloud, **When** the first claim attempt is not yet available, **Then** the app displays a bounded cloud-registration wait and retries the authenticated atomic claim without returning to BLE scanning.
+6. **Given** the bounded cloud-registration wait expires while the pairing proof remains valid, **When** the user chooses to retry, **Then** the app retries cloud registration with the in-memory proof; it offers a separate explicit action to restart BLE provisioning.
 
 ---
 
@@ -140,8 +142,10 @@ As the current device owner, I want to request Wi-Fi reprovisioning through the 
 - **FR-005**: Once physically installed, only a deliberate long press of the maintenance control MAY reset local Wi-Fi credentials and setup state; shorter presses MUST not reset setup.
 - **FR-006**: A physical setup reset MUST preserve the device identity and existing owner association; it MUST not transfer ownership or delete remote data.
 - **FR-007**: Device online registration MUST use a stable per-device identity issued by the backend. A new anonymous identity on every restart MUST not authorize device access.
-- **FR-008**: Development devices MAY expose a local-network live diagnostic stream. Production devices MUST expose concise remote diagnostics and MUST NOT require a permanently available live console.
+- **FR-008**: Development devices MAY expose a local-network live diagnostic stream. Production devices MUST expose a bounded RTDB diagnostic snapshot containing `freeHeap`, `wifiRSSI`, and `restartReason`, plus no more than 50 WARN/ERROR event records; production devices MUST NOT require or expose a permanently available live console.
 - **FR-009**: The mobile app MUST report setup success only after the final provisioning-complete signal following successful Wi-Fi connection and online registration.
+- **FR-009a**: After final BLE provisioning, the app MUST show cloud-registration progress and retry only the authenticated atomic claim for a bounded 90-second window. It MUST NOT automatically restart BLE scanning while the ESP32 is expected to be online.
+- **FR-009b**: After that bounded window, the app MUST offer an explicit cloud-claim retry while the in-memory pairing proof remains valid and a separate explicit restart-provisioning action. Raw pairing proofs MUST never be persisted or logged.
 - **FR-010**: Each device bootstrap credential MUST be unique, kept out of source control and remote application data, and support operator revocation.
 - **FR-011**: Before a maintenance request changes network enrollment, the pump MUST be safely off; maintenance MUST not block safety-reset processing or clear a safety latch.
 - **FR-012**: Cloud device ownership MUST belong to a durable authenticated user account. An anonymous or guest session MUST NOT create or retain a permanent device-owner association.
@@ -156,6 +160,7 @@ As the current device owner, I want to request Wi-Fi reprovisioning through the 
 - **FR-021**: An ownership transfer MUST require explicit confirmation by the current owner and a fresh local-possession proof from the intended durable-account recipient before ownership changes.
 - **FR-022**: Existing claimed devices MUST be migrated to the authoritative ownership model without changing a valid owner. Conflicting legacy ownership records MUST be frozen for operator review; the system MUST NOT guess, release, or transfer ownership. A trusted operator-only, per-device resolution workflow MUST require an evidence reference and write an immutable audit event before it may resolve a frozen conflict; it MUST NOT be callable by the Android app or firmware.
 - **FR-023**: An ownership transfer or release MUST start an owner-authorized local pairing mode that expires exactly five minutes after backend issuance and cannot be extended. Before enabling that mode, firmware MUST call `setPump(false)`; expiry or cancellation MUST stop pairing and preserve Wi-Fi, ownership, and safety latches.
+- **FR-024**: A destructive test-environment reset MAY delete all RTDB data and Firebase Auth users only after it writes an ignored local RTDB backup and requires explicit acknowledgement that this workflow cannot restore Firebase Auth users. Operators MUST record any required test-account identifiers before applying the reset. It MUST then reseed the explicitly requested non-secret active device-registry record so a configured test ESP32 can bootstrap; it MUST NOT restore ownership, pairing, telemetry, user data, Functions, OAuth settings, Secret Manager secrets, or ignored local firmware configuration.
 
 ---
 
@@ -191,8 +196,9 @@ As the current device owner, I want to request Wi-Fi reprovisioning through the 
 - **SC-003**: An OTA upload without the configured password is rejected, while an upload with the configured password completes successfully.
 - **SC-004**: After a physical setup reset, the device becomes available for onboarding and the original owner remains associated with it remotely.
 - **SC-005**: A provisioned device can restart and continue authorized online updates without changing its device identity or authorization principal.
-- **SC-006**: During development, a device on the same local network exposes live diagnostics without USB; a production-configured device exposes its health and failure state through remote diagnostics without an open live console.
+- **SC-006**: During development, a device on the same local network exposes live diagnostics without USB; a production-configured device exposes the required diagnostic snapshot and no more than 50 retained WARN/ERROR events through RTDB without an open live console.
 - **SC-007**: A device that connects to Wi-Fi but fails online registration is reported as a setup failure, not as a successful setup.
+- **SC-007a**: A device that has left BLE after terminal provisioning remains on a cloud-registration screen for up to 90 seconds; the app neither falsely reports success nor falls back to indefinite BLE scanning during that interval.
 - **SC-008**: A revoked device bootstrap secret is rejected, and a maintenance request received while a safety latch is active leaves that latch intact and control reset paths reachable.
 - **SC-009**: A user who signs in with the same durable account on a second phone can access their claimed device without repeating Wi-Fi provisioning.
 - **SC-010**: In end-to-end claim tests, 100% of successful claims create exactly one owner mapping and one corresponding audit event; no anonymous session can become the owner.

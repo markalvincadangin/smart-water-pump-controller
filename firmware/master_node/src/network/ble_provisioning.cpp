@@ -21,6 +21,7 @@ enum class ProvState {
     IDLE,
     SCANNING_WIFI,
     CONNECTING_WIFI,
+    REGISTERING_CLOUD,
     PROVISIONED,
     ERR
 };
@@ -28,6 +29,7 @@ enum class ProvState {
 static ProvState provState = ProvState::IDLE;
 static NimBLECharacteristic* pRespChar = nullptr;
 constexpr size_t COMMAND_QUEUE_DEPTH = 4;
+constexpr unsigned long CLOUD_REGISTRATION_TIMEOUT_MS = 90000UL;
 constexpr size_t MAX_COMMAND_BYTES = 512;
 struct QueuedCommand {
     char payload[MAX_COMMAND_BYTES];
@@ -189,10 +191,11 @@ void BleProvisioning::loop() {
             LOG(APP_LOG_LEVEL_INFO, "BLE", "Wi-Fi connected. Initializing cloud services.");
             CloudManager::init();
             sendStatus(currentReqId, "connected");
-            provState = ProvState::PROVISIONED;
+            sendStatus(currentReqId, "registering_cloud");
+            provState = ProvState::REGISTERING_CLOUD;
             provisionedAtMs = millis();
             provisionedStatusSent = false;
-        } else if (millis() - connectStartedMs >= 20000UL) {
+        } else if (elapsedMillis32(millis(), connectStartedMs) >= 20000UL) {
             WiFi.disconnect(false, false);
             sendError(currentReqId, "TIMEOUT", "Wi-Fi connection timed out");
             provState = ProvState::IDLE;
@@ -200,13 +203,26 @@ void BleProvisioning::loop() {
         return;
     }
 
+    if (provState == ProvState::REGISTERING_CLOUD) {
+        // `provisioned` is the protocol boundary where the mobile app begins
+        // its cloud claim. Do not emit it until the device-authenticated RTDB
+        // verifier is present; otherwise a healthy Wi-Fi connection can race
+        // the claim and leave the app waiting for an unpublished proof.
+        if (CloudManager::isPairingVerifierPublished()) {
+            sendStatus(currentReqId, "provisioned");
+            provState = ProvState::PROVISIONED;
+            provisionedAtMs = millis();
+            provisionedStatusSent = true;
+        } else if (elapsedMillis32(millis(), provisionedAtMs) >= CLOUD_REGISTRATION_TIMEOUT_MS) {
+            sendError(currentReqId, "CLOUD_TIMEOUT", "Cloud registration timed out; keep Wi-Fi connected and retry cloud registration");
+            provState = ProvState::IDLE;
+        }
+        return;
+    }
+
     if (provState == ProvState::PROVISIONED) {
         // Allow the client to receive each final state notification separately.
-        if (!provisionedStatusSent && millis() - provisionedAtMs >= 250UL) {
-            sendStatus(currentReqId, "provisioned");
-            provisionedStatusSent = true;
-            provisionedAtMs = millis();
-        } else if (provisionedStatusSent && millis() - provisionedAtMs >= 1000UL) {
+        if (provisionedStatusSent && elapsedMillis32(millis(), provisionedAtMs) >= 1000UL) {
             stop();
         }
         return;
