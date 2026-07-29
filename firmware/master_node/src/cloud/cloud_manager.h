@@ -7,6 +7,9 @@ public:
     static void init();
     static void sync();
     static bool isAuthenticated();
+    // True only after the verifier queued for the current BLE pairing session
+    // has been accepted by RTDB. The raw proof remains RAM-only.
+    static bool isPairingVerifierPublished();
     // Queues a raw BLE-local proof for hashing and device-authenticated verifier publication.
     // The raw proof never enters RTDB or logs.
     static void queuePairingVerifier(const String& rawProof, const String& purpose, uint32_t lifetimeMs);

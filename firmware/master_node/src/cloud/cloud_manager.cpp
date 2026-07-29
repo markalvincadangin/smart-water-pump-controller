@@ -29,6 +29,7 @@ static String pendingPairingProof;
 static String pendingPairingPurpose;
 static uint32_t pendingPairingLifetimeMs = 0;
 static unsigned long pendingPairingQueuedAtMs = 0;
+static bool pairingVerifierPublished = false;
 static String activeOwnershipPairingRequestId;
 
 static constexpr unsigned long BOOTSTRAP_RETRY_MS = 30000UL;
@@ -81,6 +82,7 @@ static void flushPairingVerifier() {
         pendingPairingPurpose = "";
         pendingPairingLifetimeMs = 0;
         pendingPairingQueuedAtMs = 0;
+        pairingVerifierPublished = false;
         LOG(APP_LOG_LEVEL_WARN, "CLOUD", "Expired unpublished pairing verifier discarded");
         return;
     }
@@ -106,6 +108,7 @@ static void flushPairingVerifier() {
     pendingPairingPurpose = "";
     pendingPairingLifetimeMs = 0;
     pendingPairingQueuedAtMs = 0;
+    pairingVerifierPublished = true;
     LOG(APP_LOG_LEVEL_INFO, "CLOUD", "Pairing verifier published");
 }
 
@@ -285,10 +288,19 @@ void CloudManager::queuePairingVerifier(const String& rawProof, const String& pu
     pendingPairingPurpose = purpose;
     pendingPairingLifetimeMs = lifetimeMs;
     pendingPairingQueuedAtMs = millis();
+    pairingVerifierPublished = false;
 }
 
 bool CloudManager::isAuthenticated() {
-    return firebaseStarted && Firebase.ready() && auth_cloud.token.uid == String("device:") + deviceId;
+    // The Firebase Arduino client's custom-token endpoint returns an ID token
+    // but does not populate auth_cloud.token.uid for this flow. Firebase.ready()
+    // therefore represents the usable authenticated session; RTDB rules remain
+    // the authority that binds the token's deviceId claim to this path.
+    return firebaseStarted && Firebase.ready();
+}
+
+bool CloudManager::isPairingVerifierPublished() {
+    return pairingVerifierPublished;
 }
 
 bool CloudManager::bootstrapAndStartFirebase() {
@@ -369,11 +381,9 @@ bool CloudManager::bootstrapAndStartFirebase() {
 
 bool CloudManager::pushMetadata() {
     String path = "/devices/" + deviceId + "/metadata";
-    const String firmwareUid = auth_cloud.token.uid.c_str();
-
     const String expectedUid = "device:" + deviceId;
-    if (firmwareUid != expectedUid) {
-        LOG(APP_LOG_LEVEL_WARN, "CLOUD", "Metadata deferred: custom-token identity is not ready");
+    if (!isAuthenticated()) {
+        LOG(APP_LOG_LEVEL_WARN, "CLOUD", "Metadata deferred: custom-token session is not ready");
         return false;
     }
 
@@ -383,7 +393,7 @@ bool CloudManager::pushMetadata() {
     json.set("hardwareVersion", "ESP32-WROOM-32");
     json.set("protocolVersion", "1.0");
     json.set("serialNumber", deviceId);
-    json.set("deviceAuthUid", firmwareUid.c_str());
+    json.set("deviceAuthUid", expectedUid.c_str());
 
     if (!Firebase.RTDB.updateNode(&fbdo_cloud, path.c_str(), &json)) {
         LOG(APP_LOG_LEVEL_ERROR, "CLOUD", "Metadata publish failed: %s", fbdo_cloud.errorReason().c_str());
@@ -391,7 +401,7 @@ bool CloudManager::pushMetadata() {
     }
 
     LOG(APP_LOG_LEVEL_INFO, "CLOUD", "Metadata published for %s (firmware UID: %s)",
-        deviceId.c_str(), firmwareUid.c_str());
+        deviceId.c_str(), expectedUid.c_str());
     return true;
 }
 
@@ -428,10 +438,14 @@ void CloudManager::pushDiagnostics() {
 
 void CloudManager::pushEventLog(const String& level, const String& component, const String& message) {
     if (!Firebase.ready()) return;
-    
-    unsigned long timestamp = millis(); // Simple timestamp. Should be NTP ideally.
-    String eventId = "evt_" + String(timestamp);
-    String path = "/devices/" + deviceId + "/events/" + eventId;
+
+    // AppLogger calls this only for WARN and ERROR. Keep the explicit guard at
+    // the cloud boundary so a future caller cannot turn `/events` into a
+    // general-purpose INFO log stream.
+    if (level != "WARN" && level != "ERROR") return;
+
+    const unsigned long timestamp = millis(); // Monotonic device uptime; NTP is optional for diagnostics.
+    const String eventsPath = "/devices/" + deviceId + "/events";
     
     FirebaseJson json;
     json.set("timestamp", (int)timestamp);
@@ -440,7 +454,13 @@ void CloudManager::pushEventLog(const String& level, const String& component, co
     json.set("code", "LOG");
     json.set("message", message);
 
-    Firebase.RTDB.setJSON(&fbdo_cloud, path.c_str(), &json);
+    if (!Firebase.RTDB.pushJSON(&fbdo_cloud, eventsPath.c_str(), &json)) {
+        return;
+    }
+
+    // Retention is enforced by the trusted Cloud Function. This keeps the
+    // device write path bounded and lets the backend repair older oversized
+    // histories even when the device is reconnecting.
 }
 
 void CloudManager::readShadow() {

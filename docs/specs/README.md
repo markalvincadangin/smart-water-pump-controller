@@ -16,7 +16,7 @@ Each file is the single source of truth for its domain. Do not duplicate content
 | [`firmware.md`](./firmware.md) | Firmware architecture | System architecture, build targets, GPIO assignments, RS-485 overview, control modes, RTDB schema (status + control fields) |
 | [`firmware_operational_rules.md`](./firmware_operational_rules.md) | Firmware behavior | Mode model, decision priority, emergency stop lifecycle, safety rules, one-shot command semantics, WiFi/restart/safe-mode behavior |
 | [`rs485_protocol.md`](./rs485_protocol.md) | Wire protocol | RS-485 frame format, CRC, timing, field semantics, master acceptance rules |
-| [`dashboard.md`](./dashboard.md) | Dashboard / UX | Dashboard system responsibilities, RTDB consumption rules, control UX contract, safety-critical display rules |
+| [`app.md`](./app.md) | Android app / UX | App navigation, provisioning, ownership, RTDB consumption, and safety-critical UX rules |
 
 ## Content Ownership Map
 
@@ -28,7 +28,7 @@ The following content types have exactly one home. Do not add them elsewhere:
 | GPIO / pin assignments | `firmware.md` → Hardware Interface section |
 | Firmware state machine and behavioral rules | `firmware_operational_rules.md` |
 | RS-485 framing, CRC, timing | `rs485_protocol.md` |
-| Dashboard RTDB reads and UX rules | `dashboard.md` |
+| Android app RTDB reads and UX rules | `app.md` |
 | Safety non-negotiables (fail-toward-OFF, lockout semantics) | `.specify/memory/constitution.md` — not duplicated into specs |
 
 ## Document Governance

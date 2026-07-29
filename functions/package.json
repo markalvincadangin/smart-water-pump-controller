@@ -7,7 +7,10 @@
     "build:watch": "tsc --watch",
     "test": "npx jest",
     "test:watch": "npx jest --watch",
-    "test:coverage": "npx jest --coverage"
+    "test:coverage": "npx jest --coverage",
+    "reset-test-env": "ts-node scripts/reset_test_environment.ts",
+    "migrate-legacy-ownership": "ts-node scripts/migrate_legacy_ownership.ts",
+    "resolve-ownership-conflict": "ts-node scripts/resolve_ownership_migration_conflict.ts"
   },
   "engines": {
     "node": "22"

@@ -146,6 +146,21 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Device status: ${s.message}")
             }
+            is ProvisioningState.WaitingForCloud -> {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Connecting device to SmartFlow Cloud…")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Checking secure registration (${s.attempt}/${s.maxAttempts})",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "The device has left Bluetooth to join Wi-Fi. Keep this screen open.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             is ProvisioningState.Success -> {
                 Text("Provisioning Successful!")
                 Spacer(modifier = Modifier.height(8.dp))
@@ -158,8 +173,18 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
             is ProvisioningState.Error -> {
                 Text("Error: ${s.message}", color = MaterialTheme.colorScheme.error)
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { viewModel.startScanning() }) {
-                    Text("Retry")
+                if (s.canRetryCloudClaim) {
+                    Button(onClick = { viewModel.retryPendingCloudClaim() }) {
+                        Text("Retry cloud registration")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(onClick = { viewModel.startScanning() }) {
+                        Text("Start provisioning again")
+                    }
+                } else {
+                    Button(onClick = { viewModel.startScanning() }) {
+                        Text("Retry")
+                    }
                 }
             }
         }
