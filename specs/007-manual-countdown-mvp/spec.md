@@ -26,6 +26,10 @@ source: auto-generated
 - Q: What are the expected operating conditions? → A: Added explicit "Assumptions" section detailing hardware and connectivity states.
 - Q: How is a reboot during a Countdown handled? → A: Added an Edge Case specifying that countdowns are cancelled and the pump remains OFF after a reboot.
 - Q: How is the inactive sensor service verified? → A: SC-003 updated to measure task scheduling rather than CPU cycles.
+- Q: How are mode conflicts handled? → A: Added FR-009 specifying only one active mode and rules for overriding.
+- Q: Is countdown execution dependent on network? → A: Added FR-008 and NFR-001/002 to ensure countdowns execute independently of cloud connectivity.
+- Q: How is E-Stop handled if Auto Mode is deferred? → A: Clarified in Constitution Check V that E-stop handling SHALL remain available through the existing safety path.
+- Q: Are Non-Functional Requirements specified? → A: Added Non-Functional Requirements section covering Reliability, Determinism, Resource Isolation, and Safety.
 
 ## Constitution Check *(mandatory gate)*
 
@@ -35,7 +39,7 @@ source: auto-generated
 | II. Dry-Run Lockout | Yes | Flow sensing is deferred, so dry-run may not actively trigger, but the architectural exit path via `clear_error` must remain intact. |
 | III. Overflow Protection | Yes | Both Manual and Countdown modes must enforce `cfgMaxPumpRuntimeMin` and lock out if exceeded. |
 | IV. TOR Independence | Yes | Software control does not bypass the hardware TOR. |
-| V. Sensor Freshness / E-Stop | Yes | Although Auto mode is inactive, `readFirebaseControl()` and E-stop reachability must never be blocked. |
+| V. Sensor Freshness / E-Stop | Yes | Although Auto Mode and sensor freshness monitoring are inactive, emergency stop handling SHALL remain available through the existing safety path. |
 | VI. Backward Compatibility | Yes | Deferring Auto mode is a runtime or build-time constraint; the RTDB schema and underlying logic structure are preserved. |
 
 ---
@@ -90,7 +94,7 @@ The system must protect against unbounded runtimes to prevent flooding, regardle
 
 ### Edge Cases
 
-- What happens if the Wi-Fi connection drops during a Countdown? The local firmware must continue tracking the timer and stop the pump when it expires, regardless of cloud connectivity.
+- What happens if the Wi-Fi connection drops during a Countdown? The Master Node Firmware MUST continue tracking the timer and stop the pump when it expires, regardless of cloud connectivity. (Formalized in FR-008 & NFR-001).
 - What happens to Dry-Run protection since flow sensors are deferred? The dry-run detection logic should be bypassed or naturally inactive since no flow data is polled, ensuring it does not falsely trigger and lock out the pump.
 - What happens if a power failure or reboot occurs during an active Countdown? After reboot, all active countdowns are cancelled and the pump remains OFF until a new command is received (aligning with the "Fail Toward Pump OFF" principle).
 
@@ -105,7 +109,7 @@ This specification intentionally excludes:
 * Sensor Node firmware
 * Ultrasonic processing
 * Flow measurement
-* Dry-run detection
+* Sensor-based dry-run detection logic
 * Automatic water level management
 
 ### Feature Availability
@@ -141,6 +145,15 @@ This specification intentionally excludes:
 - **FR-005**: The Master Node SHALL reject any request to enter Auto Mode while this specification is active. The Auto Mode implementation and interfaces SHALL remain in the codebase but SHALL NOT be initialized or executed during runtime.
 - **FR-006**: The system MUST enforce the maximum runtime threshold (`cfgMaxPumpRuntimeMin`) across all active modes and enter a locked-out overflow error state if exceeded.
 - **FR-007**: The local timer for Countdown mode and Overflow protection MUST use wrap-safe arithmetic (`elapsedMillis32`).
+- **FR-008**: The Master Node Firmware SHALL continue executing Countdown timing independently of cloud connectivity after activation.
+- **FR-009**: Only one pump operation mode SHALL be active at a time. When a new valid START command is received, the existing active mode SHALL be stopped, the relay state SHALL transition according to the new requested mode, and any previous timer state SHALL be cleared.
+
+### Non-Functional Requirements
+
+- **NFR-001 Reliability**: The Master Node SHALL continue local operation during temporary network loss.
+- **NFR-002 Determinism**: Countdown timing SHALL not depend on cloud communication latency.
+- **NFR-003 Resource Isolation**: Deferred services SHALL consume no runtime scheduling resources.
+- **NFR-004 Safety**: Any unexpected reset, watchdog trigger, or fatal error SHALL result in relay OFF after restart.
 
 ---
 
