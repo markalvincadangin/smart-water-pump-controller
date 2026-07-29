@@ -15,6 +15,18 @@ source: auto-generated
 
 **Input**: User description: "As part of restructuring the SmartFlow project using a Specification-Driven Development (SDD) approach, I want the next specification to focus exclusively on completing and validating the Manual and Countdown operating modes..."
 
+**Milestone Definition**: Upon completion of this specification, the Master Node SHALL function as a fully independent local pump controller capable of Manual and Countdown operation without requiring any Sensor Node, RS485 communication, or automatic sensing.
+
+## Clarifications
+
+### Session 2026-07-29
+- Q: How should Auto Mode unavailability be specified? → A: FR-005 updated to explicitly require rejecting requests to enter Auto Mode while preserving the logic in the codebase.
+- Q: How should Sensor node communication be specified? → A: FR-003 updated to specify that the Sensor Communication Service SHALL remain disabled.
+- Q: What explicitly is deferred from this release? → A: Created "Out of Scope" section and "Feature Availability" table.
+- Q: What are the expected operating conditions? → A: Added explicit "Assumptions" section detailing hardware and connectivity states.
+- Q: How is a reboot during a Countdown handled? → A: Added an Edge Case specifying that countdowns are cancelled and the pump remains OFF after a reboot.
+- Q: How is the inactive sensor service verified? → A: SC-003 updated to measure task scheduling rather than CPU cycles.
+
 ## Constitution Check *(mandatory gate)*
 
 | Principle | Applicable? | Notes |
@@ -80,6 +92,41 @@ The system must protect against unbounded runtimes to prevent flooding, regardle
 
 - What happens if the Wi-Fi connection drops during a Countdown? The local firmware must continue tracking the timer and stop the pump when it expires, regardless of cloud connectivity.
 - What happens to Dry-Run protection since flow sensors are deferred? The dry-run detection logic should be bypassed or naturally inactive since no flow data is polled, ensuring it does not falsely trigger and lock out the pump.
+- What happens if a power failure or reboot occurs during an active Countdown? After reboot, all active countdowns are cancelled and the pump remains OFF until a new command is received (aligning with the "Fail Toward Pump OFF" principle).
+
+---
+
+## Out of Scope
+
+This specification intentionally excludes:
+
+* Auto Mode
+* RS485 protocol
+* Sensor Node firmware
+* Ultrasonic processing
+* Flow measurement
+* Dry-run detection
+* Automatic water level management
+
+### Feature Availability
+
+| Feature     | Status    |
+| ----------- | --------- |
+| Manual      | Available |
+| Countdown   | Available |
+| Auto        | Deferred  |
+| RS485       | Deferred  |
+| Sensor Node | Deferred  |
+
+---
+
+## Assumptions
+
+* Relay hardware is functional.
+* Wi-Fi and Firebase connectivity are available.
+* The pump hardware is protected by the Thermal Overload Relay (TOR).
+* Countdown timing uses the system monotonic clock.
+* Sensor hardware may be physically disconnected.
 
 ---
 
@@ -89,9 +136,9 @@ The system must protect against unbounded runtimes to prevent flooding, regardle
 
 - **FR-001**: The Master Node MUST operate the relay in Manual mode, staying ON until explicitly stopped or maximum runtime is reached.
 - **FR-002**: The Master Node MUST operate the relay in Countdown mode, staying ON until the requested duration expires or it is explicitly stopped.
-- **FR-003**: The Master Node MUST NOT initialize the UART/RS485 hardware for the Sensor Node.
+- **FR-003**: The Sensor Communication Service SHALL remain disabled. The Master Node SHALL neither establish nor attempt communication with the Sensor Node.
 - **FR-004**: The Master Node MUST NOT poll, wait for, or process any ultrasonic or flow sensor data.
-- **FR-005**: The Auto Mode control logic MUST be completely inactive and unreachable during runtime.
+- **FR-005**: The Master Node SHALL reject any request to enter Auto Mode while this specification is active. The Auto Mode implementation and interfaces SHALL remain in the codebase but SHALL NOT be initialized or executed during runtime.
 - **FR-006**: The system MUST enforce the maximum runtime threshold (`cfgMaxPumpRuntimeMin`) across all active modes and enter a locked-out overflow error state if exceeded.
 - **FR-007**: The local timer for Countdown mode and Overflow protection MUST use wrap-safe arithmetic (`elapsedMillis32`).
 
@@ -116,7 +163,7 @@ The system must protect against unbounded runtimes to prevent flooding, regardle
 
 - **SC-001**: The Master Node executes Manual Mode on/off commands with less than 500ms latency from RTDB command receipt.
 - **SC-002**: The Master Node executes Countdown Mode and de-energizes the relay within 1 second of the exact expected expiration time.
-- **SC-003**: Hardware resource utilization is demonstrably reduced: RS485 serial traffic is 0 bytes/sec, and sensor polling loops consume 0 CPU cycles.
+- **SC-003**: No Sensor Service task is scheduled while this specification is active.
 - **SC-004**: When runtime exceeds `cfgMaxPumpRuntimeMin`, the Master Node forces the relay OFF and publishes the `isOverflowError` state to the RTDB immediately.
 
 ### Validation Commands
