@@ -3,40 +3,51 @@
     "users": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        "devices": { ".write": false },
+        "$userField": {
+          ".write": "auth != null && auth.uid === $uid && auth.token.role !== 'device' && $userField !== 'devices'"
+        }
       }
     },
     "devices": {
       "$deviceId": {
-        ".read": "auth != null && root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true",
+        ".read": "auth != null && ((auth.token.role === 'device' && auth.token.deviceId === $deviceId) || data.child('ownership/ownerUid').val() === auth.uid || data.child('metadata/claimedByUid').val() === auth.uid)",
         "metadata": {
-          ".write": "auth != null && (data.child('firmwareUid').val() == null || auth.uid === data.child('firmwareUid').val() || root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true)"
+          ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId && newData.child('deviceAuthUid').val() === auth.uid && newData.child('claimedByUid').val() === data.child('claimedByUid').val()"
+        },
+        "ownership": { ".write": false },
+        "ownershipAudit": { ".write": false },
+        "pairing": {
+          "current": {
+            ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId && newData.child('proofHash').isString() && !newData.child('rawProof').exists()"
+          }
         },
         "status": {
-          ".write": "auth != null && auth.uid === data.parent().child('metadata/firmwareUid').val()"
+          ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"
         },
         "telemetry": {
-          ".write": "auth != null && auth.uid === data.parent().child('metadata/firmwareUid').val()"
+          ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"
         },
         "shadow": {
           "desired": {
-            ".write": "auth != null && root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true"
+            ".write": "auth != null && auth.token.role !== 'device' && (data.parent().parent().child('ownership/ownerUid').val() === auth.uid || data.parent().parent().child('metadata/claimedByUid').val() === auth.uid)"
           },
           "reported": {
-            ".write": "auth != null && auth.uid === data.parent().parent().child('metadata/firmwareUid').val()"
+            ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"
           }
         },
         "settings": {
-          ".write": "auth != null && root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true"
+          ".write": "auth != null && auth.token.role !== 'device' && (data.parent().child('ownership/ownerUid').val() === auth.uid || data.parent().child('metadata/claimedByUid').val() === auth.uid)"
         },
         "diagnostics": {
-          ".write": "auth != null && auth.uid === data.parent().child('metadata/firmwareUid').val()"
+          ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"
         },
         "events": {
           "$eventId": {
-            ".write": "auth != null && auth.uid === data.parent().parent().child('metadata/firmwareUid').val()"
+            ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"
           }
-        }
+        },
+        "maintenance": { ".read": false, ".write": false }
       }
     },
     "firmware": {

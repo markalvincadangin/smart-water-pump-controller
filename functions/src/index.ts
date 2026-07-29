@@ -7,13 +7,63 @@
  */
 
 import * as admin from "firebase-admin";
-import { onValueWritten, onValueDeleted } from "firebase-functions/v2/database";
+import { onValueCreated, onValueWritten } from "firebase-functions/v2/database";
 import { logger } from "firebase-functions";
 import { canSend, recordSent } from "./notifications";
 
+export {
+  bootstrapDevice,
+  setDeviceBootstrapState,
+  requestWifiReprovision,
+  claimDevice,
+  startOwnershipTransfer,
+  releaseDevice,
+  cancelOwnershipPairing,
+  checkAccountDeletionEligibility,
+} from "./device_bootstrap";
+
 admin.initializeApp();
 
-const db = admin.database();
+// Firebase injects the RTDB URL only in the Functions runtime. Resolve the
+// database lazily so local export discovery and deployment do not fail first.
+const db = () => admin.database();
+
+const MAX_DEVICE_EVENT_RECORDS = 50;
+
+/**
+ * Retains a bounded, server-authoritative diagnostic history for every device.
+ *
+ * Firmware can append WARN/ERROR records while disconnected/reconnecting, but
+ * pruning belongs to a trusted backend principal: it cannot be bypassed by a
+ * device request failure and it repairs histories created by older firmware.
+ */
+export const retainDeviceEvents = onValueCreated(
+  {
+    ref: "/devices/{deviceId}/events/{eventId}",
+    region: "asia-southeast1",
+  },
+  async (event) => {
+    const eventsRef = db().ref(`devices/${event.params.deviceId}/events`);
+
+    await eventsRef.transaction((current: unknown) => {
+      if (!current || typeof current !== "object" || Array.isArray(current)) {
+        return current;
+      }
+
+      const entries = Object.entries(current as Record<string, unknown>);
+      if (entries.length <= MAX_DEVICE_EVENT_RECORDS) {
+        return current;
+      }
+
+      // RTDB push IDs sort chronologically, so keeping the greatest keys keeps
+      // the newest records without trusting device-provided timestamps.
+      const newestEntries = entries
+        .sort(([left], [right]) => left.localeCompare(right))
+        .slice(-MAX_DEVICE_EVENT_RECORDS);
+      return Object.fromEntries(newestEntries);
+    }, undefined, false);
+  }
+);
 
 interface NotificationConfig {
   enabled?: boolean;
@@ -56,7 +106,7 @@ async function sendPush(
 }
 
 async function getActiveNotificationConfigs(): Promise<Array<{ uid: string; config: NotificationConfig }>> {
-  const snap = await db.ref("users").get();
+  const snap = await db().ref("users").get();
   const allUsers = snap.val() as Record<string, { notification_prefs?: NotificationConfig }> | null;
   if (!allUsers) return [];
 
@@ -101,7 +151,7 @@ export const onDeviceUpdated = onValueWritten(
 
     for (const { uid, config } of configs) {
       // Check if user owns this device
-      const userDevicesSnap = await db.ref(`users/${uid}/devices/${event.params.deviceId}`).get();
+      const userDevicesSnap = await db().ref(`users/${uid}/devices/${event.params.deviceId}`).get();
       if (!userDevicesSnap.exists()) continue;
 
       const threshold = config.lowLevelThreshold ?? 20;
@@ -110,69 +160,55 @@ export const onDeviceUpdated = onValueWritten(
 
       // 1. Dry-Run Lockout
       if (isDryRunError && (config.dryRunAlert ?? true)) {
-        if (await canSend(db, uid, "dryRun")) {
+        if (await canSend(db(), uid, "dryRun")) {
           await sendPush(
             tokens,
             "⚠ Dry-Run Lockout",
             `No flow detected. Tank: ${waterLevel}%. Check pump and water source.`,
             "dryRun"
           );
-          await recordSent(db, uid, "dryRun");
+          await recordSent(db(), uid, "dryRun");
         }
       }
 
       // 2. Overflow Protection
       if (isOverflowError && (config.overflowAlert ?? true)) {
-        if (await canSend(db, uid, "overflow")) {
+        if (await canSend(db(), uid, "overflow")) {
           await sendPush(
             tokens,
             "⚠ Overflow Protection",
             `Max runtime exceeded. Tank: ${waterLevel}%. Check tank and sensor.`,
             "overflow"
           );
-          await recordSent(db, uid, "overflow");
+          await recordSent(db(), uid, "overflow");
         }
       }
 
       // 3. Low tank level
       if (waterLevel <= threshold && (config.lowLevelAlert ?? true)) {
-        if (await canSend(db, uid, "lowLevel")) {
+        if (await canSend(db(), uid, "lowLevel")) {
           await sendPush(
             tokens,
             `⚠ Low Tank (${waterLevel}%)`,
             `Water at ${waterLevel}% (threshold: ${threshold}%). Pump: ${isRunning ? "Running" : "Stopped"}.`,
             "lowLevel"
           );
-          await recordSent(db, uid, "lowLevel");
+          await recordSent(db(), uid, "lowLevel");
         }
       }
 
       // 4. Pump just started
       if ((config.pumpStartedAlert ?? true) && isRunning && !wasRunning) {
-        if (await canSend(db, uid, "pumpStarted")) {
+        if (await canSend(db(), uid, "pumpStarted")) {
           await sendPush(
             tokens,
             "▶ Pump Started",
             `Tank: ${waterLevel}%, Flow: ${flowRate.toFixed(1)} LPM`,
             "pumpStarted"
           );
-          await recordSent(db, uid, "pumpStarted");
+          await recordSent(db(), uid, "pumpStarted");
         }
       }
-    }
-  }
-);
-
-export const onDeviceUnclaimed = onValueDeleted(
-  {
-    ref: "/users/{uid}/devices/{deviceId}",
-    region: "asia-southeast1",
-  },
-  async (event: any) => {
-    const deviceId = event.params.deviceId;
-    if (deviceId) {
-      logger.info(`Device ${deviceId} unclaimed by user ${event.params.uid}. Deleting device node.`);
-      await db.ref(`/devices/${deviceId}`).remove();
     }
   }
 );

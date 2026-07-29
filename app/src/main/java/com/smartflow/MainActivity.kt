@@ -13,8 +13,12 @@ import com.polidea.rxandroidble3.RxBleClient
 import com.smartflow.data.BleProvisioningClient
 import com.smartflow.data.DeviceRepository
 import com.smartflow.data.FirebaseCloudStore
+import com.smartflow.data.AccountSession
+import com.smartflow.data.DurableAccountState
 import com.smartflow.presentation.DashboardScreen
 import com.smartflow.presentation.DeviceListScreen
+import com.smartflow.presentation.DeviceOwnershipScreen
+import com.smartflow.presentation.AccountManagementScreen
 import com.smartflow.presentation.LoginScreen
 import com.smartflow.presentation.ProvisioningScreen
 import com.smartflow.viewmodel.DashboardViewModel
@@ -22,6 +26,16 @@ import com.smartflow.viewmodel.ProvisioningViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+
+private fun hasEligibleAccount(): Boolean {
+    return AccountSession.state(FirebaseAuth.getInstance().currentUser) == DurableAccountState.ELIGIBLE
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -59,7 +73,7 @@ fun AppNavigation(
 ) {
     val navController = rememberNavController()
     val auth = FirebaseAuth.getInstance()
-    val startDestination = if (auth.currentUser != null) "device_list" else "login"
+    val startDestination = if (hasEligibleAccount()) "device_list" else "login"
 
     NavHost(navController = navController, startDestination = startDestination) {
         composable("login") {
@@ -73,17 +87,67 @@ fun AppNavigation(
         }
         
         composable("device_list") {
-            // Mock list for now, ideally fetched from a user's claimed devices list
-            val claimedDevices = listOf("SmartFlow-123", "SmartFlow-456")
-            DeviceListScreen(
-                devices = claimedDevices,
-                onDeviceSelected = { deviceId ->
-                    navController.navigate("dashboard/$deviceId")
-                },
-                onAddNewDevice = {
-                    navController.navigate("provisioning")
+            var sessionValidated by remember { mutableStateOf(false) }
+            var uid by remember { mutableStateOf<String?>(null) }
+
+            LaunchedEffect(Unit) {
+                if (AccountSession.refreshDurableState(auth) == DurableAccountState.ELIGIBLE) {
+                    uid = auth.currentUser?.uid
+                    sessionValidated = true
+                } else {
+                    navController.navigate("login") {
+                        popUpTo("device_list") { inclusive = true }
+                    }
                 }
-            )
+            }
+
+            if (!sessionValidated) {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) { androidx.compose.material3.CircularProgressIndicator() }
+            } else if (uid != null) {
+                val authenticatedUid = requireNotNull(uid)
+                val devicesFlow = deviceRepository.getUserDevicesStream(authenticatedUid)
+                val claimedDevices by devicesFlow.collectAsState(initial = null)
+
+                LaunchedEffect(claimedDevices) {
+                    if (claimedDevices != null && claimedDevices!!.isEmpty()) {
+                        navController.navigate("provisioning") {
+                            popUpTo("device_list") { inclusive = true }
+                        }
+                    }
+                }
+
+                if (claimedDevices == null) {
+                    // Loading state
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = androidx.compose.ui.Alignment.Center
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator()
+                    }
+                } else if (claimedDevices!!.isNotEmpty()) {
+                    DeviceListScreen(
+                        devices = claimedDevices!!,
+                        onDeviceSelected = { deviceId ->
+                            navController.navigate("dashboard/$deviceId")
+                        },
+                        onAddNewDevice = {
+                            navController.navigate("provisioning")
+                        },
+                        onManageOwnership = { deviceId -> navController.navigate("device_ownership/$deviceId") },
+                        onManageAccount = { navController.navigate("account") },
+                    )
+                }
+            } else {
+                // If uid is null, fallback to login
+                LaunchedEffect(Unit) {
+                    navController.navigate("login") {
+                        popUpTo("device_list") { inclusive = true }
+                    }
+                }
+            }
         }
         
         composable("provisioning") {
@@ -103,6 +167,30 @@ fun AppNavigation(
             val firebaseRepo = com.smartflow.data.repository.FirebaseDeviceRepository(deviceId)
             val viewModel = DashboardViewModel(firebaseRepo)
             DashboardScreen(viewModel = viewModel)
+        }
+
+        composable("device_ownership/{deviceId}") { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
+            DeviceOwnershipScreen(
+                deviceId = deviceId,
+                onStartTransfer = { recipientUid -> cloudStore.startOwnershipTransfer(deviceId, recipientUid) },
+                onRelease = { cloudStore.releaseDevice(deviceId) },
+                onCancelPairing = { cloudStore.cancelOwnershipPairing(deviceId) },
+                onRequestWifiRecovery = { cloudStore.requestWifiReprovision(deviceId) },
+                onOpenProvisioning = {
+                    navController.navigate("provisioning") {
+                        popUpTo("device_ownership/$deviceId") { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable("account") {
+            AccountManagementScreen(
+                accountLabel = auth.currentUser?.email ?: auth.currentUser?.uid.orEmpty(),
+                onCheckDeletionEligibility = { cloudStore.checkAccountDeletionEligibility() },
+                onBack = { navController.popBackStack() },
+            )
         }
     }
 }
