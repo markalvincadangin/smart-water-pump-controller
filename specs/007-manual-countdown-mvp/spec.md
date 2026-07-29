@@ -15,7 +15,7 @@ source: auto-generated
 
 **Input**: User description: "As part of restructuring the SmartFlow project using a Specification-Driven Development (SDD) approach, I want the next specification to focus exclusively on completing and validating the Manual and Countdown operating modes..."
 
-**Milestone Definition**: Upon completion of this specification, the Master Node SHALL function as a fully independent local pump controller capable of Manual and Countdown operation without requiring any Sensor Node, RS485 communication, or automatic sensing.
+**Milestone Definition**: Upon completion of this specification, the Master Node SHALL function as a fully autonomous execution controller capable of maintaining Manual and Countdown operation locally after receiving valid commands, without dependency on Sensor Node, RS485 communication, or automatic sensing.
 
 ## Clarifications
 
@@ -30,6 +30,12 @@ source: auto-generated
 - Q: Is countdown execution dependent on network? → A: Added FR-008 and NFR-001/002 to ensure countdowns execute independently of cloud connectivity.
 - Q: How is E-Stop handled if Auto Mode is deferred? → A: Clarified in Constitution Check V that E-stop handling SHALL remain available through the existing safety path.
 - Q: Are Non-Functional Requirements specified? → A: Added Non-Functional Requirements section covering Reliability, Determinism, Resource Isolation, and Safety.
+- Q: How does the local controller relate to cloud commands? → A: Added FR-010 to clarify command reception is separate from execution.
+- Q: What does a STOP command actually do? → A: Added FR-011 specifying termination of modes, timers, and relay state.
+- Q: What does "Resource Isolation" mean exactly? → A: NFR-003 updated to specify no active tasks, timers, polling loops, or communication transactions.
+- Q: How is the state machine structured? → A: Added an explicit state machine diagram under Firmware Behavior.
+- Q: Is the boot relay state specified? → A: Added Safety Invariant that default boot relay state MUST be OFF.
+- Q: Is there hardware validation? → A: Added specific Hardware Validation steps to complement the Validation Commands.
 
 ## Constitution Check *(mandatory gate)*
 
@@ -147,12 +153,14 @@ This specification intentionally excludes:
 - **FR-007**: The local timer for Countdown mode and Overflow protection MUST use wrap-safe arithmetic (`elapsedMillis32`).
 - **FR-008**: The Master Node Firmware SHALL continue executing Countdown timing independently of cloud connectivity after activation.
 - **FR-009**: Only one pump operation mode SHALL be active at a time. When a new valid START command is received, the existing active mode SHALL be stopped, the relay state SHALL transition according to the new requested mode, and any previous timer state SHALL be cleared.
+- **FR-010**: The Master Node SHALL separate command reception from command execution. Once a valid Manual or Countdown command is accepted, pump operation SHALL continue according to local firmware logic without requiring continuous cloud connectivity.
+- **FR-011**: A STOP command SHALL terminate any active operation mode, clear associated timers, de-energize the relay, and transition the system to IDLE.
 
 ### Non-Functional Requirements
 
 - **NFR-001 Reliability**: The Master Node SHALL continue local operation during temporary network loss.
 - **NFR-002 Determinism**: Countdown timing SHALL not depend on cloud communication latency.
-- **NFR-003 Resource Isolation**: Deferred services SHALL consume no runtime scheduling resources.
+- **NFR-003 Resource Isolation**: Deferred services SHALL not create active tasks, timers, polling loops, or communication transactions during runtime.
 - **NFR-004 Safety**: Any unexpected reset, watchdog trigger, or fatal error SHALL result in relay OFF after restart.
 
 ---
@@ -163,10 +171,39 @@ This specification intentionally excludes:
 - **Inactive States**: Any state transitions related to `AUTO` mode, sensor polling, or RS485 communication timeouts are functionally disabled or unreachable.
 - **Active States**: `MANUAL`, `COUNTDOWN`, `IDLE`, and `ERROR` (specifically overflow).
 
+```text
+                 START_MANUAL
+       +-----------------------------+
+       |                             |
+       v                             |
+    IDLE ---- START_COUNTDOWN ----> COUNTDOWN
+       ^                             |
+       |                             |
+       +---------- STOP -------------+
+
+    IDLE ---- START_MANUAL -------> MANUAL
+
+    MANUAL/COUNTDOWN
+          |
+          |
+   max runtime exceeded
+          |
+          v
+
+        ERROR
+          |
+     clear_error
+          |
+          v
+
+        IDLE
+```
+
 ### Safety Invariants
 - [x] All fault paths exit with `setPump(false)`
 - [x] No new `digitalWrite(RELAY_PIN, ...)` calls added outside `setPump()`
 - [x] All new timing uses wrap-safe helpers
+- [x] Relay default state after MCU boot SHALL be OFF until a valid operating state is established
 
 ---
 
@@ -192,3 +229,12 @@ pio run -e esp32dev_ota --target upload && pio device monitor
 # 3. Start 1-minute Countdown -> Verify relay clicks OFF automatically after 60s.
 # 4. Lower MaxRuntime to 2 mins, start Manual -> Verify error lockout after 120s.
 ```
+
+### Hardware Validation
+
+1. Verify relay output without pump connected.
+2. Verify relay remains OFF after power cycle.
+3. Verify Manual mode switching.
+4. Verify Countdown expiration.
+5. Verify maximum runtime protection.
+6. Verify Wi-Fi disconnect does not interrupt active Countdown.
