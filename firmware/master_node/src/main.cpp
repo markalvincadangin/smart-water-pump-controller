@@ -1,6 +1,10 @@
 #include <Arduino.h>
 #include <esp_task_wdt.h>
 
+#ifdef ENABLE_OTA
+#include <ArduinoOTA.h>
+#endif
+
 #include "config/config.h"
 #include "state/state.h"
 #include "rs485/rs485_comm.h"
@@ -17,13 +21,49 @@
 // Forward declare local helper (moved later into utils if desired)
 static void updateFlowBasedEstimate();
 
+#ifdef ENABLE_OTA
+static bool otaInitialized = false;
+
+// Safe Mode returns early from loop() to keep pump work fail-off. Keep OTA
+// service ahead of that return so a safe controller remains recoverable.
+static void serviceOta() {
+  if (!WifiManager::isConnected()) {
+    otaInitialized = false;
+    return;
+  }
+
+  if (!otaInitialized) {
+    const char* otaPassword = SMARTFLOW_OTA_PASSWORD;
+    if (otaPassword == nullptr || otaPassword[0] == '\0' ||
+        strcmp(otaPassword, "replace_with_a_strong_local_password") == 0) {
+      LOG(APP_LOG_LEVEL_ERROR, "OTA", "OTA disabled: SMARTFLOW_OTA_PASSWORD is not configured");
+      return;
+    }
+    ArduinoOTA.setPassword(otaPassword);
+    ArduinoOTA.begin();
+    otaInitialized = true;
+    LOG(APP_LOG_LEVEL_INFO, "OTA", "ArduinoOTA initialized and listening");
+  }
+
+  ArduinoOTA.handle();
+}
+#endif
+
 void setup() {
   Bootloader::executeSetup();
+  app_logger.initSinks();
+  app_logger.beginSinks();
 }
 
 void loop() {
   unsigned long now = millis();
   unsigned long loopStartMs = now;
+
+#ifdef ENABLE_OTA
+  serviceOta();
+#endif
+
+  app_logger.handle();
 
   esp_task_wdt_reset();
 
@@ -32,7 +72,7 @@ void loop() {
     // Otherwise fall back to 1-hour continuous uptime in safe mode.
     uint32_t safeModeEpochSec = 0;
     if (prefs.begin(NVS_STATE_NAMESPACE, true)) {
-      safeModeEpochSec = prefs.getUInt("safe_mode_epoch_sec", 0);
+      safeModeEpochSec = prefs.getUInt("safe_epoch", 0);
       prefs.end();
     }
 
@@ -42,7 +82,7 @@ void loop() {
         time_t nowEpoch = mktime(&ti);
         if (nowEpoch > 0) {
           if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
-            prefs.putUInt("safe_mode_epoch_sec", (uint32_t)nowEpoch);
+            prefs.putUInt("safe_epoch", (uint32_t)nowEpoch);
             prefs.end();
           }
           safeModeEpochSec = (uint32_t)nowEpoch;
@@ -69,7 +109,7 @@ void loop() {
       LOG(APP_LOG_LEVEL_ERROR, "SAFE MODE", "Timeout reached. Clearing latch and restarting...");
       if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
         prefs.putULong("safe_mode_ms", 0);
-        prefs.putUInt("safe_mode_epoch_sec", 0);
+        prefs.putUInt("safe_epoch", 0);
         prefs.putInt("boot_count", 0);
         prefs.end();
       }
@@ -85,7 +125,9 @@ void loop() {
     return;
   }
 
-  if (deviceLifecycle == DeviceLifecycle::PROVISIONING) {
+  // Continue the BLE state machine after Wi-Fi succeeds so it can deliver the
+  // final `connected` and `provisioned` notifications before deinitializing.
+  if (BleProvisioning::isActive()) {
       BleProvisioning::loop();
   }
   WifiManager::loop();
@@ -106,7 +148,7 @@ void loop() {
               LOG(APP_LOG_LEVEL_INFO, "NTP", "Time synced (post-reconnect).");
           }
       }
-      
+
       // Update RSSI occasionally
       if (now - lastRssiLogMs >= 60000) {
           lastRssiLogMs = now;

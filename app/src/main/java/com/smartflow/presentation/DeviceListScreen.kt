@@ -14,7 +14,9 @@ import androidx.compose.ui.unit.dp
 fun DeviceListScreen(
     devices: List<String>,
     onDeviceSelected: (String) -> Unit,
-    onAddNewDevice: () -> Unit
+    onAddNewDevice: () -> Unit,
+    onManageOwnership: (String) -> Unit,
+    onManageAccount: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp)
@@ -38,6 +40,10 @@ fun DeviceListScreen(
                             modifier = Modifier.padding(16.dp),
                             style = MaterialTheme.typography.titleMedium
                         )
+                        TextButton(
+                            onClick = { onManageOwnership(deviceId) },
+                            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+                        ) { Text("Manage ownership") }
                     }
                 }
             }
@@ -50,5 +56,9 @@ fun DeviceListScreen(
         ) {
             Text("Add New Device")
         }
+        TextButton(
+            onClick = onManageAccount,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        ) { Text("Account") }
     }
 }

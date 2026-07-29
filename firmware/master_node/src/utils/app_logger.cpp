@@ -1,6 +1,4 @@
 #include "app_logger.h"
-#include <WiFi.h>
-#include <WiFiUdp.h>
 #include "../config/config.h"
 
 // config.h rebinds Serial to app_logger for application code; restore the core symbol here.
@@ -9,59 +7,72 @@
 #include <stdarg.h>
 #include "../cloud/cloud_manager.h"
 
-#if defined(__has_include)
-#if __has_include(<Syslog.h>)
-#include <Syslog.h>
-#define SMARTFLOW_HAS_SYSLOG 1
-#else
-#define SMARTFLOW_HAS_SYSLOG 0
-#endif
-#else
-#define SMARTFLOW_HAS_SYSLOG 0
+#if ENABLE_SERIAL_LOG
+#include "logging/serial_sink.h"
+SerialSink serialSink(&Serial);
 #endif
 
-static WiFiUDP udpClient;
-#if SMARTFLOW_HAS_SYSLOG
-static Syslog syslog(udpClient, SYSLOG_SERVER, SYSLOG_PORT, APP_HOSTNAME, "main_controller", LOG_KERN);
+#if ENABLE_TELNET_LOG
+#include "logging/telnet_sink.h"
+TelnetSink telnetSink;
+#endif
+
+#if ENABLE_SYSLOG_LOG
+#include "logging/syslog_sink.h"
+SyslogSink syslogSink(SYSLOG_SERVER, SYSLOG_PORT, APP_HOSTNAME, "main_controller");
 #endif
 
 AppLogger app_logger;
+static bool sinksStarted = false;
+
+void AppLogger::initSinks() {
+#if ENABLE_SERIAL_LOG
+    addSink(&serialSink);
+#endif
+#if ENABLE_TELNET_LOG
+    addSink(&telnetSink);
+#endif
+#if ENABLE_SYSLOG_LOG
+    addSink(&syslogSink);
+#endif
+}
+
+void AppLogger::beginSinks() {
+    if (sinksStarted) return;
+    if (sinks.empty()) return;
+    for (auto sink : sinks) {
+        sink->begin();
+    }
+    sinksStarted = true;
+    logEvent(APP_LOG_LEVEL_INFO, "LOGGER", "Log sinks initialized.");
+}
+
+void AppLogger::addSink(LogSink* sink) {
+    if (sink) {
+        sinks.push_back(sink);
+    }
+}
 
 size_t AppLogger::write(uint8_t c) {
-#if defined(PLATFORMIO)
-    Serial.write(c);
-#else
-    Serial0.write(c);
-#endif
-    
-    // Only buffer if WiFi is connected to avoid memory leaks or useless string ops
-    if (WiFi.status() == WL_CONNECTED) {
-        logBuffer += (char)c;
-        if (c == '\n') {
-            if (logBuffer.length() > 0) {
-                // Remove trailing \r or \n
-                logBuffer.trim();
-                if (logBuffer.length() > 0) {
-#if SMARTFLOW_HAS_SYSLOG
-                    syslog.log(LOG_INFO, logBuffer.c_str());
-#endif
-                }
-                logBuffer = "";
-            }
-        } else if (logBuffer.length() > 1024) {
-            // Prevent runaway buffers
-            logBuffer = "";
-        }
+    size_t written = 1;
+    for (auto sink : sinks) {
+        sink->write(c);
     }
-    return 1;
+    return written;
 }
 
 size_t AppLogger::write(const uint8_t *buffer, size_t size) {
-    size_t n = 0;
-    while (size--) {
-        n += write(*buffer++);
+    if (!buffer || size == 0) {
+        return 0;
     }
-    return n;
+
+    // Dispatch the complete record to every sink.  Besides avoiding one virtual
+    // call per character, this makes the logger's buffer-oriented contract
+    // explicit: sinks receive the same bytes in the same order.
+    for (auto sink : sinks) {
+        sink->write(buffer, size);
+    }
+    return size;
 }
 
 void AppLogger::logEvent(int level, const char* comp, const char* fmt, ...) {
@@ -71,7 +82,36 @@ void AppLogger::logEvent(int level, const char* comp, const char* fmt, ...) {
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
-    this->printf("[%s] %s\n", comp, buf);
+    // Get timestamp
+    unsigned long ms = millis();
+    unsigned long s = ms / 1000;
+    unsigned long h = s / 3600;
+    unsigned long m = (s % 3600) / 60;
+    s = s % 60;
+    ms = ms % 1000;
+
+    // Do not use Print::printf() here.  Some Arduino core builds route that
+    // helper through a non-overridden Print path, which bypasses registered
+    // sinks.  Formatting first and explicitly calling this class's write()
+    // guarantees Serial, TCP, and future sinks observe the identical record.
+    char entry[384];
+    const int entryLength = snprintf(
+        entry,
+        sizeof(entry),
+        "[%02lu:%02lu:%02lu.%03lu] [%s] %s\n",
+        h,
+        m,
+        s,
+        ms,
+        comp ? comp : "LOG",
+        buf);
+    if (entryLength > 0) {
+        const size_t bytesToWrite = static_cast<size_t>(
+            entryLength < static_cast<int>(sizeof(entry))
+                ? entryLength
+                : sizeof(entry) - 1);
+        write(reinterpret_cast<const uint8_t*>(entry), bytesToWrite);
+    }
     
     // Only push to cloud if it's an error or warning, to avoid spamming the events node.
     if (level <= APP_LOG_LEVEL_WARN) {
