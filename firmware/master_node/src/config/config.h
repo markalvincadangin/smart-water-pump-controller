@@ -22,7 +22,7 @@
 // when pulled into multiple translation units. Include them in ONE .cpp instead.
 
 // ---- Credentials ----
-// Copy `secrets.h.example` → `secrets.h` and fill in WiFi + Firebase credentials.
+// Copy `secrets.h.example` → `secrets.h` and fill in Firebase, bootstrap, and OTA credentials.
 // Never commit `secrets.h`.
 #if defined(__has_include)
 	#if __has_include("secrets.h")
@@ -35,6 +35,12 @@
 #endif
 
 #include "hardware.h"
+
+// Development/recovery only: a non-empty request ID creates one scoped
+// reprovisioning reset for that ID. Leave empty for all normal builds.
+#ifndef SMARTFLOW_REPROVISION_REQUEST_ID
+  #define SMARTFLOW_REPROVISION_REQUEST_ID ""
+#endif
 
 // ---- Tank calibration ----
 #define TANK_EMPTY_CM   122
@@ -152,9 +158,31 @@
 	#define SYSLOG_PORT 514
 #endif
 
+// ---- Logger Configuration ----
+#define ENABLE_SERIAL_LOG 1
+#ifndef ENABLE_DEV_TCP_LOG
+	#define ENABLE_DEV_TCP_LOG 0
+#endif
+#define ENABLE_TELNET_LOG ENABLE_DEV_TCP_LOG
+#define ENABLE_SYSLOG_LOG 1
 
+#ifndef SMARTFLOW_OTA_PASSWORD
+	#define SMARTFLOW_OTA_PASSWORD ""
+#endif
 
-// Redirect all Serial prints in the application to our AppLogger (which routes to HardwareSerial + UDP Syslog)
+#ifndef DEVICE_BOOTSTRAP_SECRET
+	#define DEVICE_BOOTSTRAP_SECRET ""
+#endif
+
+#ifndef DEVICE_BOOTSTRAP_URL
+	#define DEVICE_BOOTSTRAP_URL ""
+#endif
+
+#ifndef DEVICE_BOOTSTRAP_ROOT_CA
+	#define DEVICE_BOOTSTRAP_ROOT_CA ""
+#endif
+
+// Redirect all Serial prints in the application to our AppLogger
 #include "../utils/app_logger.h"
 #define Serial app_logger
 

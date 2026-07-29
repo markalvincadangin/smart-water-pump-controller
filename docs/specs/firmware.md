@@ -159,7 +159,27 @@ The firmware must always satisfy:
 
 ### Cloud contract (Firebase RTDB)
 
-**Status (ESP32 → cloud)**: `/pump_system/status`
+#### Stable device authorization
+
+The master authenticates as the stable Firebase UID `device:{device_id}`. On each boot it obtains a Firebase custom token from the regional `bootstrapDevice` HTTPS function by presenting its immutable device ID, current NTP timestamp, single-use nonce, and a per-device HMAC proof. The device-specific bootstrap secret is compiled from ignored local configuration; its backend counterpart lives only in Google Cloud Secret Manager.
+
+The firmware must fail closed when its bootstrap configuration, trust root, NTP time, HTTPS validation, or token exchange is unavailable: it may not fall back to anonymous sign-in or unauthenticated RTDB access. RTDB rules allow a device principal to read only its own configuration/control paths and write only its own telemetry, status, reported shadow, events, diagnostics, and permitted metadata. Ownership remains an Android-user concern and is separate from device authentication.
+
+Device metadata uses `deviceAuthUid` (not a transient Firebase UID). The Cloud Function establishes that field before device writes; firmware may only retain its immutable MAC-derived device ID and does not persist a Firebase access/refresh token or anonymous UID in NVS.
+
+#### Ownership pairing boundary
+
+The authoritative owner is `/devices/{device_id}/ownership/ownerUid`; the legacy-compatible `metadata/claimedByUid` and `/users/{uid}/devices/{device_id}` index are written atomically only by trusted backend code. Android clients do not write those paths directly. After `get_token`, firmware creates a fresh BLE-local proof, publishes only its SHA-256 verifier at `/devices/{device_id}/pairing/current`, and never persists or logs the raw proof. The verifier is single-use and expires after five minutes. Android may claim only through the regional `claimDevice` callable after the final BLE `provisioned` status and only while authenticated as a non-anonymous, durable account (Google or verified email/password).
+
+`provisioned` ends the BLE exchange, not necessarily the user-visible setup flow. The device may intentionally close BLE while it joins Wi-Fi and completes cloud registration. The Android app must show a bounded cloud-registration wait state and retry the secure callable claim for up to 45 attempts at two-second intervals (90 seconds). A retry during that window must reuse the in-memory pairing proof and must not restart BLE scanning; the user may explicitly begin a new provisioning attempt only after that path is exhausted. The app must not use a direct RTDB ownership/readiness preflight as a substitute for the callable claim.
+
+The BLE `reset` command is a scoped local reprovisioning operation, not a factory erase. Its first state-changing action is `setPump(false)`; it clears only local Wi-Fi credentials and enrollment material, then restarts into BLE provisioning. It retains safety latches, pump configuration, counters, cloud ownership, and immutable device identity.
+
+#### Production diagnostics
+
+Production firmware publishes the `/devices/{device_id}/diagnostics` snapshot with `freeHeap`, `wifiRSSI`, and `restartReason`. Its cloud event history contains only WARN/ERROR records. The trusted `retainDeviceEvents` backend trigger atomically retains the newest 50 push-ID-ordered records, including repair of oversized histories left by an older firmware version. Firmware application code logs through the transport-independent `AppLogger`/`LogSink` boundary; development-only sinks may expose bounded local history and live diagnostics on a trusted LAN, but the TCP implementation is compile-time gated and is not a production support interface.
+
+**Status (ESP32 → cloud)**: `/devices/{device_id}/telemetry` and `/devices/{device_id}/shadow/reported`
 
 Core fields:
 
@@ -188,7 +208,7 @@ Core fields:
 - `estimated_level_pct` / `level_estimate_active` / `flow_volume_added_l`
 - `level_last_valid_age_sec` / `level_sensor_health_pct` (dashboard diagnostic metrics)
 
-**Control (cloud → ESP32)**: `/pump_system/control`
+**Control (cloud → ESP32)**: `/devices/{device_id}/shadow/desired`
 
 - `mode`: AUTO | MANUAL | COUNTDOWN
 - `manual_desired`: bool (persistent intent)
@@ -197,10 +217,16 @@ Core fields:
 - `clear_error`: bool (one-shot — clears DRY_RUN and OVERFLOW lockouts)
 - `countdown_start`: bool (one-shot)
 - `countdown_duration_min`: int (1–120)
-- `countdown_add_time` + `countdown_add_min`: one-shot time extension
 - `bypass_level_sensor`: bool (persistent)
 - `bypass_flow_sensor`: bool (persistent — added Phase 1)
 - `reboot_request_id`: int (monotonic token)
+
+**Configuration (cloud → ESP32)**: `/devices/{device_id}/settings`
+
+- `pump_start_level_pct`: int (threshold to turn ON)
+- `pump_stop_level_pct`: int (threshold to turn OFF)
+- `dry_run_threshold_lpm`: float
+- `max_pump_runtime_min`: int
 
 ### Hardware assumptions (deployment-critical)
 

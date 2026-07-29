@@ -112,6 +112,13 @@ void checkCrashLoop() {
     return;
   }
 
+  // Clear crash counters and safe mode latch on a full power cycle
+  if (esp_reset_reason() == ESP_RST_POWERON) {
+    prefs.putULong("safe_mode_ms", 0);
+    prefs.putInt("boot_count", 0);
+    prefs.putUInt("safe_epoch", 0);
+  }
+
   int bootCount = prefs.getInt("boot_count", 0);
   unsigned long safeModeStart = prefs.getULong("safe_mode_ms", 0);
 
@@ -252,5 +259,24 @@ void persistStateToNVS() {
   }
 
   prefs.end();
+}
+
+bool clearNetworkEnrollment() {
+  if (!prefs.begin(NVS_STATE_NAMESPACE, false)) {
+    LOG(APP_LOG_LEVEL_ERROR, "NVS", "Unable to clear local enrollment state.");
+    return false;
+  }
+
+  // Do not clear this namespace wholesale. It also holds safety latches, pump
+  // state, counters, and crash-loop data that must survive reprovisioning.
+  prefs.remove("wifi_ssid");
+  prefs.remove("wifi_pass");
+  prefs.remove("claim_token");
+  // Remove only the obsolete anonymous-auth record written by earlier builds.
+  prefs.remove("firmwareUid");
+  prefs.end();
+
+  LOG(APP_LOG_LEVEL_INFO, "NVS", "Local Wi-Fi and enrollment material cleared.");
+  return true;
 }
 
