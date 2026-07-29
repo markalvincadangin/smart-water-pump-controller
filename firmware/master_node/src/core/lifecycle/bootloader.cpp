@@ -13,6 +13,7 @@
 #include "../../cloud/cloud_manager.h"
 #include "../../safety/safety_pump.h"
 #include "../../utils/time_utils.h"
+#include "../../config/feature_config.h"
 
 String Bootloader::getBootReasonString() {
   esp_reset_reason_t reason = esp_reset_reason();
@@ -94,8 +95,12 @@ void Bootloader::executeSetup() {
   lastPersistedMode.reserve(12);
 
   PumpDriver::init();
+#if FEATURE_SENSOR_SERVICE
   Rs485Comm::init();
   SensorDriver::init();
+#else
+  LOG(APP_LOG_LEVEL_INFO, "BOOT", "Sensor Service (RS-485) is disabled via config.");
+#endif
   
   LOG(APP_LOG_LEVEL_INFO, "INIT", "GPIO configured. Pump OFF.");
   LOG(APP_LOG_LEVEL_INFO, "INIT", "RS-485 UART2 initialized (115200 8N1).");

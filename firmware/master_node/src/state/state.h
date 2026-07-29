@@ -45,6 +45,14 @@ extern bool  isRunning;
 extern int   prevWaterLevelPct;
 
 // Mode and faults
+enum class PumpState {
+    IDLE,
+    MANUAL,
+    COUNTDOWN,
+    ERROR
+};
+
+extern PumpState currentState;
 extern String pumpMode;
 extern bool   isDryRunError;
 extern bool   isLevelSensorError;

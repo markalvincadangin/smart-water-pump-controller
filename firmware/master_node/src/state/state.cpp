@@ -35,6 +35,7 @@ bool  isRunning               = false;
 int   prevWaterLevelPct       = 0;
 
 String pumpMode          = "AUTO";
+PumpState currentState   = PumpState::IDLE;
 bool   isDryRunError     = false;
 bool   isLevelSensorError = false;
 bool   isFlowSensorError = false;
