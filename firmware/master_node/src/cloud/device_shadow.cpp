@@ -3,6 +3,11 @@
 #include "../utils/app_logger.h"
 #include <ArduinoJson.h>
 
+static String shadowLastMode = "";
+static bool shadowLastManualDesired = false;
+static bool shadowLastCountdownStart = false;
+static PumpCommand activeCommand(CommandType::NONE);
+
 void DeviceShadow::init() {
     LOG(APP_LOG_LEVEL_INFO, "SHADOW", "Device Shadow initialized");
 }
@@ -33,18 +38,12 @@ void DeviceShadow::evaluateDesired(const String& desiredMode, bool manualDesired
     }
 
     if (clearError) {
+        // We emit CLEAR_ERROR immediately if it's true, but we should probably debounce it.
+        // For simplicity, if we receive clearError and the state has errors, we can emit the command.
         if (isDryRunError || isOverflowError || isLevelSensorError || isFlowSensorError) {
-            isDryRunError = false;
-            isOverflowError = false;
-            isLevelSensorError = false;
-            isFlowSensorError = false;
-            dryRunTimerActive = false;
-            dryRunStartMs = 0;
-            pumpAutoStartTracking = false;
-            pumpAutoStartMs = 0;
-            LOG(APP_LOG_LEVEL_INFO, "SHADOW", "Errors cleared via Device Shadow.");
-            lastFaultCode = "";
-            lastFaultMessage = "";
+            activeCommand.type = CommandType::CLEAR_ERROR;
+            LOG(APP_LOG_LEVEL_INFO, "SHADOW", "Cloud requested error clear.");
+            // We do NOT clear the state here anymore. The state machine will handle it.
         }
     }
 
@@ -57,37 +56,51 @@ void DeviceShadow::evaluateDesired(const String& desiredMode, bool manualDesired
     newMode.trim();
     newMode.toUpperCase();
 
-    if (newMode == "AUTO" || newMode == "MANUAL" || newMode == "COUNTDOWN") {
-        if (pumpMode != newMode) {
-            LOG(APP_LOG_LEVEL_INFO, "SHADOW", "Mode changed: %s -> %s", pumpMode.c_str(), newMode.c_str());
-            pumpMode = newMode;
-        }
-    }
+    // Edge detection for mode and intents
+    bool modeChanged = (shadowLastMode != newMode);
+    bool manualEdge = (newMode == "MANUAL" && manualDesiredInt != shadowLastManualDesired);
+    bool countdownEdge = (newMode == "COUNTDOWN" && countdownStart != shadowLastCountdownStart);
 
-    // Evaluate manual intent
-    if (pumpMode == "MANUAL") {
-        if (manualDesired != manualDesiredInt) {
-            manualDesired = manualDesiredInt;
-            LOG(APP_LOG_LEVEL_INFO, "SHADOW", "Manual intent changed -> %s", manualDesired ? "ON" : "OFF");
+    if (modeChanged || manualEdge || countdownEdge) {
+        LOG(APP_LOG_LEVEL_INFO, "SHADOW", "Cloud intent change detected -> Mode: %s, Manual: %d, C/D: %d", newMode.c_str(), manualDesiredInt, countdownStart);
+        
+        if (newMode == "MANUAL") {
+            if (manualDesiredInt) {
+                activeCommand = PumpCommand(CommandType::START_MANUAL);
+            } else {
+                activeCommand = PumpCommand(CommandType::STOP);
+            }
+        } else if (newMode == "COUNTDOWN") {
+            if (countdownStart) {
+                uint32_t dur = countdownDurationMin > 0 ? countdownDurationMin : cfgLastCountdownDurationMin;
+                activeCommand = PumpCommand(CommandType::START_COUNTDOWN, dur * 60);
+            } else {
+                activeCommand = PumpCommand(CommandType::STOP);
+            }
+        } else {
+            // "AUTO" or other
+            activeCommand = PumpCommand(CommandType::STOP);
         }
+
+        shadowLastMode = newMode;
+        shadowLastManualDesired = manualDesiredInt;
+        shadowLastCountdownStart = countdownStart;
     }
-    
-    // Evaluate countdown start
-    if (pumpMode == "COUNTDOWN" && countdownStart) {
-        if (!isCountdownActive) {
-            isCountdownActive = true;
-            int dur = countdownDurationMin > 0 ? countdownDurationMin : cfgLastCountdownDurationMin;
-            countdownEndMs = millis() + (dur * 60000UL);
-            LOG(APP_LOG_LEVEL_INFO, "SHADOW", "Countdown started for %d min", dur);
-        }
-    }
+}
+
+PumpCommand DeviceShadow::getCommand() {
+    return activeCommand;
+}
+
+void DeviceShadow::clearCommand() {
+    activeCommand.type = CommandType::NONE;
 }
 
 String DeviceShadow::getReportedJson() {
     StaticJsonDocument<256> doc;
     doc["run_mode"] = runMode;
     doc["is_running"] = isRunning;
-    doc["is_error"] = (isDryRunError || isOverflowError || isLevelSensorError || isFlowSensorError);
+    doc["is_error"] = (currentState == PumpState::ERROR) || isDryRunError || isOverflowError || isLevelSensorError || isFlowSensorError;
     doc["is_overflow_error"] = isOverflowError;
     doc["emergency_stop_latched"] = emergencyStopLatched;
     
@@ -97,6 +110,7 @@ String DeviceShadow::getReportedJson() {
         remainSec = (int)((countdownEndMs - now) / 1000);
     }
     doc["countdown_remaining_sec"] = remainSec;
+    doc["last_fault_message"] = lastFaultMessage;
     
     String output;
     serializeJson(doc, output);

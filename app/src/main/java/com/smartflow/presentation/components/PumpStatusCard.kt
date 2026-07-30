@@ -10,7 +10,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,9 +81,18 @@ fun PumpStatusCard(
                 }
                 
                 if (countdownRemainingSec > 0) {
+                    var localCountdown by remember(countdownRemainingSec) { mutableStateOf(countdownRemainingSec) }
+                    
+                    LaunchedEffect(countdownRemainingSec) {
+                        while (localCountdown > 0) {
+                            kotlinx.coroutines.delay(1000)
+                            localCountdown -= 1
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Time Left: ${countdownRemainingSec / 60}m ${countdownRemainingSec % 60}s",
+                        text = "Time Left: ${localCountdown / 60}m ${localCountdown % 60}s",
                         style = MaterialTheme.typography.bodyMedium,
                         color = CyanPrimary,
                         fontWeight = FontWeight.Bold

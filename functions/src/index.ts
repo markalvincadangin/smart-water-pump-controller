@@ -135,8 +135,8 @@ export const onDeviceUpdated = onValueWritten(
     // Extract data from V2 schema
     const waterLevel = after.telemetry?.waterLevel ?? 0;
     const flowRate = after.telemetry?.flowRate ?? 0;
-    const isRunning = after.shadow?.reported?.pumpState ?? false;
-    const wasRunning = before?.shadow?.reported?.pumpState ?? false;
+    const isRunning = after.shadow?.reported?.is_running ?? false;
+    const wasRunning = before?.shadow?.reported?.is_running ?? false;
 
     // Check for recent error events
     const eventsMap = after.events as Record<string, any> | undefined;

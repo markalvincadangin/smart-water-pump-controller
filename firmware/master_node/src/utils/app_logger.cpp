@@ -113,9 +113,9 @@ void AppLogger::logEvent(int level, const char* comp, const char* fmt, ...) {
         write(reinterpret_cast<const uint8_t*>(entry), bytesToWrite);
     }
     
-    // Only push to cloud if it's an error or warning, to avoid spamming the events node.
-    if (level <= APP_LOG_LEVEL_WARN) {
-        String levelStr = (level == APP_LOG_LEVEL_ERROR) ? "ERROR" : "WARN";
+    // Only push to cloud if it's an error, warning, or a STATE event.
+    if (level <= APP_LOG_LEVEL_WARN || (level == APP_LOG_LEVEL_INFO && comp && strcmp(comp, "STATE") == 0)) {
+        String levelStr = (level == APP_LOG_LEVEL_ERROR) ? "ERROR" : (level == APP_LOG_LEVEL_WARN ? "WARN" : "INFO");
         CloudManager::pushEventLog(levelStr, comp, buf);
     }
 }

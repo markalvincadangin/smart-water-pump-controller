@@ -16,6 +16,7 @@ dashboard/.lighthouseci/
 *.resolved
 
 # Environment and secrets
+.env
 .env.local
 **/serviceAccountKey.json
 functions/.env
@@ -32,8 +33,12 @@ app/google-services.json
 # Share Tailwind/CSS workspace hints; ignore other editor junk
 .vscode/*
 !.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/*.ps1
 **/.vscode/*
 !/.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/*.ps1
 .cursor/*
 !.cursor/skills/
 !.cursor/rules/

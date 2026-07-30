@@ -44,6 +44,31 @@ class MainActivity : ComponentActivity() {
     private lateinit var cloudStore: FirebaseCloudStore
     private lateinit var deviceRepository: DeviceRepository
 
+    private val requestPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            // FCM SDK (and your app) can post notifications.
+        }
+    }
+
+    private fun askNotificationPermission() {
+        // This is only necessary for API level >= 33 (TIRAMISU)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                // FCM SDK (and your app) can post notifications.
+            } else if (shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)) {
+                // TODO: display an educational UI explaining to the user the features that will be enabled
+                requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                // Directly ask for the permission
+                requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -52,8 +77,25 @@ class MainActivity : ComponentActivity() {
         cloudStore = FirebaseCloudStore()
         deviceRepository = DeviceRepository(cloudStore)
 
+        askNotificationPermission()
+        
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                android.util.Log.w("FCM", "Fetching FCM registration token failed", task.exception)
+                return@addOnCompleteListener
+            }
+            val token = task.result
+            android.util.Log.d("FCM", "FCM token: $token")
+            val user = FirebaseAuth.getInstance().currentUser
+            if (user != null) {
+                val db = com.google.firebase.database.FirebaseDatabase.getInstance()
+                db.getReference("users/${user.uid}/notification_prefs/fcmTokens/${token.hashCode()}").setValue(token)
+                db.getReference("users/${user.uid}/notification_prefs/enabled").setValue(true)
+            }
+        }
+
         setContent {
-            MaterialTheme {
+            com.smartflow.presentation.theme.SmartFlowTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

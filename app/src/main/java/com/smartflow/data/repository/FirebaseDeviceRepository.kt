@@ -21,6 +21,7 @@ interface DeviceRepository {
     val shadowFlow: StateFlow<DeviceShadow>
     val configFlow: StateFlow<DeviceConfig>
     val connectionFlow: StateFlow<ConnectionState>
+    val eventsFlow: StateFlow<List<com.smartflow.domain.DeviceEvent>>
 
     suspend fun initializeAuth()
     fun updateDesiredState(desired: com.smartflow.domain.ShadowDesired)
@@ -46,6 +47,9 @@ class FirebaseDeviceRepository(
 
     private val _connectionFlow = MutableStateFlow(ConnectionState.DISCONNECTED)
     override val connectionFlow = _connectionFlow.asStateFlow()
+
+    private val _eventsFlow = MutableStateFlow<List<com.smartflow.domain.DeviceEvent>>(emptyList())
+    override val eventsFlow = _eventsFlow.asStateFlow()
 
     init {
         // Track Firebase connected state (.info/connected)
@@ -104,6 +108,21 @@ class FirebaseDeviceRepository(
                 if (c != null) {
                     _configFlow.value = c
                 }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+
+        deviceRef.child("events").orderByKey().limitToLast(20).addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val eventsList = mutableListOf<com.smartflow.domain.DeviceEvent>()
+                for (child in snapshot.children) {
+                    val event = child.getValue(com.smartflow.domain.DeviceEvent::class.java)
+                    if (event != null) {
+                        eventsList.add(event)
+                    }
+                }
+                // Reverse the list to show newest first
+                _eventsFlow.value = eventsList.reversed()
             }
             override fun onCancelled(error: DatabaseError) {}
         })

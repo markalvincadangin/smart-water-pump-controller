@@ -1,18 +1,10 @@
 {
   "version": "2.0.0",
-  "inputs": [
-    {
-      "id": "esp32IpAddress",
-      "type": "promptString",
-      "description": "Enter the IP address of the ESP32 (e.g., 192.168.1.100)",
-      "default": "192.168.1."
-    }
-  ],
   "tasks": [
     {
-      "label": "Run SmartFlow on Poco (Wireless)",
+      "label": "App: Run Debug",
       "type": "shell",
-      "command": "adb connect 192.168.1.23:36737 && .\\gradlew.bat app:installDebug && adb -s 192.168.1.23:36737 shell am start -n com.smartflow/.MainActivity",
+      "command": "pwsh -File .vscode/run_task.ps1 app_run",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -25,9 +17,9 @@
       }
     },
     {
-      "label": "SmartFlow Logcat (Poco)",
+      "label": "App: Logcat",
       "type": "shell",
-      "command": "adb -s 192.168.1.23:36737 logcat --pid=$(adb -s 192.168.1.23:36737 shell pidof -s com.smartflow)",
+      "command": "pwsh -File .vscode/run_task.ps1 app_logcat",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -36,12 +28,31 @@
       }
     },
     {
-      "label": "Flash Firmware via OTA (ESP32)",
+      "label": "Firmware: Build",
       "type": "shell",
-      "command": "$env:SMARTFLOW_OTA_PASSWORD='smartflow@2026'; pio run -e esp32dev_ota -t upload --upload-port ${input:esp32IpAddress}",
-      "options": {
-        "cwd": "${workspaceFolder}/firmware/master_node"
-      },
+      "command": "pwsh -File .vscode/run_task.ps1 firmware_build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "Firmware: Flash (OTA)",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 firmware_flash_ota",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "Firmware: Monitor (Telnet)",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 firmware_monitor",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
