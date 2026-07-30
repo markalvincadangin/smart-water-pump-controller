@@ -138,4 +138,34 @@ class FirebaseCloudStore {
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
     }
+
+    fun observeNotificationPrefs(uid: String): Flow<NotificationPrefs> = callbackFlow {
+        val ref = database.child("users").child(uid).child("notification_prefs")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val prefs = snapshot.getValue(NotificationPrefs::class.java) ?: NotificationPrefs()
+                trySend(prefs)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                close(error.toException())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun updateNotificationPrefs(uid: String, prefs: NotificationPrefs) {
+        val updates = mapOf(
+            "users/$uid/notification_prefs/enabled" to prefs.enabled,
+            "users/$uid/notification_prefs/dndEnabled" to prefs.dndEnabled,
+            "users/$uid/notification_prefs/dndStartHour" to prefs.dndStartHour,
+            "users/$uid/notification_prefs/dndEndHour" to prefs.dndEndHour
+        )
+        database.updateChildren(updates).await()
+    }
+
+    suspend fun markNotificationsAsRead(uid: String) {
+        database.child("users").child(uid).child("notification_prefs")
+            .child("lastReadTimestamp").setValue(System.currentTimeMillis()).await()
+    }
 }

@@ -22,8 +22,13 @@ import com.smartflow.presentation.DeviceOwnershipScreen
 import com.smartflow.presentation.AccountManagementScreen
 import com.smartflow.presentation.LoginScreen
 import com.smartflow.presentation.ProvisioningScreen
+import com.smartflow.presentation.NotificationsScreen
+import com.smartflow.presentation.NotificationSettingsScreen
 import com.smartflow.viewmodel.DashboardViewModel
 import com.smartflow.viewmodel.ProvisioningViewModel
+import com.smartflow.viewmodel.DeviceListViewModel
+import com.smartflow.viewmodel.NotificationsViewModel
+import com.smartflow.viewmodel.NotificationSettingsViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -163,8 +168,9 @@ fun AppNavigation(
                 ) { androidx.compose.material3.CircularProgressIndicator() }
             } else if (uid != null) {
                 val authenticatedUid = requireNotNull(uid)
-                val devicesFlow = deviceRepository.getUserDevicesStream(authenticatedUid)
-                val claimedDevices by devicesFlow.collectAsState(initial = null)
+                val deviceListViewModel = remember(authenticatedUid) { DeviceListViewModel(authenticatedUid, deviceRepository) }
+                val claimedDevices by deviceListViewModel.devices.collectAsState(initial = null)
+                val hasUnreadNotifications by deviceListViewModel.hasUnreadNotifications.collectAsState(initial = false)
 
                 LaunchedEffect(claimedDevices) {
                     if (claimedDevices != null && claimedDevices!!.isEmpty()) {
@@ -185,6 +191,7 @@ fun AppNavigation(
                 } else if (claimedDevices!!.isNotEmpty()) {
                     DeviceListScreen(
                         devices = claimedDevices!!,
+                        hasUnreadNotifications = hasUnreadNotifications,
                         onDeviceSelected = { deviceId ->
                             navController.navigate("dashboard/$deviceId")
                         },
@@ -193,6 +200,7 @@ fun AppNavigation(
                         },
                         onManageOwnership = { deviceId -> navController.navigate("device_ownership/$deviceId") },
                         onManageAccount = { navController.navigate("account") },
+                        onViewNotifications = { navController.navigate("notifications") }
                     )
                 }
             } else {
@@ -257,6 +265,29 @@ fun AppNavigation(
                 },
                 onBack = { navController.popBackStack() },
             )
+        }
+        
+        composable("notifications") {
+            val authenticatedUid = auth.currentUser?.uid
+            if (authenticatedUid != null) {
+                val viewModel = remember(authenticatedUid) { NotificationsViewModel(authenticatedUid, deviceRepository) }
+                NotificationsScreen(
+                    viewModel = viewModel,
+                    onNavigateSettings = { navController.navigate("notification_settings") },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+        }
+
+        composable("notification_settings") {
+            val authenticatedUid = auth.currentUser?.uid
+            if (authenticatedUid != null) {
+                val viewModel = remember(authenticatedUid) { NotificationSettingsViewModel(authenticatedUid, deviceRepository) }
+                NotificationSettingsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -17,16 +18,30 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun DeviceListScreen(
     devices: List<String>,
+    hasUnreadNotifications: Boolean,
     onDeviceSelected: (String) -> Unit,
     onAddNewDevice: () -> Unit,
     onManageOwnership: (String) -> Unit,
     onManageAccount: () -> Unit,
+    onViewNotifications: () -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("My Devices") },
                 actions = {
+                    Box {
+                        IconButton(onClick = onViewNotifications) {
+                            Icon(Icons.Default.Notifications, contentDescription = "Notifications")
+                        }
+                        if (hasUnreadNotifications) {
+                            Badge(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 8.dp, end = 8.dp)
+                            )
+                        }
+                    }
                     IconButton(onClick = onManageAccount) {
                         Icon(Icons.Default.Person, contentDescription = "Account")
                     }
