@@ -13,6 +13,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import android.content.Intent
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import androidx.compose.ui.platform.LocalContext
 import com.smartflow.viewmodel.ProvisioningState
 import com.smartflow.viewmodel.ProvisioningViewModel
 
@@ -29,11 +33,27 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
         arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
     }
 
+    val context = LocalContext.current
+    val bluetoothManager = context.getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    val bluetoothAdapter = bluetoothManager?.adapter
+
+    val enableBluetoothLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            viewModel.startScanning()
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         if (result.values.all { it }) {
-            viewModel.startScanning()
+            if (bluetoothAdapter?.isEnabled == true) {
+                viewModel.startScanning()
+            } else {
+                enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            }
         }
     }
 
