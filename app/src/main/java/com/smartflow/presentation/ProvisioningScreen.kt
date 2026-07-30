@@ -11,11 +11,13 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.smartflow.viewmodel.ProvisioningState
 import com.smartflow.viewmodel.ProvisioningViewModel
 
 @Composable
-fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: () -> Unit) {
+fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: () -> Unit, onBack: () -> Unit) {
     val state by viewModel.provisioningState.collectAsState()
 
     var ssid by remember { mutableStateOf("") }
@@ -40,6 +42,11 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
             @OptIn(ExperimentalMaterial3Api::class)
             TopAppBar(
                 title = { Text("Add Device") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer

@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +26,7 @@ import android.content.res.Configuration
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -44,6 +46,11 @@ fun DashboardScreen(
                         modifier = Modifier.height(28.dp),
                         contentScale = androidx.compose.ui.layout.ContentScale.Fit
                     )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
                 },
                 actions = {
                     IconButton(

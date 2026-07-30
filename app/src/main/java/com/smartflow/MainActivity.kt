@@ -213,7 +213,8 @@ fun AppNavigation(
                     navController.navigate("device_list") {
                         popUpTo("device_list") { inclusive = true }
                     }
-                }
+                },
+                onBack = { navController.popBackStack() }
             )
         }
         
@@ -221,7 +222,10 @@ fun AppNavigation(
             val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
             val firebaseRepo = com.smartflow.data.repository.FirebaseDeviceRepository(deviceId)
             val viewModel = DashboardViewModel(firebaseRepo)
-            DashboardScreen(viewModel = viewModel)
+            DashboardScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable("device_ownership/{deviceId}") { backStackEntry ->
