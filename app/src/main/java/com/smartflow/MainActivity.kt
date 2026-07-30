@@ -91,6 +91,17 @@ class MainActivity : ComponentActivity() {
                 val db = com.google.firebase.database.FirebaseDatabase.getInstance()
                 db.getReference("users/${user.uid}/notification_prefs/fcmTokens/${token.hashCode()}").setValue(token)
                 db.getReference("users/${user.uid}/notification_prefs/enabled").setValue(true)
+
+                db.getReference("users/${user.uid}/devices").get().addOnSuccessListener { snapshot ->
+                    for (child in snapshot.children) {
+                        if (child.getValue(Boolean::class.java) == true) {
+                            val deviceId = child.key
+                            if (deviceId != null) {
+                                db.getReference("devices/$deviceId/fcmTokens/${token.hashCode()}").setValue(token)
+                            }
+                        }
+                    }
+                }
             }
         }
 

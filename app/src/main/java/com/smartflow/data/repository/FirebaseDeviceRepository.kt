@@ -26,6 +26,7 @@ interface DeviceRepository {
     suspend fun initializeAuth()
     fun updateDesiredState(desired: com.smartflow.domain.ShadowDesired)
     fun updateConfig(config: DeviceConfig)
+    fun registerFcmToken(token: String)
 }
 
 class FirebaseDeviceRepository(
@@ -138,5 +139,9 @@ class FirebaseDeviceRepository(
         if (_connectionFlow.value == ConnectionState.CONNECTED) {
             deviceRef.child("settings").setValue(config)
         }
+    }
+
+    override fun registerFcmToken(token: String) {
+        deviceRef.child("fcmTokens").child(token.hashCode().toString()).setValue(token)
     }
 }
