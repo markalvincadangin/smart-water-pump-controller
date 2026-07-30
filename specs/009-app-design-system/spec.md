@@ -64,11 +64,11 @@ As a user, I want UI components (buttons, cards, text) to have proper contrast a
 ### Functional Requirements
 
 - **FR-001**: The app MUST implement a standardized color palette including Primary, Secondary, Background, Surface, and Error colors for both Light and Dark themes.
-- **FR-002**: The app MUST [NEEDS CLARIFICATION: What is the primary brand color for SmartFlow? e.g., Blue, Green, Teal?]
+- **FR-002**: The app MUST use the brand color palette defined in the Brand Identity Package (Primary Blue `#0EA5E9`, Secondary Green `#10B981`, Background `#0F172A`, Accent White `#FFFFFF`).
 - **FR-003**: The app MUST define a standardized typography scale (e.g., standardizing on a specific font family or using default Roboto with specific weights/sizes).
-- **FR-004**: The app MUST [NEEDS CLARIFICATION: Should we use a specific custom font (like Inter or Google Sans) or stick to the system default font?]
+- **FR-004**: The app MUST use Inter as the primary typeface and Roboto as the secondary typeface.
 - **FR-005**: All existing Compose screens MUST be updated to use the new `SmartFlowTheme` design system components instead of hardcoded colors or styles.
-- **FR-006**: The app MUST [NEEDS CLARIFICATION: Should the app force a specific orientation (e.g., Portrait only) or support both Portrait and Landscape dynamically with the new design system?]
+- **FR-006**: The app MUST support dynamic screen orientation (portrait and landscape) based on device rotation, utilizing responsive Compose modifiers.
 
 ### Key Entities
 
