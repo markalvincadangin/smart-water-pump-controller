@@ -5,6 +5,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import kotlinx.coroutines.launch
 
 /**
@@ -17,6 +19,7 @@ import kotlinx.coroutines.launch
 fun AccountManagementScreen(
     accountLabel: String,
     onCheckDeletionEligibility: suspend () -> Pair<Boolean, Int>,
+    onSignOut: () -> Unit,
     onBack: () -> Unit,
 ) {
     var busy by remember { mutableStateOf(false) }
@@ -27,6 +30,11 @@ fun AccountManagementScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Account") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to devices")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -103,7 +111,11 @@ fun AccountManagementScreen(
             }
             
             Spacer(modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back to devices") }
+            Button(
+                onClick = onSignOut, 
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) { Text("Sign Out") }
         }
     }
 }

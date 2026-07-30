@@ -237,6 +237,7 @@ fun AppNavigation(
                         popUpTo("device_ownership/$deviceId") { inclusive = true }
                     }
                 },
+                onBack = { navController.popBackStack() },
             )
         }
 
@@ -244,6 +245,12 @@ fun AppNavigation(
             AccountManagementScreen(
                 accountLabel = auth.currentUser?.email ?: auth.currentUser?.uid.orEmpty(),
                 onCheckDeletionEligibility = { cloudStore.checkAccountDeletionEligibility() },
+                onSignOut = {
+                    auth.signOut()
+                    navController.navigate("login") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
                 onBack = { navController.popBackStack() },
             )
         }
