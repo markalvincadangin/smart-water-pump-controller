@@ -54,8 +54,8 @@
 
 **Purpose**: Cross-module validation and docs updates
 
-- [ ] T050 End-to-end validation: Manually insert mock error and countdown events into RTDB and verify notification on an Android device.
-- [ ] T051 Commit: `feat(app,functions): implement push notifications` — Conventional Commits format
+- [x] T050 End-to-end validation: Manually insert mock error and countdown events into RTDB and verify notification on an Android device.
+- [x] T051 Commit: `feat(app,functions): implement push notifications` — Conventional Commits format
 
 ---
 
