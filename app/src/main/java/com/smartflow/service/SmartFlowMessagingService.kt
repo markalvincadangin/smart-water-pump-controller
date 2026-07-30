@@ -20,6 +20,17 @@ class SmartFlowMessagingService : FirebaseMessagingService() {
             val tokensRef = db.getReference("users/$uid/notification_prefs/fcmTokens")
             // Use hashCode as a simple safe key
             tokensRef.child(token.hashCode().toString()).setValue(token)
+
+            db.getReference("users/$uid/devices").get().addOnSuccessListener { snapshot ->
+                for (child in snapshot.children) {
+                    if (child.getValue(Boolean::class.java) == true) {
+                        val deviceId = child.key
+                        if (deviceId != null) {
+                            db.getReference("devices/$deviceId/fcmTokens/${token.hashCode()}").setValue(token)
+                        }
+                    }
+                }
+            }
         }
     }
 
