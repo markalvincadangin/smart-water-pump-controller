@@ -48,9 +48,18 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("SmartFlow", style = MaterialTheme.typography.headlineLarge)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Sign in to claim and control your devices.")
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = com.smartflow.R.drawable.logo_stacked),
+            contentDescription = "SmartFlow Logo",
+            modifier = Modifier.height(120.dp).fillMaxWidth().padding(horizontal = 32.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "Sign in to claim and control your devices.",
+            color = MaterialTheme.colorScheme.onBackground,
+            style = MaterialTheme.typography.bodyLarge
+        )
         Spacer(modifier = Modifier.height(24.dp))
         OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(8.dp))

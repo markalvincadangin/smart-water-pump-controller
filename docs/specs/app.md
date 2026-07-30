@@ -25,3 +25,11 @@ The Account screen checks server-authoritative deletion eligibility before any a
 ## Production diagnostics
 
 The app presents the device health snapshot (`freeHeap`, `wifiRSSI`, `restartReason`) and at most 50 WARN/ERROR cloud events. It must not depend on or expose the development TCP log console.
+
+## UI/UX and Design System
+
+The app strictly adheres to the centralized brand design system via Material 3 composition. Dynamic color extraction from user wallpapers is explicitly disabled to ensure uncompromised brand identity across light and dark modes. All semantic styling relies exclusively on `MaterialTheme.colorScheme` tokens; hardcoded colors are forbidden. The core dashboard layout is intrinsically responsive, enforcing a scrolling single-column hierarchy in portrait and pivoting to a side-by-side grid in landscape to maximize telemetry visibility without obscuring controls.
+
+## HMI and Idempotency
+
+Human-machine interface (HMI) controls require tactile confirmation and strict state idempotency. Critical hardware actions invoke device haptic feedback (`LongPress`). To prevent race conditions from rapid input, state-mutating UI elements (like the Timer and Power toggles) must immediately transition to an active busy indicator and disable themselves until authoritative cloud telemetry confirms the hardware's actual state matches the user's desired state. The sole exception is the Emergency Stop (E-STOP) button, which remains perpetually enabled to allow redundant abort signaling.

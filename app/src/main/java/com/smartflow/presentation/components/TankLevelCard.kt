@@ -17,8 +17,6 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.smartflow.domain.ConnectionState
-import com.smartflow.presentation.theme.CyanPrimary
-import com.smartflow.presentation.theme.GrayText
 import kotlin.math.sin
 
 @Composable
@@ -28,7 +26,7 @@ fun TankLevelCard(
     modifier: Modifier = Modifier
 ) {
     val isStale = connectionState != ConnectionState.CONNECTED
-    val waveColor = if (isStale) GrayText else CyanPrimary
+    val waveColor = if (isStale) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
 
     val infiniteTransition = rememberInfiniteTransition()
     val phaseOffset by infiniteTransition.animateFloat(
@@ -127,12 +125,12 @@ fun TankLevelCard(
                 Text(
                     text = "Tank Level",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = GrayText
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = "$waterLevelPct%",
                     style = MaterialTheme.typography.headlineLarge,
-                    color = if (isStale) GrayText else MaterialTheme.colorScheme.onSurface,
+                    color = if (isStale) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
                 if (isStale) {

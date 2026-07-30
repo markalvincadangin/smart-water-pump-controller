@@ -35,7 +35,16 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("SmartFlow", fontWeight = FontWeight.Bold) },
+                title = { 
+                    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
+                    val wordmarkRes = if (isDarkTheme) com.smartflow.R.drawable.wordmark_dark else com.smartflow.R.drawable.wordmark_light
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = wordmarkRes),
+                        contentDescription = "SmartFlow Logo",
+                        modifier = Modifier.height(28.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                    )
+                },
                 actions = {
                     IconButton(
                         onClick = { showConfig = true },

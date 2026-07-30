@@ -13,7 +13,11 @@ if (Test-Path $EnvPath) {
     Write-Warning ".env file not found at $EnvPath"
 }
 
-if ($TaskName -eq "app_run") {
+if ($TaskName -eq "app_build") {
+    Set-Location $WorkspaceRoot
+    .\gradlew.bat assembleDebug
+}
+elseif ($TaskName -eq "app_run") {
     & $env:ADB_PATH connect $env:POCO_IP
     Set-Location $WorkspaceRoot
     .\gradlew.bat app:installDebug

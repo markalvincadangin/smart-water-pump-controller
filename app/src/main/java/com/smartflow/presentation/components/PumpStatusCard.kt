@@ -24,9 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.smartflow.domain.ConnectionState
-import com.smartflow.presentation.theme.CyanPrimary
-import com.smartflow.presentation.theme.EmeraldSecondary
-import com.smartflow.presentation.theme.GrayText
+
 
 @Composable
 fun PumpStatusCard(
@@ -65,12 +63,12 @@ fun PumpStatusCard(
                 Text(
                     text = "Pump Status",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = GrayText
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val statusText = if (isStale) "UNKNOWN" else if (isPumpRunning) "RUNNING" else "STOPPED"
-                    val statusColor = if (isStale) GrayText else if (isPumpRunning) EmeraldSecondary else MaterialTheme.colorScheme.onSurface
+                    val statusColor = if (isStale) MaterialTheme.colorScheme.onSurfaceVariant else if (isPumpRunning) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface
                     
                     Text(
                         text = statusText,
@@ -94,7 +92,7 @@ fun PumpStatusCard(
                     Text(
                         text = "Time Left: ${localCountdown / 60}m ${localCountdown % 60}s",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = CyanPrimary,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -111,7 +109,7 @@ fun PumpStatusCard(
                             .size(64.dp)
                             .scale(haloScale)
                             .clip(CircleShape)
-                            .background(EmeraldSecondary.copy(alpha = 0.2f))
+                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
                     )
                 }
                 Box(
@@ -119,8 +117,8 @@ fun PumpStatusCard(
                         .size(48.dp)
                         .clip(CircleShape)
                         .background(
-                            if (isStale) GrayText.copy(alpha = 0.3f)
-                            else if (isPumpRunning) EmeraldSecondary
+                            if (isStale) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            else if (isPumpRunning) MaterialTheme.colorScheme.secondary
                             else Color.DarkGray
                         )
                 )
@@ -141,12 +139,12 @@ fun PumpStatusCard(
                 Text(
                     text = "Flow Rate",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = GrayText
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = if (isStale) "-- L/min" else String.format("%.1f L/min", flowRateLpm),
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (isStale) GrayText else MaterialTheme.colorScheme.onSurface
+                    color = if (isStale) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                 )
             }
         }

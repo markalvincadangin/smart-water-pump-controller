@@ -16,8 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.smartflow.domain.ConnectionState
 import com.smartflow.domain.ControlMode
-import com.smartflow.presentation.theme.CyanPrimary
-import com.smartflow.presentation.theme.RedError
+
 
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -93,16 +92,16 @@ fun ControlPanel(
                     onValueChange = { countdownDuration = it },
                     valueRange = 1f..120f,
                     steps = 119,
-                    colors = SliderDefaults.colors(thumbColor = CyanPrimary, activeTrackColor = CyanPrimary)
+                    colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary)
                 )
                 Button(
                     onClick = { 
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onCountdownStart(countdownDuration.toInt()) 
                     },
-                    enabled = isConnected && !lockoutActive,
+                    enabled = isConnected && !lockoutActive && !(isCountdownStartDesired && !isPumpRunning),
                     shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
                     if (isCountdownStartDesired && !isPumpRunning) {
@@ -129,7 +128,7 @@ fun ControlPanel(
                     enabled = isConnected,
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = com.smartflow.presentation.theme.AmberWarning,
+                        containerColor = MaterialTheme.colorScheme.tertiary,
                         contentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier
@@ -149,7 +148,7 @@ fun ControlPanel(
                     enabled = isConnected && mode == ControlMode.MANUAL && !isPendingManual,
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isPumpRunning) MaterialTheme.colorScheme.surfaceVariant else CyanPrimary,
+                        containerColor = if (isPumpRunning) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
                         contentColor = if (isPumpRunning) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary
                     ),
                     modifier = Modifier
@@ -180,7 +179,7 @@ fun ControlPanel(
                 enabled = isConnected,
                 shape = RoundedCornerShape(24.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = RedError,
+                    containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError
                 ),
                 modifier = Modifier
@@ -201,7 +200,7 @@ private fun ModeButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = if (isSelected) CyanPrimary else MaterialTheme.colorScheme.surfaceVariant
+    val backgroundColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
     
     Box(

@@ -12,9 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.smartflow.domain.DeviceEvent
-import com.smartflow.presentation.theme.AmberWarning
-import com.smartflow.presentation.theme.GrayText
-import com.smartflow.presentation.theme.RedError
+
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -39,7 +37,7 @@ fun ActivityPanel(
             Text(
                 text = "Activity Log",
                 style = MaterialTheme.typography.bodyMedium,
-                color = GrayText
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -65,8 +63,8 @@ fun ActivityPanel(
                         } else ""
                         
                         val color = when (event.severity) {
-                            "ERROR" -> RedError
-                            "WARN" -> AmberWarning
+                            "ERROR" -> MaterialTheme.colorScheme.error
+                            "WARN" -> MaterialTheme.colorScheme.tertiary
                             else -> MaterialTheme.colorScheme.onSurface
                         }
                         

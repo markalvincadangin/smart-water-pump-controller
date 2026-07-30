@@ -2,6 +2,17 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "App: Build",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 app_build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
       "label": "App: Run Debug",
       "type": "shell",
       "command": "pwsh -File .vscode/run_task.ps1 app_run",

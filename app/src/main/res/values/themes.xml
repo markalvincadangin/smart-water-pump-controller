@@ -6,7 +6,7 @@
         <!-- Set the splash screen background, animated icon, and animation duration. -->
         <item name="windowSplashScreenBackground">@color/splash_background</item>
         <!-- Use windowSplashScreenAnimatedIcon to add a drawable or an animated drawable -->
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_inset</item>
         <!-- Set the theme of the Activity that directly follows your splash screen. -->
         <item name="postSplashScreenTheme">@style/Theme.SmartFlow</item>
     </style>

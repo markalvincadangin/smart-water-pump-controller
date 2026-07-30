@@ -67,6 +67,8 @@ As a user, I want UI components (buttons, cards, text) to have proper contrast a
 - Q: The spec requires Inter and Roboto typefaces. Should we bundle the raw font files directly in the APK, or use Google Fonts (Downloadable Fonts) via Compose? → A: Use Google Fonts (Downloadable Fonts) in Compose to reduce APK size, with standard Android system fonts as a fallback.
 - Q: How should the app's UI adapt when the device is rotated to landscape orientation? → A: Use a Side-by-Side Grid (e.g. 2-column layout) to utilize horizontal space efficiently and prevent UI elements from stretching too wide.
 
+- Q: How should we implement the Android app icons and splash logo given the raster PNG assets in `docs/design/assets/logos/android/`? → A: Use the provided `ic_launcher_foreground.png` and `ic_launcher_background.png` directly for adaptive icons and the splash screen.
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
