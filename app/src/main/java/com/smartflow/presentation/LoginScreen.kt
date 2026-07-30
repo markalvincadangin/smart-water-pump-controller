@@ -48,8 +48,10 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
+        val logoRes = if (isDarkTheme) com.smartflow.R.drawable.logo_stacked_dark else com.smartflow.R.drawable.logo_stacked_light
         androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(id = com.smartflow.R.drawable.logo_stacked),
+            painter = androidx.compose.ui.res.painterResource(id = logoRes),
             contentDescription = "SmartFlow Logo",
             modifier = Modifier.height(120.dp).fillMaxWidth().padding(horizontal = 32.dp),
             contentScale = androidx.compose.ui.layout.ContentScale.Fit
