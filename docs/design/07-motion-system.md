@@ -1,34 +1,91 @@
 # Motion System
 
-Animation in SmartFlow is functional, not decorative. It serves to draw attention to state changes, indicate system activity, and provide reassurance.
+Motion communicates state and causality. It is never required to understand a critical condition.
 
-## Animation Principles
-1. **Purposeful:** Every animation must explain a change in state or relationship.
-2. **Snappy but Smooth:** Industrial systems require fast responses. UI animations should be quick (200-300ms) but use smooth easing curves (Standard Material Easing: Fast out, Slow in).
-3. **Non-Blocking:** Animations must never prevent the user from interacting with critical controls (like an E-Stop).
+## Principles
 
-## Core Motion States
+1. Purposeful
+2. Fast and readable
+3. Non-blocking
+4. Interruptible
+5. Reduced-motion compatible
+6. Safe for repeated exposure
 
-### 1. Idle
-- **Visuals:** Static. No motion.
-- **Rationale:** An idle pump is safe. Motion implies activity. Do not animate things unnecessarily.
+## Duration tokens
 
-### 2. Running (Active Flow)
-- **Visuals:** Subtle, continuous motion. Examples include a slow, infinite panning of a wave SVG inside the `TankLevelCard`, or a slow pulse (alpha 0.8 to 1.0) on the `PumpStatusCard`'s active badge.
-- **Rationale:** Immediately communicates to the operator that hardware is physically moving/pumping without requiring them to read text.
+| Token | Duration | Use |
+|---|---:|---|
+| `motion.instant` | 0ms | Reduced motion, immediate state change |
+| `motion.fast` | 100ms | Press and selection feedback |
+| `motion.standard` | 200ms | Component state transition |
+| `motion.emphasized` | 300ms | Card expansion and navigation |
+| `motion.slow` | 500ms | Large visual data transition |
 
-### 3. Loading / Connecting
-- **Visuals:** Indeterminate circular progress indicators.
-- **Rationale:** Use the standard Material loading spinner to indicate network requests (e.g., polling Firebase).
+Avoid transitions longer than 500ms in operational flows.
 
-### 4. Emergency / Alarm
-- **Visuals:** Rapid pulsing or flashing. If a critical hardware alarm triggers (e.g., Dry Run), the `error` colored elements should pulse rapidly (e.g., 2 times per second) to draw immediate visual attention.
-- **Rationale:** Alarms must break through visual noise.
+## Easing
 
-## Transitions
-- **Navigating:** Use standard Compose crossfades or slide-in transitions between main dashboard tabs.
-- **Expanding Cards:** When a user taps a card to see more details, use a `SharedTransition` or `animateContentSize` to smoothly grow the card, maintaining the user's spatial awareness of where the data came from.
+- Standard: fast-out, slow-in
+- Exit: fast-out
+- Entrance: slow-in
+- Linear: continuous physical flow only
 
-## Reduced Motion
-- **Accessibility Requirement:** The app MUST respect the Android system-level "Remove animations" setting. 
-- **Implementation:** When reduced motion is enabled, infinite animations (running waves, pulsing alarms) must be replaced with static states. Transitions should instantly snap rather than tween.
+## State behavior
+
+### Idle
+
+Static. Do not animate normal inactivity.
+
+### Running
+
+Use restrained motion:
+
+- slow wave translation
+- subtle progress movement
+- low-amplitude badge breathing only when useful
+
+Running motion must not resemble an alarm.
+
+### Loading and connecting
+
+Use standard progress treatment with supporting text. For initial dashboard loading, prefer structural skeletons. For stale data, show the last known value rather than a spinner.
+
+### Commands
+
+A command transition should show:
+
+`Pressed → Pending → Accepted → Completed`
+
+The transition must remain interruptible if the system reports rejection, timeout, or alarm.
+
+### Critical alarms
+
+Do not use continuous rapid flashing.
+
+Use:
+
+- persistent high-contrast alarm color
+- clear icon
+- cause and consequence text
+- immediate action
+- optional one-time entrance pulse
+- haptic or audio alert when available and user-configured
+
+## Data animation
+
+- Animate between confirmed samples.
+- Do not interpolate across missing data.
+- Do not use easing that makes telemetry appear delayed or overshoot.
+- Respect timestamps and sample cadence.
+
+## Reduced motion
+
+When reduced motion is enabled:
+
+- remove infinite loops
+- replace animated waves with static state
+- disable parallax and shared-element motion
+- keep critical state changes immediate
+- preserve haptic/audio alerts according to user settings
+
+Motion is supplemental; text, iconography, and structure remain complete without it.

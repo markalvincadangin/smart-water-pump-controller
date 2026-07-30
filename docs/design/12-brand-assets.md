@@ -1,47 +1,111 @@
-# Brand Assets & Future Roadmap
+# Brand Assets and Governance
 
-## Required Brand Assets
+## Required master assets
 
-To fully implement the SmartFlow brand, the following source assets must be generated and stored in version control:
+### Vector
 
-### 1. Vector Logos (SVG)
-- `smartflow-logo-horizontal.svg` (Primary, full color)
-- `smartflow-logo-stacked.svg` (Vertical)
-- `smartflow-icon.svg` (Standalone droplet/arcs)
-- `smartflow-wordmark.svg` (Standalone text)
-- `smartflow-icon-monochrome.svg` (Solid single path)
+- `smartflow-logo-horizontal.svg`
+- `smartflow-logo-stacked.svg`
+- `smartflow-icon.svg`
+- `smartflow-wordmark.svg`
+- `smartflow-logo-monochrome.svg`
+- `smartflow-icon-monochrome.svg`
 
-### 2. Raster Logos (PNG)
-- High-resolution transparent PNG exports (1024x1024 minimum) of all vectors above for legacy systems or environments that do not support SVG.
+### Raster
 
-### 3. Font Files (TTF/OTF)
-- `Inter` font family files (Variable or Static weights: 400, 500, 600, 700).
-- `Roboto` font family files (Regular 400).
-- These must be included in the Android project under `app/src/main/res/font/`.
+- horizontal light, dark, white, black
+- stacked light, dark, white, black
+- icon full color, white, black
+- wordmark light and dark
+- Android adaptive foreground and background
+- Play Store feature graphic
+- iOS app icon
+- favicon sizes
+- splash asset
 
-### 4. Android XML Assets
-- `ic_launcher_foreground.xml` (VectorDrawable)
-- `ic_launcher_background.xml` (VectorDrawable)
-- `ic_splash_logo.xml` (VectorDrawable)
+## Source-of-truth rule
 
----
+All exports must be produced from approved vector masters.
 
-## Future Roadmap: Scaling the Design System
+Do not:
 
-While currently optimized for a mobile Android application, the SmartFlow Design System is built to scale across the entire IoT ecosystem.
+- use an AI-generated preview as a production master
+- upscale a PNG
+- combine pieces from mismatched revisions
+- recreate the wordmark with a font
+- manually recolor individual exports without updating the master
 
-### 1. Web Dashboard (React/Next.js)
-- **Adaptation:** The 8dp grid scales perfectly to web. The `design-tokens.md` can be exported directly into Tailwind CSS configuration (`tailwind.config.js`).
-- **Layout:** On large screens, the stacked mobile cards will reflow into a multi-column dashboard grid. The `PumpStatusCard` remains top-left (highest priority), while historical `TelemetryCharts` span the wider horizontal space.
+## File naming
 
-### 2. Tablet / Industrial Kiosk
-- **Adaptation:** The UI will transition to a permanent two-pane layout. Navigation moves from a Bottom Bar to a persistent Left Navigation Rail. 
-- **Typography:** The `Display` and `Headline` typography scales will be utilized more frequently to ensure legibility from a distance (e.g., an operator looking at a wall-mounted tablet).
+Use lowercase kebab case for brand exports.
 
-### 3. Wear OS (Smartwatches)
-- **Adaptation:** The interface will strip down to the bare minimum: Current Pump Status, Tank Level, and critical alarms.
-- **Colors:** Deep blacks (`#000000`) will replace the Navy Background (`#0F172A`) to save battery on OLED screens. 
+Examples:
 
-### 4. Fleet Management (Enterprise Platform)
-- **Adaptation:** When managing hundreds of pumps, individual `PumpStatusCards` are too large. The design system will introduce high-density Data Tables. 
-- **Semantics:** The color system's status colors (`secondary` Green, `error` Red) will be heavily utilized in compact "Status Dot" indicators to quickly scan a list of 500 pumps and find the 3 that are failing.
+- `smartflow-logo-horizontal-dark.png`
+- `smartflow-logo-stacked-light.svg`
+- `smartflow-icon-monochrome.svg`
+- `ic-launcher-foreground.png`
+
+Platform-required Android resource names may use underscores.
+
+## Versioning
+
+Store each approved release under a versioned directory.
+
+```text
+brand/
+  v1.1.0/
+    vector/
+    png/
+    android/
+    ios/
+    web/
+    print/
+```
+
+Do not overwrite a released master without incrementing the version.
+
+## Export matrix
+
+| Use | Format | Color space | Background |
+|---|---|---|---|
+| Web/UI | SVG, PNG | sRGB | Transparent where specified |
+| Android | VectorDrawable, PNG | sRGB | Layer-specific |
+| iOS | PNG | sRGB | Solid |
+| Print | PDF/SVG | Print-managed | As specified |
+| Favicon | SVG/PNG/ICO | sRGB | Transparent or approved solid |
+
+## Asset QA checklist
+
+- correct approved source
+- correct revision
+- exact canvas size
+- correct aspect ratio
+- correct lockup
+- balanced optical margins
+- no clipping
+- clean transparency
+- correct theme treatment
+- negative spaces preserved
+- no glow or shadow
+- filename matches inventory
+- preview tested on intended background
+- checksum recorded in manifest
+
+## Font governance
+
+Inter and Roboto are implementation dependencies, not brand assets to redistribute casually.
+
+Keep font files only in authorized project repositories and comply with their licenses. Do not package font binaries with general brand-download bundles unless licensing and distribution have been reviewed.
+
+## Roadmap
+
+The design system can extend to:
+
+- web dashboard
+- tablet and industrial kiosk
+- Wear OS
+- enterprise fleet management
+- documentation and support portal
+
+Each platform may adapt layout density, but safety semantics, alarm priorities, logo integrity, and core color meaning remain unchanged.

@@ -104,11 +104,11 @@ app/src/main/res/
 **Build command**: `.\gradlew.bat assembleDebug`
 
 ### Implementation
-- [ ] [APP-001] Download and add `Inter` and `Roboto` font files to `app/src/main/res/font/`.
+- [ ] [APP-001] Implement Downloadable Fonts (Google Fonts provider) for `Inter` and `Roboto` in `app/src/main/java/com/smartflow/ui/theme/Type.kt`.
 - [ ] [APP-002] Update `app/src/main/java/com/smartflow/ui/theme/Color.kt` with Brand Identity colors.
-- [ ] [APP-003] Update `app/src/main/java/com/smartflow/ui/theme/Type.kt` to use the new fonts.
-- [ ] [APP-004] Update `app/src/main/java/com/smartflow/ui/theme/Theme.kt` to define Light and Dark `ColorScheme`s.
-- [ ] [APP-005] Update existing screens to use `MaterialTheme.colorScheme` and `MaterialTheme.typography` instead of hardcoded values.
+- [ ] [APP-003] Update `app/src/main/java/com/smartflow/ui/theme/Theme.kt` to define Light and Dark `ColorScheme`s, disabling dynamic colors.
+- [ ] [APP-004] Update existing screens to use `MaterialTheme.colorScheme` and `MaterialTheme.typography` instead of hardcoded values.
+- [ ] [APP-005] Implement `androidx.core:core-splashscreen` using the standalone brand icon in `Theme.kt` (XML) and `MainActivity.kt`.
 
 **Checkpoint**: `.\gradlew.bat assembleDebug` succeeds, app UI reflects new theme.
 

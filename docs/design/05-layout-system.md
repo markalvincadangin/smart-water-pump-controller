@@ -1,34 +1,88 @@
 # Layout System
 
-SmartFlow's layout system relies on an 8dp grid, Material 3 elevation models, and robust geometric shapes.
+SmartFlow uses a structured 8dp grid with a 4dp sub-grid.
 
-## Spacing Grid
-We use a strict **8dp** base grid for all padding, margins, and component sizing. 
-- **Base Unit:** `8dp`
-- **Increments:** 4dp (Half), 8dp (1x), 16dp (2x), 24dp (3x), 32dp (4x), 48dp (6x), 64dp (8x).
-- **Usage:** 
-  - `4dp`: Spacing between tightly coupled elements (e.g., an icon and its text label).
-  - `8dp`: Standard spacing between items in a list or inside a card.
-  - `16dp`: Standard margin for the edge of the screen on mobile, and standard padding inside a Card.
-  - `24dp`: Spacing between distinct sections on a dashboard.
+## Spacing tokens
 
-## Shapes
-We use geometric, rounded shapes to balance the harshness of industrial data with a modern, approachable aesthetic. Corner radii communicate interactivity.
-- **Extra Small (4dp):** Checkboxes, small tooltips, system badges.
-- **Small (8dp):** Text fields, buttons (if not fully pill-shaped), small chips.
-- **Medium (16dp):** Standard Cards (`TankLevelCard`, `PumpStatusCard`).
-- **Large (24dp):** Bottom Sheets, large modal dialogs.
-- **Full / Pill (100%):** Primary Action Buttons (FABs), standard active chips.
+| Token | Value | Typical use |
+|---|---:|---|
+| `space.0` | 0dp | No separation |
+| `space.0_5` | 4dp | Icon-to-label, tightly related values |
+| `space.1` | 8dp | Small internal gap |
+| `space.1_5` | 12dp | Compact component padding |
+| `space.2` | 16dp | Mobile edge margin, standard card padding |
+| `space.3` | 24dp | Section separation |
+| `space.4` | 32dp | Major content separation |
+| `space.6` | 48dp | Large empty state spacing |
+| `space.8` | 64dp | Hero or wide-layout spacing |
 
-## Elevation (Material 3)
-In SmartFlow, we rely primarily on **Tonal Elevation** (color shifts) rather than heavy drop shadows, especially in Dark Mode where shadows are invisible.
-- **Level 0 (0dp):** `background`. The base canvas.
-- **Level 1 (1dp):** `surface` with a slight `primary` tint. Used for resting Cards.
-- **Level 2 (3dp):** Used for Top App Bars when scrolling, and slightly elevated Cards (e.g., a selected state).
-- **Level 3 (6dp):** Bottom Sheets and Nav Bars.
-- **Level 4 (8dp):** Dialogs.
-- **Level 5 (12dp):** Modal dialogs or elements requiring absolute highest z-index.
+Use 4dp only as a sub-grid. Primary alignment should fall on 8dp increments.
 
-## Responsive Layout & Safe Areas
-- **Edge-to-Edge:** The app must draw edge-to-edge behind the system navigation and status bars. Use `WindowInsets` to apply padding only where necessary (e.g., adding `navigationBarsPadding` to a Bottom Navigation, but letting the background color bleed behind it).
-- **Adaptive:** While primarily designed for portrait mobile use, the layout must safely adapt to landscape mode. In landscape, vertically scrolling lists should transition to grids (e.g., `LazyVerticalGrid` with 2 columns) to optimize horizontal space.
+## Screen margins
+
+- Compact mobile: 16dp
+- Comfortable mobile / landscape: 24dp
+- Tablet and expanded layouts: 32dp
+- Large dashboard content should use a centered maximum-width container.
+
+## Shape tokens
+
+| Token | Value | Use |
+|---|---:|---|
+| `radius.xs` | 4dp | Small badges, tooltips |
+| `radius.sm` | 8dp | Inputs, compact buttons |
+| `radius.md` | 16dp | Standard cards |
+| `radius.lg` | 24dp | Sheets and large dialogs |
+| `radius.full` | 999dp | Pills and circular controls |
+
+Corner radius must not imply interactivity on a non-interactive data surface.
+
+## Tonal elevation
+
+| Level | Intended use |
+|---|---|
+| 0 | Background canvas |
+| 1 | Resting card |
+| 2 | Selected or scrolling top app bar |
+| 3 | Navigation and bottom sheet |
+| 4 | Dialog |
+| 5 | Highest modal layer |
+
+Dark-mode elevation is expressed primarily through surface tone, not shadow.
+
+## Responsive classes
+
+| Class | Width | Pattern |
+|---|---:|---|
+| Compact | `<600dp` | Single-column dashboard |
+| Medium | `600–839dp` | Two-column cards or navigation rail |
+| Expanded | `≥840dp` | Multi-column dashboard, persistent navigation |
+
+These are project layout thresholds and may be tuned after device testing.
+
+## Dashboard hierarchy
+
+1. Global alarm or connection banner
+2. Pump status and primary command
+3. Tank level and primary telemetry
+4. Trends and secondary telemetry
+5. History, settings, and advanced diagnostics
+
+Do not let low-priority charts displace the current pump state.
+
+## Safe areas and edge-to-edge
+
+- Draw backgrounds edge-to-edge.
+- Apply insets to content that must remain readable or tappable.
+- Never place emergency controls under a system gesture zone.
+- Keep snackbars above navigation.
+- Validate display cutouts and landscape rotation.
+
+## Density
+
+Normal operation should remain calm and scan-friendly.
+
+- Use cards for operational groups, not every individual value.
+- Combine related label/value/unit data.
+- Use progressive disclosure for raw sensor values.
+- Fleet and enterprise layouts may use tables, but critical state remains visually prioritized.

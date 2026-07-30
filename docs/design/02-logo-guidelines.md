@@ -1,42 +1,142 @@
 # Logo Guidelines
 
-## Logo Concept & Symbolism
-The SmartFlow logo is the anchor of our visual identity. It synthesizes three core concepts:
-1. **The Droplet:** Represents water, our core medium. It sits at the absolute center, denoting focus and priority.
-2. **The Flowing Ring:** A circular, organic path cradling the droplet. It represents continuous flow, circulation, and the physical pipes/tanks.
-3. **The Signal Arcs:** Three outward-radiating arcs on the upper right. They signify connectivity (Wi-Fi, IoT, RS-485 telemetry) and intelligent monitoring.
+## Approved artwork status
 
-## Logo Guidelines & Clear Space
-The logo relies on vector precision and balanced spacing. 
-- **Clear Space:** The minimum clear space around the logo is defined as `X`, where `X` is equal to the width of the central droplet. No other graphical elements or typography should enter this zone.
-- **Minimum Size:**
-  - **Icon Only:** 16px (digital), 0.25in (print)
-  - **Horizontal Logo (with Wordmark):** 48px width (digital), 0.75in (print)
+The approved SmartFlow logo is immutable brand artwork.
 
-## Variations
-- **Primary Logo (Horizontal):** The preferred logo lockup. The icon sits to the left of the "SmartFlow" wordmark.
-- **Secondary Logo (Vertical/Stacked):** Used when horizontal space is constrained (e.g., square avatars, tall packaging). The icon sits centered above the wordmark.
-- **Icon-Only:** Used for app icons, favicons, and UI elements where brand context is already established.
-- **Wordmark-Only:** Used in tight vertical spaces (like the Android top app bar) where the icon would be too small to be legible.
+Do not redraw, reinterpret, regenerate, re-typeset, or approximate it. Production assets must be exported from the approved master artwork.
 
-## Theme Treatments
-- **Light Theme:** Primary Blue (`#0EA5E9`) and Secondary Green (`#10B981`) on a pure white or very light gray background. The wordmark uses a dark slate color (`#0F172A`).
-- **Dark Theme:** Primary Blue and Secondary Green on our signature dark background (`#0F172A`). The wordmark uses pure white (`#FFFFFF`) for maximum contrast.
-- **Monochrome:** For system-enforced theming (e.g., Android Adaptive Icons in monochrome, print receipts). The logo is rendered in a single solid color (White on dark, or Black on light), relying entirely on negative space and vector paths.
+Allowed production refinements are limited to:
 
-## Incorrect Usage
-To maintain brand integrity, **never**:
-1. Stretch, skew, or distort the logo proportions.
-2. Rotate the logo.
-3. Recolor the logo outside the approved palette.
-4. Change or remove the gradient in the primary icon.
-5. Add drop shadows or glow effects to the logo.
-6. Place the logo on a busy photographic background without a solid overlay.
-7. Distort the spacing between the icon and the wordmark.
-8. Outline the logo.
-9. Rearrange the layout of the icon and wordmark.
+- optical alignment
+- spacing and kerning
+- vector precision
+- consistent stroke widths
+- pixel-grid alignment
+- gradient consistency
+- adaptive-icon safe-zone placement
+- export quality
 
-## App Icon Constraints
-- **Android Adaptive Icon:** The core icon is centered in the foreground layer. The background layer is a solid color (`#0F172A` for dark, `#FFFFFF` for light). The icon must stay within the system-defined "Safe Zone" (66dp within a 108dp grid) to avoid cropping during system masking (circle, squircle, teardrop).
-- **iOS App Icon:** Solid background with no transparency. No rounded corners in the asset (Apple applies the mask).
-- **Favicon:** Simplified down to the bare vector paths without complex gradients for 16x16px and 32x32px sizes.
+## Logo anatomy
+
+1. **Droplet:** Water and the controlled resource
+2. **Flowing ring:** Continuous circulation and automation
+3. **Signal arcs:** Connectivity, telemetry, and remote monitoring
+4. **Wordmark:** The approved “SmartFlow” artwork; it is not recreated with a UI font
+
+## Approved lockups
+
+- **Primary horizontal:** Icon left, wordmark right
+- **Stacked:** Icon centered above wordmark
+- **Icon only:** App icons, favicons, avatars, compact UI
+- **Wordmark only:** Headers and constrained layouts where the symbol is redundant
+
+Do not create unapproved arrangements.
+
+## Clear space
+
+Define `X` as the width of the central droplet.
+
+Maintain at least `1X` clear space on all sides of:
+
+- the icon
+- the horizontal lockup
+- the stacked lockup
+- the wordmark
+
+The clear-space area must not contain text, borders, photographs, control indicators, or container edges.
+
+## Minimum size
+
+| Asset | Recommended minimum | Absolute minimum | Notes |
+|---|---:|---:|---|
+| Full icon | 24px | 16px | At 16px use the simplified favicon export |
+| Horizontal logo | 96px wide | 48px wide | Use icon-only when the wordmark becomes unclear |
+| Stacked logo | 72px wide | 56px wide | Avoid for dense toolbars |
+| Print icon | 0.25in | — | Verify output device |
+| Print horizontal | 0.75in wide | — | Use vector artwork |
+
+## Theme treatments
+
+### Light background
+
+- Full-color icon
+- `Smart` in dark navy
+- `Flow` in approved blue
+- Background: white or approved light neutral
+
+### Dark background
+
+- Full-color icon
+- `Smart` in white or approved light neutral
+- `Flow` in approved blue
+- Background: `#0F172A` or another approved dark neutral
+
+### Monochrome
+
+- Entire mark in solid white on dark
+- Entire mark in solid black on light
+- Preserve all negative spaces
+- Do not outline the artwork
+
+## Export requirements
+
+- SVG is the master interchange format.
+- PNG exports must use true transparency when specified.
+- Do not add a matte color around transparent edges.
+- Preserve sRGB color for screen assets.
+- Use vector PDF for print.
+- Export at integer dimensions and inspect at 100% scale.
+- Do not upscale a raster logo to create a larger master.
+
+## App icon rules
+
+### Android adaptive icon
+
+- Foreground and background are separate layers.
+- Foreground uses the approved icon only.
+- Keep critical artwork inside the central safe zone.
+- Background is solid `#0F172A` unless an approved light variant is required.
+- Supply a monochrome vector for Android themed icons.
+
+### iOS app icon
+
+- No transparency
+- No pre-applied rounded corners
+- Use a solid approved background
+- Keep the icon optically centered
+
+### Favicon
+
+- Use a simplified icon export at 16px and 32px.
+- Prioritize silhouette and spacing over gradient detail.
+- Do not substitute a generic droplet.
+
+## Incorrect usage
+
+Never:
+
+1. Stretch, skew, rotate, or distort the mark.
+2. Recolor outside the approved system.
+3. change the approved silhouette or proportions.
+4. add glow, drop shadow, bevel, or 3D effects.
+5. place on a busy image without an approved contrast field.
+6. alter icon-to-wordmark spacing.
+7. outline the logo.
+8. remove required negative spaces.
+9. recreate the wordmark with Inter, Roboto, or another font.
+10. combine pieces from different logo revisions.
+
+## Production QA
+
+Before release, verify:
+
+- correct source master
+- correct lockup
+- correct theme treatment
+- exact canvas dimensions
+- transparent or solid background as specified
+- balanced margins
+- no clipping under app-icon masks
+- correct filename and version
+- visual match against the approved reference

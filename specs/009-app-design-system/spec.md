@@ -59,16 +59,25 @@ As a user, I want UI components (buttons, cards, text) to have proper contrast a
 
 ---
 
+## Clarifications
+
+### Session 2026-07-30
+- Q: Should we enable Material You dynamic colors (Android 12+) or strictly enforce brand colors? → A: Strictly enforce SmartFlow brand colors everywhere to ensure brand consistency.
+- Q: Should we implement the Android 12+ Splash Screen API using the new standalone icon right now, or defer it? → A: Implement the Android 12+ Splash Screen API using the new standalone icon in this feature branch.
+- Q: The spec requires Inter and Roboto typefaces. Should we bundle the raw font files directly in the APK, or use Google Fonts (Downloadable Fonts) via Compose? → A: Use Google Fonts (Downloadable Fonts) in Compose to reduce APK size, with standard Android system fonts as a fallback.
+- Q: How should the app's UI adapt when the device is rotated to landscape orientation? → A: Use a Side-by-Side Grid (e.g. 2-column layout) to utilize horizontal space efficiently and prevent UI elements from stretching too wide.
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: The app MUST implement a standardized color palette including Primary, Secondary, Background, Surface, and Error colors for both Light and Dark themes.
-- **FR-002**: The app MUST use the brand color palette defined in the Brand Identity Package (Primary Blue `#0EA5E9`, Secondary Green `#10B981`, Background `#0F172A`, Accent White `#FFFFFF`).
+- **FR-002**: The app MUST strictly enforce the SmartFlow Brand Identity colors (Primary Blue `#0EA5E9`, Secondary Green `#10B981`, Background `#0F172A`, Accent White `#FFFFFF`) everywhere. Material You dynamic colors must be explicitly disabled to ensure brand consistency.
 - **FR-003**: The app MUST define a standardized typography scale (e.g., standardizing on a specific font family or using default Roboto with specific weights/sizes).
-- **FR-004**: The app MUST use Inter as the primary typeface and Roboto as the secondary typeface.
+- **FR-004**: The app MUST use Inter as the primary typeface and Roboto as the secondary typeface, loading them dynamically via Compose Downloadable Fonts (Google Fonts provider) to minimize APK size, falling back to system default fonts if offline.
 - **FR-005**: All existing Compose screens MUST be updated to use the new `SmartFlowTheme` design system components instead of hardcoded colors or styles.
-- **FR-006**: The app MUST support dynamic screen orientation (portrait and landscape) based on device rotation, utilizing responsive Compose modifiers.
+- **FR-006**: The app MUST support dynamic screen orientation. In landscape mode, the UI MUST adapt into a 2-column Side-by-Side Grid layout using responsive Compose modifiers to prevent elements from stretching unnecessarily wide.
+- **FR-007**: The app MUST implement the `androidx.core:core-splashscreen` API utilizing the new standalone brand icon and background colors for a cohesive launch experience.
 
 ### Key Entities
 
@@ -108,4 +117,3 @@ As a user, I want UI components (buttons, cards, text) to have proper contrast a
 
 - The app uses Jetpack Compose for UI.
 - The design system will be based on Material Design 3 guidelines.
-- The minimum Android SDK level supports dynamic colors (if enabled), but we will provide a solid fallback brand color.

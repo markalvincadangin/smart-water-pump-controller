@@ -1,36 +1,86 @@
 # Typography
 
-SmartFlow requires typography that is highly legible on industrial HMIs, mobile screens outdoors in the sun, and dark pump rooms.
+## Brand wordmark
 
-## Typefaces
-1. **Primary Typeface:** **Inter**
-   - *Role:* UI elements, buttons, data tables, metrics, navigation.
-   - *Why:* Inter is a highly legible, variable neo-grotesque font specifically designed for computer screens. Its tall x-height and clear distinct characters (like distinguishing 'l', 'I', and '1') are vital for reading critical telemetry data like "11.1 GPM".
-2. **Secondary Typeface:** **Roboto**
-   - *Role:* Body copy, long-form text, documentation.
-   - *Why:* The native Android standard. Provides a familiar, highly readable fallback for general text.
+The official SmartFlow wordmark is approved artwork.
 
-## Typography Scale (Material 3)
+- Do not re-typeset it.
+- Do not approximate it with Inter, Roboto, or another font.
+- Use the exported wordmark or approved logo lockup.
 
-| Role | Font | Weight | Size | Line Height | Tracking (Letter Spacing) | Usage |
-|------|------|--------|------|-------------|---------------------------|-------|
-| **Display Large** | Inter | Bold (700) | 57sp | 64sp | -0.25sp | Hero metrics (e.g., "128 GPM" on a dashboard) |
-| **Display Medium** | Inter | SemiBold (600)| 45sp | 52sp | 0sp | Secondary hero metrics |
-| **Display Small** | Inter | Medium (500) | 36sp | 44sp | 0sp | Modal headers, large states |
-| **Headline Large** | Inter | SemiBold (600)| 32sp | 40sp | 0sp | Page Titles |
-| **Headline Medium**| Inter | Medium (500) | 28sp | 36sp | 0sp | Bottom sheet titles |
-| **Headline Small** | Inter | Medium (500) | 24sp | 32sp | 0sp | Card Headers (e.g., "Pump Status") |
-| **Title Large** | Inter | Medium (500) | 22sp | 28sp | 0sp | Dialog titles |
-| **Title Medium** | Inter | Medium (500) | 16sp | 24sp | 0.15sp | List item titles, subtitle |
-| **Title Small** | Inter | Medium (500) | 14sp | 20sp | 0.1sp | Small UI headers |
-| **Body Large** | Roboto | Regular (400) | 16sp | 24sp | 0.5sp | Paragraphs, descriptions |
-| **Body Medium** | Roboto | Regular (400) | 14sp | 20sp | 0.25sp | Secondary descriptions |
-| **Body Small** | Roboto | Regular (400) | 12sp | 16sp | 0.4sp | Captions, footnotes |
-| **Label Large** | Inter | Medium (500) | 14sp | 20sp | 0.1sp | Button text, Tabs, Data table headers |
-| **Label Medium** | Inter | Medium (500) | 12sp | 16sp | 0.5sp | Badge text, Chips |
-| **Label Small** | Inter | Medium (500) | 11sp | 16sp | 0.5sp | Overline, small graph axis labels |
+## Product typefaces
 
-## Hierarchy & Accessibility
-- **Contrast:** All typography must meet WCAG AA contrast standards. Text on `background` and `surface` must achieve at least a 4.5:1 ratio.
-- **Tabular Figures:** When displaying changing numbers (timers, flow rates, pressure), enable the `tnum` (tabular numbers) OpenType feature in Inter. This ensures characters have fixed widths, preventing the UI from "jittering" horizontally as numbers change rapidly.
-- **Dynamic Type:** All sizes are defined in `sp` (scaleable pixels). The app must support user-adjusted font sizes up to 200% without breaking critical layouts.
+### Primary UI typeface: Inter
+
+Use for:
+
+- navigation
+- buttons
+- controls
+- telemetry
+- data tables
+- headings
+- labels
+
+Inter's clear numeral and character forms support fast scanning of operational data.
+
+### Secondary typeface: Roboto
+
+Use for:
+
+- long-form body copy
+- documentation
+- Android-native fallback
+- legal or explanatory text
+
+Avoid mixing the two typefaces within one short component.
+
+## Material 3 type scale
+
+| Role | Font | Weight | Size | Line height | Tracking |
+|---|---|---:|---:|---:|---:|
+| Display Large | Inter | 700 | 57sp | 64sp | -0.25sp |
+| Display Medium | Inter | 600 | 45sp | 52sp | 0sp |
+| Display Small | Inter | 500 | 36sp | 44sp | 0sp |
+| Headline Large | Inter | 600 | 32sp | 40sp | 0sp |
+| Headline Medium | Inter | 500 | 28sp | 36sp | 0sp |
+| Headline Small | Inter | 500 | 24sp | 32sp | 0sp |
+| Title Large | Inter | 500 | 22sp | 28sp | 0sp |
+| Title Medium | Inter | 500 | 16sp | 24sp | 0.15sp |
+| Title Small | Inter | 500 | 14sp | 20sp | 0.1sp |
+| Body Large | Roboto | 400 | 16sp | 24sp | 0.5sp |
+| Body Medium | Roboto | 400 | 14sp | 20sp | 0.25sp |
+| Body Small | Roboto | 400 | 12sp | 16sp | 0.4sp |
+| Label Large | Inter | 500 | 14sp | 20sp | 0.1sp |
+| Label Medium | Inter | 500 | 12sp | 16sp | 0.5sp |
+| Label Small | Inter | 500 | 11sp | 16sp | 0.5sp |
+
+## Telemetry and units
+
+- Enable tabular figures for changing values.
+- Keep the number and unit visually grouped.
+- Use a non-breaking space between values and units when supported: `128 GPM`.
+- Do not use color as the only indicator of a threshold breach.
+- Use consistent decimal precision:
+  - flow: project-defined precision
+  - pressure: project-defined precision
+  - level: whole percentage unless extra precision is actionable
+- Show the measurement timestamp when data may be stale.
+
+## Hierarchy rules
+
+1. One hero metric per primary card.
+2. Units must be smaller than the measured value but remain legible.
+3. Labels describe meaning; values show state.
+4. Avoid all caps for sentences and alarm explanations.
+5. Reserve uppercase for short safety actions such as `EMERGENCY STOP`.
+6. Do not place critical text below 12sp.
+7. Do not truncate alarm cause or required action.
+
+## Scaling and reflow
+
+- Support system font scaling to 200%.
+- Do not hardcode text-container height.
+- Rows containing critical text must be allowed to become columns.
+- Preserve command controls and alarm actions when text expands.
+- Test at compact width, landscape, and large-screen layouts.

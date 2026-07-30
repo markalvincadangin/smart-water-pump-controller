@@ -1,38 +1,37 @@
-# Quickstart: Validating the App Design System
+# Quickstart: App Design System Validation
 
-To validate the newly implemented SmartFlow design system in the Android App:
+**Feature**: 009-app-design-system
+
+This guide describes how to validate that the Jetpack Compose Design System (Colors, Typography, Shapes, Splash Screen) has been correctly implemented.
 
 ## Prerequisites
-- Android Studio or command-line Gradle.
-- A physical Android device or an emulator running API 24 or higher.
+- Android Studio with JDK 21
+- Android device or emulator running API 31+ (Android 12+) to verify the Splash Screen
 
-## Setup & Run
+## Validation Steps
 
-1. **Build and Install**:
-   Ensure you are in the root directory, then run the Gradle task to build and install the debug APK on your connected device/emulator:
-   ```bash
-   cd app
-   ..\gradlew.bat installDebug
-   ```
+### 1. Build and Deploy
+```bash
+cd app
+.\gradlew.bat assembleDebug
+```
+Deploy the generated APK to your emulator or device.
 
-2. **Launch the App**:
-   Open the SmartFlow app on your device.
+### 2. Splash Screen Verification
+- **Action**: Launch the app from the home screen.
+- **Expected Outcome**: You should briefly see the new standalone SmartFlow logo (droplet and arcs) centered on the screen, matching the brand background color.
 
-## Validation Scenarios
+### 3. Theme Application (Light/Dark Mode)
+- **Action**: Navigate to the main dashboard.
+- **Expected Outcome**:
+  - The UI uses `SmartFlowTheme` (no default Material purple).
+  - Background is `BackgroundLight` or `BackgroundDark` depending on system settings.
+  - Buttons and interactive elements use `BluePrimary` (`#0EA5E9`) or `GreenSecondary` (`#10B981`).
 
-### Scenario 1: Verify Theme Colors
-- Check the top app bar, buttons, and backgrounds.
-- The Primary color should be the SmartFlow Blue (`#0EA5E9`).
-- Status indicators or secondary elements should use Green (`#10B981`).
+### 4. Typography (Downloadable Fonts)
+- **Action**: Inspect text elements on the screen.
+- **Expected Outcome**: The primary typeface should clearly be **Inter**, and secondary/body text should be **Roboto**. Turn off network access and clear app data to verify the fallback system font works cleanly if fonts cannot be downloaded.
 
-### Scenario 2: Verify Typography
-- Check the text rendering.
-- Headings and body text should render cleanly in the **Inter** typeface.
-- Secondary elements or specific labels may use **Roboto**.
-
-### Scenario 3: Verify Dark Mode Support
-- Go to your device's System Settings -> Display -> Enable **Dark Theme**.
-- Return to the SmartFlow app.
-- The app should seamlessly transition to a dark background (`#0F172A`) with legible white/light text and correctly contrasting buttons.
-
-If all scenarios pass, the implementation successfully meets the feature specification.
+### 5. Dynamic Colors Verification
+- **Action**: On an Android 12+ device, change the system wallpaper to a bright color (e.g., Pink). Relaunch the SmartFlow app.
+- **Expected Outcome**: The app must **NOT** adopt the pink wallpaper colors. It must strictly retain the SmartFlow brand identity (Navy, Blue, Green).
