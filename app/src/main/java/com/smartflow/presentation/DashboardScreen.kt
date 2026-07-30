@@ -18,6 +18,7 @@ import com.smartflow.presentation.components.*
 import com.smartflow.presentation.theme.AmberWarning
 import com.smartflow.presentation.theme.DarkSlateSurface
 import com.smartflow.presentation.theme.RedError
+import com.smartflow.presentation.theme.WhiteText
 import com.smartflow.viewmodel.DashboardViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,8 +41,8 @@ fun DashboardScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = DarkSlateSurface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurface
+                    titleContentColor = WhiteText,
+                    actionIconContentColor = WhiteText
                 )
             )
         },
@@ -102,14 +103,17 @@ fun DashboardScreen(
                     isPumpRunning = uiState.isPumpRunning,
                     lockoutActive = uiState.lockoutActive,
                     connectionState = uiState.connectionStatus,
-                    onModeChanged = viewModel::setControlMode,
+                    isManualDesired = uiState.isManualDesired,
+                    isCountdownStartDesired = uiState.isCountdownStartDesired,
+                    lastFaultMessage = uiState.lastFaultMessage,
+                    onModeChanged = { viewModel.setControlMode(it) },
                     onEmergencyStop = viewModel::triggerEmergencyStop,
                     onPowerToggle = viewModel::setPumpPower,
                     onCountdownStart = viewModel::startCountdown,
                     onClearError = viewModel::clearErrors
                 )
 
-                ActivityPanel()
+                ActivityPanel(events = uiState.events)
             }
         }
 

@@ -22,6 +22,8 @@ import com.smartflow.presentation.theme.RedError
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.*
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 
 @Composable
 fun ControlPanel(
@@ -29,6 +31,9 @@ fun ControlPanel(
     isPumpRunning: Boolean,
     lockoutActive: Boolean,
     connectionState: ConnectionState,
+    isManualDesired: Boolean,
+    isCountdownStartDesired: Boolean,
+    lastFaultMessage: String,
     onModeChanged: (ControlMode) -> Unit,
     onEmergencyStop: () -> Unit,
     onPowerToggle: (Boolean) -> Unit,
@@ -38,6 +43,7 @@ fun ControlPanel(
 ) {
     val isConnected = connectionState == ConnectionState.CONNECTED
     var countdownDuration by remember { mutableFloatStateOf(30f) }
+    val haptic = LocalHapticFeedback.current
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -90,13 +96,24 @@ fun ControlPanel(
                     colors = SliderDefaults.colors(thumbColor = CyanPrimary, activeTrackColor = CyanPrimary)
                 )
                 Button(
-                    onClick = { onCountdownStart(countdownDuration.toInt()) },
+                    onClick = { 
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onCountdownStart(countdownDuration.toInt()) 
+                    },
                     enabled = isConnected && !lockoutActive,
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = CyanPrimary),
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
-                    Text("START TIMER", fontWeight = FontWeight.Bold)
+                    if (isCountdownStartDesired && !isPumpRunning) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("START TIMER", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -123,9 +140,13 @@ fun ControlPanel(
                 }
             } else {
                 // Power Toggle (Only enabled in MANUAL mode)
+                val isPendingManual = mode == ControlMode.MANUAL && (isPumpRunning != isManualDesired)
                 Button(
-                    onClick = { onPowerToggle(!isPumpRunning) },
-                    enabled = isConnected && mode == ControlMode.MANUAL,
+                    onClick = { 
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onPowerToggle(!isPumpRunning) 
+                    },
+                    enabled = isConnected && mode == ControlMode.MANUAL && !isPendingManual,
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isPumpRunning) MaterialTheme.colorScheme.surfaceVariant else CyanPrimary,
@@ -135,16 +156,27 @@ fun ControlPanel(
                         .weight(1f)
                         .height(56.dp) // Ensures > 48dp minimum touch target
                 ) {
-                    Text(
-                        text = if (isPumpRunning) "STOP PUMP" else "START PUMP",
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (isPendingManual) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = if (isPumpRunning) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            text = if (isPumpRunning) "STOP PUMP" else "START PUMP",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
 
             // E-STOP (High visibility Red pill button)
             Button(
-                onClick = onEmergencyStop,
+                onClick = { 
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onEmergencyStop() 
+                },
                 enabled = isConnected,
                 shape = RoundedCornerShape(24.dp),
                 colors = ButtonDefaults.buttonColors(

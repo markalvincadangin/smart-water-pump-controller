@@ -115,7 +115,7 @@ class FirebaseCloudStore {
     }
 
     fun streamEvents(deviceId: String): Flow<List<DeviceEvent>> = callbackFlow {
-        val ref = database.child("devices").child(deviceId).child("events").orderByChild("timestamp").limitToLast(50)
+        val ref = database.child("devices").child(deviceId).child("events").orderByKey().limitToLast(50)
         val eventsList = mutableListOf<DeviceEvent>()
 
         val listener = object : ValueEventListener {

@@ -439,16 +439,19 @@ void CloudManager::pushDiagnostics() {
 void CloudManager::pushEventLog(const String& level, const String& component, const String& message) {
     if (!Firebase.ready()) return;
 
-    // AppLogger calls this only for WARN and ERROR. Keep the explicit guard at
+    // AppLogger calls this only for INFO, WARN and ERROR. Keep the explicit guard at
     // the cloud boundary so a future caller cannot turn `/events` into a
-    // general-purpose INFO log stream.
-    if (level != "WARN" && level != "ERROR") return;
+    // general-purpose INFO log stream for everything.
+    if (level != "INFO" && level != "WARN" && level != "ERROR") return;
 
-    const unsigned long timestamp = millis(); // Monotonic device uptime; NTP is optional for diagnostics.
+    uint64_t timestamp = millis();
+    if (ntpSynced) {
+        timestamp = (static_cast<uint64_t>(ntpEpochSecAtLastSync) * 1000ULL) + (millis() - ntpLastSyncMs);
+    }
     const String eventsPath = "/devices/" + deviceId + "/events";
     
     FirebaseJson json;
-    json.set("timestamp", (int)timestamp);
+    json.set("timestamp", timestamp);
     json.set("severity", level);
     json.set("category", component);
     json.set("code", "LOG");

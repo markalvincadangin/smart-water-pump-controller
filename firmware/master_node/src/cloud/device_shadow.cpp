@@ -100,7 +100,7 @@ String DeviceShadow::getReportedJson() {
     StaticJsonDocument<256> doc;
     doc["run_mode"] = runMode;
     doc["is_running"] = isRunning;
-    doc["is_error"] = (isDryRunError || isOverflowError || isLevelSensorError || isFlowSensorError);
+    doc["is_error"] = (currentState == PumpState::ERROR) || isDryRunError || isOverflowError || isLevelSensorError || isFlowSensorError;
     doc["is_overflow_error"] = isOverflowError;
     doc["emergency_stop_latched"] = emergencyStopLatched;
     
@@ -110,6 +110,7 @@ String DeviceShadow::getReportedJson() {
         remainSec = (int)((countdownEndMs - now) / 1000);
     }
     doc["countdown_remaining_sec"] = remainSec;
+    doc["last_fault_message"] = lastFaultMessage;
     
     String output;
     serializeJson(doc, output);

@@ -20,25 +20,44 @@ class DashboardViewModel(
         repository.telemetryFlow,
         repository.shadowFlow,
         repository.configFlow,
-        repository.connectionFlow
-    ) { telemetry, shadow, config, connection ->
+        repository.connectionFlow,
+        repository.eventsFlow
+    ) { telemetry, shadow, config, connection, events ->
         val currentMode = when (shadow.reported.runMode) {
             "MANUAL", "MANUAL_ON", "MANUAL_OFF", "MANUAL_COOLDOWN" -> ControlMode.MANUAL
             "COUNTDOWN" -> ControlMode.COUNTDOWN
-            else -> ControlMode.AUTO
+            "AUTO", "SMART", "ECO" -> ControlMode.AUTO
+            "IDLE", "ERROR" -> {
+                when (shadow.desired.mode) {
+                    "MANUAL" -> ControlMode.MANUAL
+                    "COUNTDOWN" -> ControlMode.COUNTDOWN
+                    else -> ControlMode.AUTO
+                }
+            }
+            else -> {
+                when (shadow.desired.mode) {
+                    "MANUAL" -> ControlMode.MANUAL
+                    "COUNTDOWN" -> ControlMode.COUNTDOWN
+                    else -> ControlMode.AUTO
+                }
+            }
         }
         
         DashboardUiState(
             isPumpRunning = shadow.reported.isRunning,
             mode = currentMode,
-            lockoutActive = shadow.reported.isError || shadow.reported.isOverflowError,
+            lockoutActive = shadow.reported.isError || shadow.reported.isOverflowError || shadow.reported.emergencyStopLatched,
             waterLevelPct = telemetry.waterLevel,
             flowRateLpm = telemetry.flowRate,
             connectionStatus = connection,
             config = config,
             countdownRemainingSec = shadow.reported.countdownRemainingSec,
             bypassLevelSensor = shadow.desired.bypassLevelSensor,
-            bypassFlowSensor = shadow.desired.bypassFlowSensor
+            bypassFlowSensor = shadow.desired.bypassFlowSensor,
+            isManualDesired = shadow.desired.manualDesired,
+            isCountdownStartDesired = shadow.desired.countdownStart,
+            lastFaultMessage = shadow.reported.lastFaultMessage,
+            events = events
         )
     }.stateIn(
         scope = viewModelScope,
@@ -56,7 +75,9 @@ class DashboardViewModel(
         val currentDesired = repository.shadowFlow.value.desired
         val desired = currentDesired.copy(
             mode = uiState.value.mode.name,
-            manualDesired = on
+            manualDesired = on,
+            clearError = false,
+            resetStop = false
         )
         repository.updateDesiredState(desired)
     }
@@ -66,7 +87,9 @@ class DashboardViewModel(
         val desired = currentDesired.copy(
             mode = mode.name,
             manualDesired = uiState.value.isPumpRunning,
-            countdownStart = false // Reset countdown start when switching modes
+            countdownStart = false, // Reset countdown start when switching modes
+            clearError = false,
+            resetStop = false
         )
         repository.updateDesiredState(desired)
     }
@@ -85,7 +108,9 @@ class DashboardViewModel(
         val desired = currentDesired.copy(
             mode = ControlMode.COUNTDOWN.name,
             countdownStart = true,
-            countdownDurationMin = durationMin
+            countdownDurationMin = durationMin,
+            clearError = false,
+            resetStop = false
         )
         repository.updateDesiredState(desired)
     }
@@ -95,7 +120,8 @@ class DashboardViewModel(
         val desired = currentDesired.copy(
             mode = uiState.value.mode.name,
             clearError = true,
-            resetStop = true
+            resetStop = true,
+            emergencyStop = false
         )
         repository.updateDesiredState(desired)
     }
