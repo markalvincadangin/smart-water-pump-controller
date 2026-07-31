@@ -68,7 +68,7 @@ void loadDeviceConfigFromNVS() {
   cfgAutoBypassOnSensorFail = autoBypassEn;
   if (autoBypassSec >= 10 && autoBypassSec <= 300) cfgAutoBypassDelaySec = autoBypassSec;
 
-  LOG(APP_LOG_LEVEL_INFO, "NVS", "Device config loaded.");
+  app_logger.logCloudEvent(APP_LOG_LEVEL_INFO, LogCategory::SYSTEM, EventCode::EVT_CONFIG_RESTORED, "Device config loaded.");
 }
 
 void saveDeviceConfigToNVS() {
@@ -144,7 +144,7 @@ void checkCrashLoop() {
     lastFaultCode = "SAFE_MODE";
     lastFaultMessage = "Crash loop detected. Controller in safe mode. Power cycle to recover.";
     prefs.putULong("safe_mode_ms", safeModeEnteredMs);
-    LOG(APP_LOG_LEVEL_INFO, "ERROR", "CRASH LOOP DETECTED: %d boots without reaching stable uptime. Entering SAFE MODE.", bootCount);
+    app_logger.logCloudEvent(APP_LOG_LEVEL_ERROR, LogCategory::SYSTEM, EventCode::EVT_CRASH_LOOP_SAFE_MODE, "CRASH LOOP DETECTED: %d boots without reaching stable uptime. Entering SAFE MODE.", bootCount);
     LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Pump OFF. Firebase disabled. Serial only.");
   } else {
     LOG(APP_LOG_LEVEL_INFO, "BOOT", "Boot count (uncleared): %d/%d", bootCount, CRASH_LOOP_THRESHOLD);

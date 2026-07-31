@@ -204,3 +204,9 @@ extern uint8_t gLogLevel;
   } \
 } while(0)
 
+#define LOG_CLOUD(level, cat, code, fmt, ...) do { \
+  if ((level) <= LOG_COMPILE_FLOOR && (level) <= gLogLevel) { \
+    app_logger.logCloudEvent(level, cat, code, fmt, ##__VA_ARGS__); \
+  } \
+} while(0)
+

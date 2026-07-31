@@ -1,7 +1,5 @@
 package com.smartflow.domain
 
-import com.google.firebase.database.PropertyName
-
 enum class ControlMode {
     AUTO,
     MANUAL,
@@ -13,37 +11,39 @@ enum class ConnectionState {
     DISCONNECTED,
     CONNECTING
 }
+
 data class DeviceShadow(
     val desired: ShadowDesired = ShadowDesired(),
     val reported: ShadowReported = ShadowReported()
 )
 
 data class ShadowDesired(
-    @get:PropertyName("mode") @set:PropertyName("mode") var mode: String = ControlMode.AUTO.name,
-    @get:PropertyName("manual_desired") @set:PropertyName("manual_desired") var manualDesired: Boolean = false,
-    @get:PropertyName("countdown_start") @set:PropertyName("countdown_start") var countdownStart: Boolean = false,
-    @get:PropertyName("countdown_duration_min") @set:PropertyName("countdown_duration_min") var countdownDurationMin: Int = 0,
-    @get:PropertyName("emergency_stop") @set:PropertyName("emergency_stop") var emergencyStop: Boolean = false,
-    @get:PropertyName("reset_stop") @set:PropertyName("reset_stop") var resetStop: Boolean = false,
-    @get:PropertyName("clear_error") @set:PropertyName("clear_error") var clearError: Boolean = false,
-    @get:PropertyName("bypass_level_sensor") @set:PropertyName("bypass_level_sensor") var bypassLevelSensor: Boolean = true,
-    @get:PropertyName("bypass_flow_sensor") @set:PropertyName("bypass_flow_sensor") var bypassFlowSensor: Boolean = true
+    val mode: String = ControlMode.AUTO.name,
+    val manualDesired: Boolean = false,
+    val countdownStart: Boolean = false,
+    val countdownDurationMin: Int = 0,
+    val emergencyStop: Boolean = false,
+    val resetStop: Boolean = false,
+    val clearError: Boolean = false,
+    val bypassLevelSensor: Boolean = true,
+    val bypassFlowSensor: Boolean = true,
+    val rebootDevice: Boolean = false
 )
 
 data class ShadowReported(
-    @get:PropertyName("run_mode") @set:PropertyName("run_mode") var runMode: String = "",
-    @get:PropertyName("is_running") @set:PropertyName("is_running") var isRunning: Boolean = false,
-    @get:PropertyName("countdown_remaining_sec") @set:PropertyName("countdown_remaining_sec") var countdownRemainingSec: Int = 0,
-    @get:PropertyName("is_error") @set:PropertyName("is_error") var isError: Boolean = false,
-    @get:PropertyName("is_overflow_error") @set:PropertyName("is_overflow_error") var isOverflowError: Boolean = false,
-    @get:PropertyName("emergency_stop_latched") @set:PropertyName("emergency_stop_latched") var emergencyStopLatched: Boolean = false,
-    @get:PropertyName("last_fault_message") @set:PropertyName("last_fault_message") var lastFaultMessage: String = ""
+    val runMode: String = "",
+    val isRunning: Boolean = false,
+    val countdownRemainingSec: Int = 0,
+    val isError: Boolean = false,
+    val isOverflowError: Boolean = false,
+    val emergencyStopLatched: Boolean = false,
+    val lastFaultMessage: String = ""
 )
 
 data class Telemetry(
-    @get:PropertyName("water_level_percent") @set:PropertyName("water_level_percent") var waterLevel: Int = 0,
-    @get:PropertyName("flow_rate_lpm") @set:PropertyName("flow_rate_lpm") var flowRate: Float = 0f,
-    @get:PropertyName("ultrasonic_last_good_cm") @set:PropertyName("ultrasonic_last_good_cm") var distanceCm: Float = 0f
+    val waterLevel: Int = 0,
+    val flowRate: Float = 0f,
+    val distanceCm: Float = 0f
 )
 
 data class DeviceConfig(
@@ -55,6 +55,7 @@ data class DeviceConfig(
 data class DashboardUiState(
     val isPumpRunning: Boolean = false,
     val mode: ControlMode = ControlMode.AUTO,
+    val desiredMode: ControlMode = ControlMode.AUTO,
     val lockoutActive: Boolean = false,
     val waterLevelPct: Int = 0,
     val flowRateLpm: Float = 0f,
@@ -70,9 +71,13 @@ data class DashboardUiState(
 )
 
 data class DeviceEvent(
-    @get:PropertyName("timestamp") @set:PropertyName("timestamp") var timestamp: Long = 0L,
-    @get:PropertyName("severity") @set:PropertyName("severity") var severity: String = "",
-    @get:PropertyName("category") @set:PropertyName("category") var category: String = "",
-    @get:PropertyName("code") @set:PropertyName("code") var code: String = "",
-    @get:PropertyName("message") @set:PropertyName("message") var message: String = ""
+    val id: String,
+    val timestamp: Long,
+    val severity: String,
+    val category: String,
+    val code: String,
+    val title: String,
+    val logMessage: String,
+    val notificationMessage: String,
+    val rawMessage: String
 )

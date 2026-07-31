@@ -177,7 +177,8 @@ The BLE `reset` command is a scoped local reprovisioning operation, not a factor
 
 #### Production diagnostics
 
-Production firmware publishes the `/devices/{device_id}/diagnostics` snapshot with `freeHeap`, `wifiRSSI`, and `restartReason`. Its cloud event history contains only WARN/ERROR records. The trusted `retainDeviceEvents` backend trigger atomically retains the newest 50 push-ID-ordered records, including repair of oversized histories left by an older firmware version. Firmware application code logs through the transport-independent `AppLogger`/`LogSink` boundary; development-only sinks may expose bounded local history and live diagnostics on a trusted LAN, but the TCP implementation is compile-time gated and is not a production support interface.
+Production firmware publishes the `/devices/{device_id}/diagnostics` snapshot with `freeHeap`, `wifiRSSI`, and `restartReason`.
+The firmware uses a strictly structured event registry mapping to `EventCode` and `LogCategory` enums (e.g. `EVT_PUMP_ON`, `EVT_DRY_RUN_LOCKOUT`). The legacy unstructured `LOG()` string macro is now strictly isolated to local debugging (Serial/Syslog) and does not push to Firebase. This ensures the Android app's Activity Log remains completely standardized and localizable. The trusted `retainDeviceEvents` backend trigger atomically retains the newest 50 push-ID-ordered records. Firmware application code logs through the transport-independent `AppLogger`/`LogSink` boundary; development-only sinks may expose bounded local history and live diagnostics on a trusted LAN, but the TCP implementation is compile-time gated and is not a production support interface.
 
 **Status (ESP32 → cloud)**: `/devices/{device_id}/telemetry` and `/devices/{device_id}/shadow/reported`
 

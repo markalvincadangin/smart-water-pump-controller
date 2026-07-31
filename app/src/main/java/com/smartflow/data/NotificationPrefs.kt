@@ -6,5 +6,7 @@ data class NotificationPrefs(
     val dndStartHour: Int = 22,
     val dndEndHour: Int = 6,
     val lastReadTimestamp: Long = 0L,
-    val fcmTokens: Map<String, String> = emptyMap()
+    val fcmTokens: Map<String, String> = emptyMap(),
+    val readEventIds: Map<String, Boolean> = emptyMap(),
+    val deletedEventIds: Map<String, Boolean> = emptyMap()
 )

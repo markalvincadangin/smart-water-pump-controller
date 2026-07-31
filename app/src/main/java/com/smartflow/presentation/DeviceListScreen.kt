@@ -7,12 +7,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.smartflow.presentation.components.SmartFlowTopAppBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -21,37 +22,11 @@ fun DeviceListScreen(
     hasUnreadNotifications: Boolean,
     onDeviceSelected: (String) -> Unit,
     onAddNewDevice: () -> Unit,
-    onManageOwnership: (String) -> Unit,
-    onManageAccount: () -> Unit,
-    onViewNotifications: () -> Unit
+    onManageOwnership: (String) -> Unit
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("My Devices") },
-                actions = {
-                    Box {
-                        IconButton(onClick = onViewNotifications) {
-                            Icon(Icons.Default.Notifications, contentDescription = "Notifications")
-                        }
-                        if (hasUnreadNotifications) {
-                            Badge(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(top = 8.dp, end = 8.dp)
-                            )
-                        }
-                    }
-                    IconButton(onClick = onManageAccount) {
-                        Icon(Icons.Default.Person, contentDescription = "Account")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
+            SmartFlowTopAppBar()
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddNewDevice, containerColor = MaterialTheme.colorScheme.primary) {

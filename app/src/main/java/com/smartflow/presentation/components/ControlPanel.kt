@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 @Composable
 fun ControlPanel(
     mode: ControlMode,
+    desiredMode: ControlMode,
     isPumpRunning: Boolean,
     lockoutActive: Boolean,
     connectionState: ConnectionState,
@@ -58,21 +59,24 @@ fun ControlPanel(
         ) {
             ModeButton(
                 text = "AUTO",
-                isSelected = mode == ControlMode.AUTO,
+                isSelected = desiredMode == ControlMode.AUTO,
+                isPending = desiredMode == ControlMode.AUTO && mode != ControlMode.AUTO,
                 isEnabled = isConnected,
                 onClick = { onModeChanged(ControlMode.AUTO) },
                 modifier = Modifier.weight(1f)
             )
             ModeButton(
                 text = "MANUAL",
-                isSelected = mode == ControlMode.MANUAL,
+                isSelected = desiredMode == ControlMode.MANUAL,
+                isPending = desiredMode == ControlMode.MANUAL && mode != ControlMode.MANUAL,
                 isEnabled = isConnected,
                 onClick = { onModeChanged(ControlMode.MANUAL) },
                 modifier = Modifier.weight(1f)
             )
             ModeButton(
                 text = "TIMER",
-                isSelected = mode == ControlMode.COUNTDOWN,
+                isSelected = desiredMode == ControlMode.COUNTDOWN,
+                isPending = desiredMode == ControlMode.COUNTDOWN && mode != ControlMode.COUNTDOWN,
                 isEnabled = isConnected,
                 onClick = { onModeChanged(ControlMode.COUNTDOWN) },
                 modifier = Modifier.weight(1f)
@@ -104,13 +108,18 @@ fun ControlPanel(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
-                    if (isCountdownStartDesired && !isPumpRunning) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        if (isCountdownStartDesired && !isPumpRunning) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         Text("START TIMER", fontWeight = FontWeight.Bold)
                     }
                 }
@@ -155,13 +164,18 @@ fun ControlPanel(
                         .weight(1f)
                         .height(56.dp) // Ensures > 48dp minimum touch target
                 ) {
-                    if (isPendingManual) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = if (isPumpRunning) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        if (isPendingManual) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = if (isPumpRunning) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         Text(
                             text = if (isPumpRunning) "STOP PUMP" else "START PUMP",
                             fontWeight = FontWeight.Bold
@@ -196,6 +210,7 @@ fun ControlPanel(
 private fun ModeButton(
     text: String,
     isSelected: Boolean,
+    isPending: Boolean = false,
     isEnabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -208,13 +223,26 @@ private fun ModeButton(
             .height(56.dp) // Ensures > 48dp minimum touch target
             .clip(RoundedCornerShape(24.dp))
             .background(backgroundColor)
-            .clickable(enabled = isEnabled, onClick = onClick),
+            .clickable(enabled = isEnabled && !isPending, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            color = contentColor,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            if (isPending) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = contentColor,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(
+                text = text,
+                color = contentColor,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }

@@ -17,6 +17,7 @@ fun ConfigBottomSheet(
     bypassFlow: Boolean,
     onConfigChanged: (DeviceConfig) -> Unit,
     onBypassChanged: (Boolean, Boolean) -> Unit,
+    onReboot: () -> Unit,
     onDismissRequest: () -> Unit,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
@@ -103,6 +104,70 @@ fun ConfigBottomSheet(
                     onCheckedChange = { localBypassFlow = it },
                     colors = SwitchDefaults.colors(checkedThumbColor = CyanPrimary, checkedTrackColor = CyanPrimary.copy(alpha = 0.5f))
                 )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+
+            Text(
+                text = "System Actions",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            var showRebootConfirm by remember { mutableStateOf(false) }
+            var isRebooting by remember { mutableStateOf(false) }
+
+            if (showRebootConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showRebootConfirm = false },
+                    title = { Text("Confirm Reboot") },
+                    text = { Text("Are you sure you want to reboot the ESP32? The device will go offline for a moment.") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showRebootConfirm = false
+                                isRebooting = true
+                                onReboot()
+                                // Note: we don't dismiss the sheet immediately so they see the loading spinner
+                                // The sheet will naturally close if they want, or we can close it after a delay.
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            )
+                        ) {
+                            Text("REBOOT")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showRebootConfirm = false }) {
+                            Text("CANCEL")
+                        }
+                    }
+                )
+            }
+
+            Button(
+                onClick = {
+                    showRebootConfirm = true
+                },
+                enabled = !isRebooting,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    disabledContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isRebooting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("REBOOT DEVICE", fontWeight = FontWeight.Bold)
+                }
             }
 
             Row(

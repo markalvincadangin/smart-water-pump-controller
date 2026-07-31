@@ -10,12 +10,12 @@ void setPump(bool on) {
   if (on && !isRunning) {
     totalPumpCycles++;
     pumpOnSinceMs = millis();
-    LOG(APP_LOG_LEVEL_INFO, "PUMP", "Relay ENERGIZED. Pump is now ON.");
+    app_logger.logCloudEvent(APP_LOG_LEVEL_INFO, LogCategory::PUMP, EventCode::EVT_PUMP_ON, "Relay ENERGIZED. Pump is now ON.");
   }
   if (!on && isRunning && pumpOnSinceMs > 0) {
     totalPumpRunSec += (millis() - pumpOnSinceMs) / 1000UL;
     pumpOnSinceMs = 0;
-    LOG(APP_LOG_LEVEL_INFO, "PUMP", "Relay DE-ENERGIZED. Pump is now OFF.");
+    app_logger.logCloudEvent(APP_LOG_LEVEL_INFO, LogCategory::PUMP, EventCode::EVT_PUMP_OFF, "Relay DE-ENERGIZED. Pump is now OFF.");
   }
 
   if (on) {
@@ -38,7 +38,7 @@ void checkLevelSensorFailure(int sensorReading) {
     levelSensorFailCount++;
     if (levelSensorFailCount >= cfgLevelSensorFailureThreshold && !isLevelSensorError) {
       isLevelSensorError = true;
-      LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[ERROR] Ultrasonic (level) failure: %d consecutive timeouts.", levelSensorFailCount);
+      app_logger.logCloudEvent(APP_LOG_LEVEL_ERROR, LogCategory::SENSOR, EventCode::EVT_SENSOR_LEVEL_FAIL, "Ultrasonic (level) failure: %d consecutive timeouts.", levelSensorFailCount);
     }
     if (isLevelSensorError && cfgAutoBypassOnSensorFail && !cfgBypassLevelSensor) {
       if (levelSensorFailStartMs == 0) levelSensorFailStartMs = millis();
@@ -46,17 +46,17 @@ void checkLevelSensorFailure(int sensorReading) {
         cfgBypassLevelSensor = true;
         autoBypassWasEngaged = true;
         autoBypassActive = true;
-        LOG(APP_LOG_LEVEL_ERROR, "AUTO-BYPASS", "Enabled after sustained sensor failure.");
+        app_logger.logCloudEvent(APP_LOG_LEVEL_ERROR, LogCategory::SAFETY, EventCode::EVT_AUTO_BYPASS_ENABLED, "Enabled after sustained sensor failure.");
       }
     }
   } else {
     levelLastValidMs = millis();
     if (isLevelSensorError) {
-      LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[INFO] Ultrasonic (level) recovered. Error cleared.");
+      isLevelSensorError = false;
+      levelSensorFailCount = 0;
+      app_logger.logCloudEvent(APP_LOG_LEVEL_INFO, LogCategory::SENSOR, EventCode::EVT_SENSOR_LEVEL_RECOVERED, "Ultrasonic (level) recovered. Error cleared.");
+      levelSensorFailStartMs = 0;
     }
-    levelSensorFailCount = 0;
-    isLevelSensorError = false;
-    levelSensorFailStartMs = 0;
 
     if (prevLevelError) {
       levelAnchorPct = sensorReading;
@@ -81,7 +81,7 @@ void checkFlowSensorStuck() {
     flowStuckStartMs = 0;
     if (isFlowSensorError) {
       isFlowSensorError = false;
-      LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[INFO] Flow sensor error cleared (bypass active).");
+      app_logger.logCloudEvent(APP_LOG_LEVEL_INFO, LogCategory::SENSOR, EventCode::EVT_SENSOR_FLOW_RECOVERED, "Flow sensor recovered. Error cleared.");
     }
     return;
   }
@@ -96,12 +96,12 @@ void checkFlowSensorStuck() {
         lastFaultMessage = "Flow sensor reading abnormal (stuck-high while pump OFF).";
         flowStuckHighEventCount++;
         flowStuckHighEventCountWin++;
-        LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[ERROR] Flow stuck-high: %.1f LPM while pump OFF for >%ds.", flowRateLpm, (int)(FLOW_STUCK_TIMEOUT_MS / 1000));
+        app_logger.logCloudEvent(APP_LOG_LEVEL_ERROR, LogCategory::SENSOR, EventCode::EVT_SENSOR_FLOW_STUCK, "Flow stuck-high: %.1f LPM while pump OFF for >%ds.", flowRateLpm, (int)(FLOW_STUCK_TIMEOUT_MS / 1000));
       }
     }
   } else {
     if (isFlowSensorError) {
-      LOG(APP_LOG_LEVEL_ERROR, "SENSOR", "[INFO] Flow sensor recovered. Error cleared.");
+      app_logger.logCloudEvent(APP_LOG_LEVEL_INFO, LogCategory::SENSOR, EventCode::EVT_SENSOR_FLOW_RECOVERED, "Flow sensor recovered. Error cleared.");
       isFlowSensorError = false;
     }
     flowStuckTimerActive = false;
@@ -131,7 +131,7 @@ OverflowStatus checkOverflowProtection() {
   if (elapsed >= maxRuntimeMs) {
     isOverflowError = true;
     pumpAutoStartTracking = false;
-    LOG(APP_LOG_LEVEL_ERROR, "SAFETY", "[ERROR] Max runtime exceeded (%d min). Pump stopped.", cfgMaxPumpRuntimeMin);
+    app_logger.logCloudEvent(APP_LOG_LEVEL_ERROR, LogCategory::SAFETY, EventCode::EVT_MAX_RUNTIME_EXCEEDED, "Max runtime exceeded (%d min). Pump stopped.", cfgMaxPumpRuntimeMin);
     return {SafetyDecision::STOP_OVERFLOW, nearThreshold};
   }
   return {SafetyDecision::OK, nearThreshold};
@@ -174,19 +174,19 @@ SafetyDecision checkDryRunProtection() {
     if (!dryRunTimerActive) {
       dryRunTimerActive = true;
       dryRunStartMs = millis();
-      LOG(APP_LOG_LEVEL_WARN, "SAFETY", "[WARN] Dry-run condition detected. Timer started.");
+      app_logger.logCloudEvent(APP_LOG_LEVEL_WARN, LogCategory::SAFETY, EventCode::EVT_DRY_RUN_WARN, "Dry-run condition detected. Timer started.");
     } else {
       uint32_t elapsedDr = elapsedMillis32(millis(), dryRunStartMs);
       if (elapsedDr >= dryRunTimeoutMs) {
         isDryRunError = true;
         // HARD SAFETY: always stop the pump regardless of mode.
-        LOG(APP_LOG_LEVEL_ERROR, "SAFETY", "[ERROR] DRY-RUN LOCKOUT. Pump stopped; waiting for acknowledge.");
+        app_logger.logCloudEvent(APP_LOG_LEVEL_ERROR, LogCategory::SAFETY, EventCode::EVT_DRY_RUN_LOCKOUT, "DRY-RUN LOCKOUT. Pump stopped; waiting for acknowledge.");
         return SafetyDecision::STOP_DRYRUN;
       }
     }
   } else {
     if (dryRunTimerActive) {
-      LOG(APP_LOG_LEVEL_INFO, "SAFETY", "[INFO] Flow restored. Dry-run timer reset.");
+      app_logger.logCloudEvent(APP_LOG_LEVEL_INFO, LogCategory::SAFETY, EventCode::EVT_DRY_RUN_CLEARED, "Flow restored. Dry-run timer reset.");
     }
     dryRunTimerActive = false;
     dryRunStartMs = 0;

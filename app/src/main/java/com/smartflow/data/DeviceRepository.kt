@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
+import com.smartflow.domain.DeviceEvent
 
 class DeviceRepository(private val cloudStore: FirebaseCloudStore) {
     
@@ -43,5 +44,13 @@ class DeviceRepository(private val cloudStore: FirebaseCloudStore) {
 
     suspend fun markNotificationsAsRead(uid: String) {
         cloudStore.markNotificationsAsRead(uid)
+    }
+
+    suspend fun markSpecificNotificationsAsRead(uid: String, eventIds: List<String>) {
+        cloudStore.markSpecificNotificationsAsRead(uid, eventIds)
+    }
+
+    suspend fun deleteSpecificNotifications(uid: String, eventIds: List<String>) {
+        cloudStore.deleteSpecificNotifications(uid, eventIds)
     }
 }

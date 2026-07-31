@@ -56,7 +56,7 @@ void WifiManager::loop() {
         // Wait at least WIFI_BACKOFF_INITIAL_MS before reconnecting
         if (now - lastWifiRetryMs >= WIFI_BACKOFF_INITIAL_MS) {
             lastWifiRetryMs = now;
-            LOG(APP_LOG_LEVEL_WARN, "WIFI", "Disconnected. Attempting reconnect...");
+            app_logger.logCloudEvent(APP_LOG_LEVEL_WARN, LogCategory::SYSTEM, EventCode::EVT_WIFI_DISCONNECTED, "Disconnected. Attempting reconnect...");
             WiFi.disconnect();
             connect();
         }

@@ -26,7 +26,11 @@ class DeviceListViewModel(
                 deviceRepository.streamAllEvents(deviceIds),
                 deviceRepository.getNotificationPrefsStream(uid)
             ) { events, prefs ->
-                events.any { it.second.timestamp > prefs.lastReadTimestamp }
+                events.any { (deviceId, event) ->
+                    val isDeleted = prefs.deletedEventIds[event.id] == true
+                    val isRead = prefs.readEventIds[event.id] == true || event.timestamp <= prefs.lastReadTimestamp
+                    !isDeleted && !isRead
+                }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)

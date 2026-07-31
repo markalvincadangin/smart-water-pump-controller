@@ -103,8 +103,9 @@ Both MANUAL and COUNTDOWN modes share a unified pre-evaluation block for safety:
 - `countdown_add_time` is validated and capped extension.
 - `countdown_stop` clears timer but keeps mode COUNTDOWN (idle).
 - On expiry (or if interrupted by a shared safety gate):
+  - `countdown_start` is force-cleared from Firebase `desired` state *before* turning the pump off to prevent stale-state EMI crash loops.
   - pump OFF
-  - mode remains COUNTDOWN idle until explicit restart
+  - mode automatically reverts to `MANUAL` with `manual_desired = false` (MANUAL OFF). This is a strict safety fallback because AUTO mode relies on ultrasonic sensors which may not be fully stabilized yet in the physical deployment.
 
 ### 5.4 AUTO
 
@@ -164,6 +165,7 @@ These command paths are designed to avoid sticky replay during reconnect/retry w
   - normal init path is constrained
   - pump remains fail-safe OFF behavior
   - auto-clear uses wall-clock when available, fallback timing otherwise
+- On normal boot, stale `countdown_start` intents are cleared from the cloud shadow before pump logic evaluates, preventing rapid-cycling loops caused by EMI resets during countdown expiry.
 - Persisted state includes core mode/config and runtime counters.
 - Some runtime timers remain volatile across reboot (documented operational limitation).
 
@@ -173,4 +175,4 @@ These command paths are designed to avoid sticky replay during reconnect/retry w
 - Emergency stop must always de-energize and latch.
 - No MANUAL+COUNTDOWN concurrent run path exists.
 - Hard safety lockouts always dominate mode intent until cleared.
-- Direct relay control (calling `setPump(bool)`) is strictly limited to `app_executePumpLogic()` in the app layer, with one explicit exception: the `emergency_stop` handler in `connectivity_cloud.cpp` calls `setPump(false)` directly for latency-critical, immediate shutdown.
+- Direct relay control is strictly evaluated inside `PumpApp::executeLogic()` (and `checkCountdownExpiry()`). The main loop acts as an orchestrator and never bypasses these safety constraints to drive the relay directly.

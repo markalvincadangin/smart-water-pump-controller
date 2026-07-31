@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,12 +15,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import com.smartflow.domain.ConnectionState
-import com.smartflow.presentation.components.*
-
+import com.smartflow.domain.ControlMode
+import com.smartflow.presentation.components.ActivityPanel
+import com.smartflow.presentation.components.ConfigBottomSheet
+import com.smartflow.presentation.components.ControlPanel
+import com.smartflow.presentation.components.DiagnosticsCard
+import com.smartflow.presentation.components.PumpStatusCard
+import com.smartflow.presentation.components.TankLevelCard
+import com.smartflow.presentation.components.SmartFlowTopAppBar
 import com.smartflow.viewmodel.DashboardViewModel
 
 import androidx.compose.ui.platform.LocalConfiguration
 import android.content.res.Configuration
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,37 +41,45 @@ fun DashboardScreen(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    val snackbarHostState = com.smartflow.LocalSnackbarHostState.current
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(uiState.connectionStatus) {
+        if (uiState.connectionStatus != ConnectionState.CONNECTED) {
+            showConfig = false
+            snackbarHostState.showSnackbar(
+                message = "Device is currently offline.",
+                duration = SnackbarDuration.Short
+            )
+        } else {
+            snackbarHostState.showSnackbar(
+                message = "Device connected.",
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { 
-                    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
-                    val wordmarkRes = if (isDarkTheme) com.smartflow.R.drawable.wordmark_dark else com.smartflow.R.drawable.wordmark_light
-                    androidx.compose.foundation.Image(
-                        painter = androidx.compose.ui.res.painterResource(id = wordmarkRes),
-                        contentDescription = "SmartFlow Logo",
-                        modifier = Modifier.height(28.dp),
-                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
+            SmartFlowTopAppBar(
+                showBackButton = true,
+                onBackClick = onBack,
                 actions = {
                     IconButton(
-                        onClick = { showConfig = true },
+                        onClick = { 
+                            if (uiState.connectionStatus == ConnectionState.CONNECTED) {
+                                showConfig = true 
+                            } else {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Cannot configure device while offline.")
+                                }
+                            }
+                        },
                         modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                     ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Tune, contentDescription = "Device Configuration")
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                }
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -130,6 +145,7 @@ fun DashboardScreen(
                     ) {
                         ControlPanel(
                             mode = uiState.mode,
+                            desiredMode = uiState.desiredMode,
                             isPumpRunning = uiState.isPumpRunning,
                             lockoutActive = uiState.lockoutActive,
                             connectionState = uiState.connectionStatus,
@@ -168,6 +184,7 @@ fun DashboardScreen(
 
                     ControlPanel(
                         mode = uiState.mode,
+                        desiredMode = uiState.desiredMode,
                         isPumpRunning = uiState.isPumpRunning,
                         lockoutActive = uiState.lockoutActive,
                         connectionState = uiState.connectionStatus,
@@ -193,6 +210,7 @@ fun DashboardScreen(
                 bypassFlow = uiState.bypassFlowSensor,
                 onConfigChanged = viewModel::updateConfig,
                 onBypassChanged = viewModel::updateBypass,
+                onReboot = viewModel::rebootDevice,
                 onDismissRequest = { showConfig = false }
             )
         }

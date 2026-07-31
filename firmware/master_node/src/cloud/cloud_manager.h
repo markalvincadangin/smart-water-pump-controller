@@ -14,7 +14,10 @@ public:
     // The raw proof never enters RTDB or logs.
     static void queuePairingVerifier(const String& rawProof, const String& purpose, uint32_t lifetimeMs);
     
-    static void pushEventLog(const String& level, const String& component, const String& message);
+    static void pushCloudEvent(const String& level, const String& component, const String& code, const String& details);
+    static void clearCountdownDesiredState();
+    static bool clearRebootDesiredState();
+    static void setErrorFallbackDesiredState();
 
 private:
     static void pushTelemetry();

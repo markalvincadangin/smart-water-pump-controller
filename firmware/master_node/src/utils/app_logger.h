@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <vector>
 #include "logging/log_sink.h"
+#include "log_events.h"
 
 class AppLogger : public Stream {
 private:
@@ -37,6 +38,7 @@ public:
     }
 
     void logEvent(int level, const char* comp, const char* fmt, ...);
+    void logCloudEvent(int level, LogCategory cat, EventCode code, const char* fmt, ...);
 };
 
 extern AppLogger app_logger;

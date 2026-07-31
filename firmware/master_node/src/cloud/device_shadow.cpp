@@ -12,7 +12,17 @@ void DeviceShadow::init() {
     LOG(APP_LOG_LEVEL_INFO, "SHADOW", "Device Shadow initialized");
 }
 
-void DeviceShadow::evaluateDesired(const String& desiredMode, bool manualDesiredInt, bool countdownStart, int countdownDurationMin, bool emergencyStop, bool resetStop, bool clearError, bool bypassLevelSensor, bool bypassFlowSensor) {
+void DeviceShadow::evaluateDesired(const String& desiredMode, bool manualDesiredInt, bool countdownStart, int countdownDurationMin, bool emergencyStop, bool resetStop, bool clearError, bool bypassLevelSensor, bool bypassFlowSensor, bool rebootDevice) {
+    if (rebootDevice) {
+        if (millis() > 15000) {
+            activeCommand.type = CommandType::REBOOT_DEVICE;
+            LOG(APP_LOG_LEVEL_INFO, "SHADOW", "Cloud requested device reboot.");
+        } else {
+            LOG(APP_LOG_LEVEL_WARN, "SHADOW", "Cloud requested reboot, but ignored due to early boot time guard.");
+        }
+        return; // Prioritize reboot above all other intent changes
+    }
+
     if (resetStop) {
         if (emergencyStopLatched) {
             emergencyStopLatched = false;
@@ -68,18 +78,18 @@ void DeviceShadow::evaluateDesired(const String& desiredMode, bool manualDesired
             if (manualDesiredInt) {
                 activeCommand = PumpCommand(CommandType::START_MANUAL);
             } else {
-                activeCommand = PumpCommand(CommandType::STOP);
+                activeCommand = PumpCommand(CommandType::STOP_MANUAL);
             }
         } else if (newMode == "COUNTDOWN") {
             if (countdownStart) {
                 uint32_t dur = countdownDurationMin > 0 ? countdownDurationMin : cfgLastCountdownDurationMin;
                 activeCommand = PumpCommand(CommandType::START_COUNTDOWN, dur * 60);
             } else {
-                activeCommand = PumpCommand(CommandType::STOP);
+                activeCommand = PumpCommand(CommandType::STOP_COUNTDOWN);
             }
         } else {
             // "AUTO" or other
-            activeCommand = PumpCommand(CommandType::STOP);
+            activeCommand = PumpCommand(CommandType::STOP_AUTO);
         }
 
         shadowLastMode = newMode;

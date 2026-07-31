@@ -112,10 +112,25 @@ void AppLogger::logEvent(int level, const char* comp, const char* fmt, ...) {
                 : sizeof(entry) - 1);
         write(reinterpret_cast<const uint8_t*>(entry), bytesToWrite);
     }
+}
+void AppLogger::logCloudEvent(int level, LogCategory cat, EventCode code, const char* fmt, ...) {
+    char details[512];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(details, sizeof(details), fmt, args);
+    va_end(args);
+
+    // 1. Format the standard text for local serial debugging
+    const char* catStr = getCategoryString(cat);
+    const char* codeStr = getEventCodeString(code);
     
-    // Only push to cloud if it's an error, warning, or a STATE event.
-    if (level <= APP_LOG_LEVEL_WARN || (level == APP_LOG_LEVEL_INFO && comp && strcmp(comp, "STATE") == 0)) {
-        String levelStr = (level == APP_LOG_LEVEL_ERROR) ? "ERROR" : (level == APP_LOG_LEVEL_WARN ? "WARN" : "INFO");
-        CloudManager::pushEventLog(levelStr, comp, buf);
-    }
+    char buf[768];
+    snprintf(buf, sizeof(buf), "[%s] %s", codeStr, details);
+    
+    // Log locally
+    logEvent(level, catStr, buf);
+    
+    // 2. Push explicitly to the cloud with the structured code
+    String levelStr = (level == APP_LOG_LEVEL_ERROR) ? "ERROR" : (level == APP_LOG_LEVEL_WARN ? "WARN" : "INFO");
+    CloudManager::pushCloudEvent(levelStr, catStr, codeStr, details);
 }

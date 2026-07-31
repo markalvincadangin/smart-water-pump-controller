@@ -23,29 +23,24 @@ class DashboardViewModel(
         repository.connectionFlow,
         repository.eventsFlow
     ) { telemetry, shadow, config, connection, events ->
+        val desiredMode = when (shadow.desired.mode) {
+            "MANUAL" -> ControlMode.MANUAL
+            "COUNTDOWN" -> ControlMode.COUNTDOWN
+            else -> ControlMode.AUTO
+        }
+        
         val currentMode = when (shadow.reported.runMode) {
             "MANUAL", "MANUAL_ON", "MANUAL_OFF", "MANUAL_COOLDOWN" -> ControlMode.MANUAL
             "COUNTDOWN" -> ControlMode.COUNTDOWN
             "AUTO", "SMART", "ECO" -> ControlMode.AUTO
-            "IDLE", "ERROR" -> {
-                when (shadow.desired.mode) {
-                    "MANUAL" -> ControlMode.MANUAL
-                    "COUNTDOWN" -> ControlMode.COUNTDOWN
-                    else -> ControlMode.AUTO
-                }
-            }
-            else -> {
-                when (shadow.desired.mode) {
-                    "MANUAL" -> ControlMode.MANUAL
-                    "COUNTDOWN" -> ControlMode.COUNTDOWN
-                    else -> ControlMode.AUTO
-                }
-            }
+            "IDLE", "ERROR" -> desiredMode
+            else -> desiredMode
         }
         
         DashboardUiState(
             isPumpRunning = shadow.reported.isRunning,
             mode = currentMode,
+            desiredMode = desiredMode,
             lockoutActive = shadow.reported.isError || shadow.reported.isOverflowError || shadow.reported.emergencyStopLatched,
             waterLevelPct = telemetry.waterLevel,
             flowRateLpm = telemetry.flowRate,
@@ -136,6 +131,14 @@ class DashboardViewModel(
             mode = uiState.value.mode.name,
             bypassLevelSensor = bypassLevel,
             bypassFlowSensor = bypassFlow
+        )
+        repository.updateDesiredState(desired)
+    }
+
+    fun rebootDevice() {
+        val currentDesired = repository.shadowFlow.value.desired
+        val desired = currentDesired.copy(
+            rebootDevice = true
         )
         repository.updateDesiredState(desired)
     }

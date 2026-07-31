@@ -19,6 +19,7 @@ import android.bluetooth.BluetoothManager
 import androidx.compose.ui.platform.LocalContext
 import com.smartflow.viewmodel.ProvisioningState
 import com.smartflow.viewmodel.ProvisioningViewModel
+import com.smartflow.presentation.components.SmartFlowTopAppBar
 
 @Composable
 fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: () -> Unit, onBack: () -> Unit) {
@@ -59,18 +60,10 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
 
     Scaffold(
         topBar = {
-            @OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text("Add Device") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            SmartFlowTopAppBar(
+                title = "Add Device",
+                showBackButton = true,
+                onBackClick = onBack
             )
         }
     ) { paddingValues ->

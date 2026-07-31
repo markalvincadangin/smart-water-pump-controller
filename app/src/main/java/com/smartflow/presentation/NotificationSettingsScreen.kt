@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.smartflow.viewmodel.NotificationSettingsViewModel
+import com.smartflow.presentation.components.SmartFlowTopAppBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,18 +23,10 @@ fun NotificationSettingsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Notification Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            SmartFlowTopAppBar(
+                title = "Notification Settings",
+                showBackButton = true,
+                onBackClick = onBack
             )
         }
     ) { paddingValues ->

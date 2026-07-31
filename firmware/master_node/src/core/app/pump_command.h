@@ -10,8 +10,11 @@ enum class CommandType {
     NONE,
     START_MANUAL,
     START_COUNTDOWN,
-    STOP,
-    CLEAR_ERROR
+    STOP_AUTO,
+    STOP_MANUAL,
+    STOP_COUNTDOWN,
+    CLEAR_ERROR,
+    REBOOT_DEVICE
 };
 
 struct PumpCommand {

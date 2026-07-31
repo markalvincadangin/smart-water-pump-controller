@@ -38,6 +38,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
+import androidx.navigation.compose.currentBackStackEntryAsState
+import com.smartflow.data.repository.SettingsRepository
+import com.smartflow.presentation.SettingsScreen
+import com.smartflow.viewmodel.SettingsViewModel
 
 private fun hasEligibleAccount(): Boolean {
     return AccountSession.state(FirebaseAuth.getInstance().currentUser) == DurableAccountState.ELIGIBLE
@@ -49,6 +65,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var bleProvisioningClient: BleProvisioningClient
     private lateinit var cloudStore: FirebaseCloudStore
     private lateinit var deviceRepository: DeviceRepository
+    private lateinit var settingsRepository: SettingsRepository
 
     private val requestPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -112,30 +129,110 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        settingsRepository = SettingsRepository(applicationContext)
+
         setContent {
-            com.smartflow.ui.theme.SmartFlowTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+            val themePreference by settingsRepository.themePreferenceFlow.collectAsState(
+                initial = com.smartflow.ui.theme.ThemePreference.SYSTEM_DEFAULT
+            )
+            val snackbarHostState = remember { SnackbarHostState() }
+            
+            com.smartflow.ui.theme.SmartFlowTheme(themePreference = themePreference) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    LocalSnackbarHostState provides snackbarHostState
                 ) {
-                    AppNavigation(bleProvisioningClient, deviceRepository, cloudStore)
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        AppNavigation(bleProvisioningClient, deviceRepository, cloudStore, settingsRepository, snackbarHostState)
+                    }
                 }
             }
         }
     }
 }
 
+val LocalSnackbarHostState = androidx.compose.runtime.staticCompositionLocalOf<SnackbarHostState> {
+    error("No SnackbarHostState provided")
+}
+
 @Composable
 fun AppNavigation(
     bleProvisioningClient: BleProvisioningClient,
     deviceRepository: DeviceRepository,
-    cloudStore: FirebaseCloudStore
+    cloudStore: FirebaseCloudStore,
+    settingsRepository: SettingsRepository,
+    snackbarHostState: SnackbarHostState
 ) {
     val navController = rememberNavController()
     val auth = FirebaseAuth.getInstance()
     val startDestination = if (hasEligibleAccount()) "device_list" else "login"
 
-    NavHost(navController = navController, startDestination = startDestination) {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    val bottomNavRoutes = listOf("device_list", "notifications", "settings")
+    val showBottomNav = currentRoute in bottomNavRoutes
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            if (showBottomNav) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ) {
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Home, contentDescription = "Devices") },
+                        label = { Text("Devices") },
+                        selected = currentRoute == "device_list",
+                        onClick = {
+                            if (currentRoute != "device_list") {
+                                navController.navigate("device_list") {
+                                    popUpTo("device_list") { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Notifications, contentDescription = "Alerts") },
+                        label = { Text("Alerts") },
+                        selected = currentRoute == "notifications",
+                        onClick = {
+                            if (currentRoute != "notifications") {
+                                navController.navigate("notifications") {
+                                    popUpTo("device_list") { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings") },
+                        selected = currentRoute == "settings",
+                        onClick = {
+                            if (currentRoute != "settings") {
+                                navController.navigate("settings") {
+                                    popUpTo("device_list") { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController, 
+            startDestination = startDestination,
+            modifier = Modifier.padding(innerPadding)
+        ) {
         composable("login") {
             LoginScreen(
                 onLoginSuccess = {
@@ -198,9 +295,7 @@ fun AppNavigation(
                         onAddNewDevice = {
                             navController.navigate("provisioning")
                         },
-                        onManageOwnership = { deviceId -> navController.navigate("device_ownership/$deviceId") },
-                        onManageAccount = { navController.navigate("account") },
-                        onViewNotifications = { navController.navigate("notifications") }
+                        onManageOwnership = { deviceId -> navController.navigate("device_ownership/$deviceId") }
                     )
                 }
             } else {
@@ -233,6 +328,15 @@ fun AppNavigation(
             DashboardScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("settings") {
+            val viewModel = remember { SettingsViewModel(settingsRepository) }
+            SettingsScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onManageAccount = { navController.navigate("account") }
             )
         }
 
@@ -288,6 +392,7 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() }
                 )
             }
+        }
         }
     }
 }

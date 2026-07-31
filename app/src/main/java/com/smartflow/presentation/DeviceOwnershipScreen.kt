@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.smartflow.presentation.components.SmartFlowTopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import kotlinx.coroutines.launch
@@ -31,17 +32,10 @@ fun DeviceOwnershipScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Manage Device") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            SmartFlowTopAppBar(
+                title = "Manage Device",
+                showBackButton = true,
+                onBackClick = onBack
             )
         }
     ) { paddingValues ->

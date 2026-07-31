@@ -148,6 +148,11 @@ void loop() {
                   ntpLastSyncMs = millis();
               }
               LOG(APP_LOG_LEVEL_INFO, "NTP", "Time synced (post-reconnect).");
+              static bool bootEventSent = false;
+              if (!bootEventSent) {
+                  bootEventSent = true;
+                  LOG_CLOUD(APP_LOG_LEVEL_INFO, LogCategory::SYSTEM, EventCode::EVT_BOOT, "SmartFlow Controller Booted and Connected");
+              }
           }
       }
   } else {
@@ -162,83 +167,90 @@ void loop() {
   if (cmd.type != CommandType::NONE) {
       // Process CLEAR_ERROR specifically
       if (cmd.type == CommandType::CLEAR_ERROR) {
+          isOverflowError = false;
+          isDryRunError = false;
+          isLevelSensorError = false;
+          isFlowSensorError = false;
           if (currentState == PumpState::ERROR) {
-              isOverflowError = false;
-              isDryRunError = false;
-              isLevelSensorError = false;
-              isFlowSensorError = false;
               currentState = PumpState::IDLE;
-              setPump(false);
-              runMode = "IDLE";
-              LOG(APP_LOG_LEVEL_INFO, "STATE", "ERROR cleared, transitioning to IDLE");
           }
-      } else if (cmd.type == CommandType::STOP) {
+          LOG(APP_LOG_LEVEL_INFO, "STATE", "ERROR cleared");
+      } else if (cmd.type == CommandType::STOP_AUTO) {
+          pumpMode = "AUTO";
           currentState = PumpState::IDLE;
-          setPump(false);
           isCountdownActive = false;
-          runMode = "IDLE";
-          LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP received, transitioning to IDLE");
+          manualDesired = false;
+          LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP_AUTO received, reverting to AUTO standby");
+      } else if (cmd.type == CommandType::STOP_MANUAL) {
+          pumpMode = "MANUAL";
+          currentState = PumpState::IDLE;
+          isCountdownActive = false;
+          manualDesired = false;
+          LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP_MANUAL received, entering MANUAL OFF");
+      } else if (cmd.type == CommandType::STOP_COUNTDOWN) {
+          pumpMode = "COUNTDOWN";
+          currentState = PumpState::IDLE;
+          isCountdownActive = false;
+          manualDesired = false;
+          LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP_COUNTDOWN received, entering COUNTDOWN standby");
       } else if (cmd.type == CommandType::START_MANUAL && currentState != PumpState::ERROR) {
+          pumpMode = "MANUAL";
           currentState = PumpState::MANUAL;
-          setPump(true);
-          runStartMs = millis();
-          runMode = "MANUAL";
+          manualDesired = true;
           isCountdownActive = false;
+          runStartMs = millis();
           LOG(APP_LOG_LEVEL_INFO, "STATE", "START_MANUAL received, executing Manual mode");
       } else if (cmd.type == CommandType::START_COUNTDOWN && currentState != PumpState::ERROR) {
+          pumpMode = "COUNTDOWN";
           currentState = PumpState::COUNTDOWN;
-          setPump(true);
+          isCountdownActive = true;
+          manualDesired = false;
           runStartMs = millis(); // Track this to guard against extreme countdowns
           countdownEndMs = millis() + (cmd.durationSeconds * 1000UL);
-          isCountdownActive = true;
-          runMode = "COUNTDOWN";
           LOG(APP_LOG_LEVEL_INFO, "STATE", "START_COUNTDOWN received, executing Countdown mode");
-      }
+        } else if (cmd.type == CommandType::REBOOT_DEVICE) {
+            LOG(APP_LOG_LEVEL_WARN, "SYSTEM", "Remote REBOOT requested from Cloud!");
+            int retry = 0;
+            while (!CloudManager::clearRebootDesiredState() && retry < 3) {
+                delay(1000);
+                retry++;
+            }
+            if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
+                prefs.putInt("boot_count", 0);
+                prefs.end();
+            }
+            delay(1000); // Give time for clear state to hit network queue
+            ESP.restart();
+        }
       DeviceShadow::clearCommand();
   }
 
-  // Safety & Cutoff Execution State Machine
-  switch (currentState) {
-      case PumpState::IDLE:
-          // Pump is off, wait for commands
-          break;
-
-      case PumpState::MANUAL:
-          if (elapsedMillis32(millis(), runStartMs) >= ((uint32_t)cfgMaxPumpRuntimeMin * 60000UL)) {
-              currentState = PumpState::ERROR;
-              setPump(false);
-              isOverflowError = true;
-              lastFaultCode = "ERR_OVERFLOW";
-              lastFaultMessage = "Max manual runtime exceeded";
-              runMode = "ERROR";
-              LOG(APP_LOG_LEVEL_ERROR, "STATE", "Max runtime breached, transitioning to ERROR");
-          }
-          break;
-
-      case PumpState::COUNTDOWN:
-          // Check countdown completion
-          if ((int32_t)(millis() - countdownEndMs) >= 0) {
-              currentState = PumpState::IDLE;
-              setPump(false);
-              isCountdownActive = false;
-              runMode = "IDLE";
-              LOG(APP_LOG_LEVEL_INFO, "STATE", "Countdown finished naturally");
-          } else if (elapsedMillis32(millis(), runStartMs) >= ((uint32_t)cfgMaxPumpRuntimeMin * 60000UL)) {
-              // Also guard against misconfigured extreme countdowns
-              currentState = PumpState::ERROR;
-              setPump(false);
-              isOverflowError = true;
-              lastFaultCode = "ERR_OVERFLOW";
-              lastFaultMessage = "Max runtime exceeded during countdown";
-              runMode = "ERROR";
-              LOG(APP_LOG_LEVEL_ERROR, "STATE", "Max runtime breached during countdown");
-          }
-          break;
-
-      case PumpState::ERROR:
-          setPump(false); // Fallback enforce
-          break;
+  // Update PumpState based on errors generated by pump_app.cpp
+  if (isDryRunError || isOverflowError || isLevelSensorError || isFlowSensorError) {
+      currentState = PumpState::ERROR;
+  } else if (pumpMode == "AUTO" && currentState != PumpState::ERROR) {
+      currentState = PumpState::IDLE;
   }
+
+  // Handle countdown edge-cases on boot and prevent immediate re-trigger/crash loops
+  if (isCountdownActive && countdownEndMs != 0 && (int32_t)(millis() - countdownEndMs) >= 0) {
+      LOG(APP_LOG_LEVEL_INFO, "STATE", "Countdown finished. Clearing desired state and reverting to MANUAL OFF.");
+      
+      // Force clear the desired state before shutting off the pump.
+      // This prevents the ESP32 from crash-looping back into COUNTDOWN if
+      // the relay de-energization causes an EMI-induced reset.
+      CloudManager::clearCountdownDesiredState();
+      delay(500);
+      
+      pumpMode = "MANUAL";
+      manualDesired = false;
+      currentState = PumpState::IDLE;
+      isCountdownActive = false;
+      countdownEndMs = 0;
+  }
+
+  // Execute unified application logic (Auto Mode, Cooldowns, Sensors, Dry-Run limits)
+  PumpApp::executeLogic();
 
 #if FEATURE_SENSOR_SERVICE
   // Optional Feature: Sensor Polling

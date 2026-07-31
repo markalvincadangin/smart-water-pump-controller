@@ -48,8 +48,15 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
-        val logoRes = if (isDarkTheme) com.smartflow.R.drawable.logo_stacked_dark else com.smartflow.R.drawable.logo_stacked_light
+        val themePref = com.smartflow.ui.theme.LocalThemePreference.current
+        val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+        val logoRes = when (themePref) {
+            com.smartflow.ui.theme.ThemePreference.MONOCHROME_LIGHT -> com.smartflow.R.drawable.logo_stacked_black
+            com.smartflow.ui.theme.ThemePreference.MONOCHROME_DARK -> com.smartflow.R.drawable.logo_stacked_white
+            com.smartflow.ui.theme.ThemePreference.LIGHT -> com.smartflow.R.drawable.logo_stacked_light
+            com.smartflow.ui.theme.ThemePreference.DARK -> com.smartflow.R.drawable.logo_stacked_dark
+            com.smartflow.ui.theme.ThemePreference.SYSTEM_DEFAULT -> if (isSystemDark) com.smartflow.R.drawable.logo_stacked_dark else com.smartflow.R.drawable.logo_stacked_light
+        }
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(id = logoRes),
             contentDescription = "SmartFlow Logo",
@@ -115,6 +122,19 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                     .build()
                 googleLauncher.launch(GoogleSignIn.getClient(context, options).signInIntent)
             }, modifier = Modifier.fillMaxWidth()) { Text("Continue with Google") }
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(onClick = {
+                isLoading = true; error = ""
+                coroutineScope.launch {
+                    try {
+                        auth.signInAnonymously().await()
+                        onLoginSuccess()
+                    } catch (exception: Exception) {
+                        error = exception.localizedMessage ?: "Anonymous sign-in failed"
+                        isLoading = false
+                    }
+                }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Continue as Guest") }
         }
     }
 }

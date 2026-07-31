@@ -436,12 +436,9 @@ void CloudManager::pushDiagnostics() {
     Firebase.RTDB.updateNode(&fbdo_cloud, path.c_str(), &json);
 }
 
-void CloudManager::pushEventLog(const String& level, const String& component, const String& message) {
+void CloudManager::pushCloudEvent(const String& level, const String& component, const String& code, const String& details) {
     if (!Firebase.ready()) return;
 
-    // AppLogger calls this only for INFO, WARN and ERROR. Keep the explicit guard at
-    // the cloud boundary so a future caller cannot turn `/events` into a
-    // general-purpose INFO log stream for everything.
     if (level != "INFO" && level != "WARN" && level != "ERROR") return;
 
     uint64_t timestamp = millis();
@@ -451,19 +448,15 @@ void CloudManager::pushEventLog(const String& level, const String& component, co
     const String eventsPath = "/devices/" + deviceId + "/events";
     
     FirebaseJson json;
-    json.set("timestamp", timestamp);
+    json.set("timestamp", (double)timestamp);
     json.set("severity", level);
     json.set("category", component);
-    json.set("code", "LOG");
-    json.set("message", message);
+    json.set("code", code);
+    json.set("message", details);
 
     if (!Firebase.RTDB.pushJSON(&fbdo_cloud, eventsPath.c_str(), &json)) {
         return;
     }
-
-    // Retention is enforced by the trusted Cloud Function. This keeps the
-    // device write path bounded and lets the backend repair older oversized
-    // histories even when the device is reconnecting.
 }
 
 void CloudManager::readShadow() {
@@ -481,6 +474,7 @@ void CloudManager::readShadow() {
         bool clear_error = false;
         bool bypass_level_sensor = false;
         bool bypass_flow_sensor = false;
+        bool reboot_device = false;
 
         json.get(jd, "mode");
         if (jd.success) mode = jd.stringValue;
@@ -509,7 +503,10 @@ void CloudManager::readShadow() {
         json.get(jd, "bypass_flow_sensor");
         if (jd.success) bypass_flow_sensor = jd.boolValue;
 
-        DeviceShadow::evaluateDesired(mode, manual_desired, countdown_start, countdown_duration_min, emergency_stop, reset_stop, clear_error, bypass_level_sensor, bypass_flow_sensor);
+        json.get(jd, "reboot_device");
+        if (jd.success) reboot_device = jd.boolValue;
+
+        DeviceShadow::evaluateDesired(mode, manual_desired, countdown_start, countdown_duration_min, emergency_stop, reset_stop, clear_error, bypass_level_sensor, bypass_flow_sensor, reboot_device);
     }
 }
 
@@ -533,6 +530,42 @@ void CloudManager::pushStatus() {
     json.set("firmwareVersion", "2.0.0");
     
     Firebase.RTDB.updateNode(&fbdo_cloud, path.c_str(), &json);
+}
+
+void CloudManager::clearCountdownDesiredState() {
+    if (!Firebase.ready()) return;
+    String path = "/devices/" + deviceId + "/shadow/desired";
+    FirebaseJson update;
+    update.set("countdown_start", false);
+    update.set("mode", "MANUAL");
+    update.set("manual_desired", false);
+    Firebase.RTDB.updateNode(&fbdo_cloud, path.c_str(), &update);
+    LOG(APP_LOG_LEVEL_INFO, "CLOUD", "Cleared countdown state from desired shadow to prevent loops.");
+}
+
+bool CloudManager::clearRebootDesiredState() {
+    if (!Firebase.ready()) return false;
+    String path = "/devices/" + deviceId + "/shadow/desired";
+    FirebaseJson update;
+    update.set("reboot_device", false);
+    bool success = Firebase.RTDB.updateNode(&fbdo_cloud, path.c_str(), &update);
+    if (success) {
+        LOG(APP_LOG_LEVEL_INFO, "CLOUD", "Cleared reboot flag from desired shadow.");
+    } else {
+        LOG(APP_LOG_LEVEL_ERROR, "CLOUD", "Failed to clear reboot flag: %s", fbdo_cloud.errorReason().c_str());
+    }
+    return success;
+}
+
+void CloudManager::setErrorFallbackDesiredState() {
+    if (!Firebase.ready()) return;
+    String path = "/devices/" + deviceId + "/shadow/desired";
+    FirebaseJson update;
+    update.set("mode", "MANUAL");
+    update.set("manual_desired", false);
+    update.set("countdown_start", false);
+    Firebase.RTDB.updateNode(&fbdo_cloud, path.c_str(), &update);
+    LOG(APP_LOG_LEVEL_INFO, "CLOUD", "Forced desired shadow to MANUAL OFF due to safety trip.");
 }
 
 void CloudManager::pushShadow() {

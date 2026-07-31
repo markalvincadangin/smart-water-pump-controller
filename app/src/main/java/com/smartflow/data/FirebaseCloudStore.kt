@@ -11,6 +11,8 @@ import kotlinx.coroutines.tasks.await
 import com.google.firebase.database.ChildEventListener
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
+import com.smartflow.domain.DeviceEvent
+import com.smartflow.data.dto.DeviceEventDto
 
 class FirebaseCloudStore {
     private val database = FirebaseDatabase.getInstance().reference
@@ -122,9 +124,9 @@ class FirebaseCloudStore {
             override fun onDataChange(snapshot: DataSnapshot) {
                 eventsList.clear()
                 for (child in snapshot.children) {
-                    val ev = child.getValue(DeviceEvent::class.java)
-                    if (ev != null) {
-                        eventsList.add(ev.copy(id = child.key ?: ""))
+                    val ev = child.getValue(DeviceEventDto::class.java)
+                    if (ev != null && child.key != null) {
+                        eventsList.add(ev.toDomain(child.key!!))
                     }
                 }
                 trySend(eventsList.toList())
@@ -167,5 +169,23 @@ class FirebaseCloudStore {
     suspend fun markNotificationsAsRead(uid: String) {
         database.child("users").child(uid).child("notification_prefs")
             .child("lastReadTimestamp").setValue(System.currentTimeMillis()).await()
+    }
+
+    suspend fun markSpecificNotificationsAsRead(uid: String, eventIds: List<String>) {
+        if (eventIds.isEmpty()) return
+        val updates = mutableMapOf<String, Any>()
+        eventIds.forEach { id ->
+            updates["users/$uid/notification_prefs/readEventIds/$id"] = true
+        }
+        database.updateChildren(updates).await()
+    }
+
+    suspend fun deleteSpecificNotifications(uid: String, eventIds: List<String>) {
+        if (eventIds.isEmpty()) return
+        val updates = mutableMapOf<String, Any>()
+        eventIds.forEach { id ->
+            updates["users/$uid/notification_prefs/deletedEventIds/$id"] = true
+        }
+        database.updateChildren(updates).await()
     }
 }

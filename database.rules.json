@@ -30,7 +30,7 @@
         },
         "shadow": {
           "desired": {
-            ".write": "auth != null && auth.token.role !== 'device' && (data.parent().parent().child('ownership/ownerUid').val() === auth.uid || data.parent().parent().child('metadata/claimedByUid').val() === auth.uid)"
+            ".write": "auth != null && ((auth.token.role === 'device' && auth.token.deviceId === $deviceId) || (auth.token.role !== 'device' && (data.parent().parent().child('ownership/ownerUid').val() === auth.uid || data.parent().parent().child('metadata/claimedByUid').val() === auth.uid)))"
           },
           "reported": {
             ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"

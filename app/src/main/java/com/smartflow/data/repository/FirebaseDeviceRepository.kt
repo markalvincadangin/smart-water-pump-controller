@@ -12,9 +12,18 @@ import com.smartflow.domain.DeviceShadow
 import com.smartflow.domain.Telemetry
 import com.smartflow.data.AccountSession
 import com.smartflow.data.DurableAccountState
+import com.smartflow.data.dto.DeviceEventDto
+import com.smartflow.data.dto.DeviceShadowDto
+import com.smartflow.data.dto.TelemetryDto
+import com.smartflow.data.dto.toDto
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import com.smartflow.data.dto.DeviceStatusDto
 
 interface DeviceRepository {
     val telemetryFlow: StateFlow<Telemetry>
@@ -37,6 +46,10 @@ class FirebaseDeviceRepository(
     private val auth = FirebaseAuth.getInstance()
     private val deviceRef = database.getReference("devices").child(deviceId)
 
+    private val repositoryScope = CoroutineScope(Dispatchers.Default)
+    private var lastHeartbeatTimeMs: Long = 0L
+    private var isAppConnectedToFirebase: Boolean = false
+
     private val _telemetryFlow = MutableStateFlow(Telemetry())
     override val telemetryFlow = _telemetryFlow.asStateFlow()
 
@@ -56,15 +69,28 @@ class FirebaseDeviceRepository(
         // Track Firebase connected state (.info/connected)
         database.getReference(".info/connected").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val connected = snapshot.getValue(Boolean::class.java) ?: false
-                if (connected) {
-                    _connectionFlow.value = ConnectionState.CONNECTED
-                } else {
+                isAppConnectedToFirebase = snapshot.getValue(Boolean::class.java) ?: false
+                if (!isAppConnectedToFirebase) {
                     _connectionFlow.value = ConnectionState.DISCONNECTED
+                } else if (System.currentTimeMillis() - lastHeartbeatTimeMs <= 10000L) {
+                    _connectionFlow.value = ConnectionState.CONNECTED
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
         })
+
+        repositoryScope.launch {
+            while (true) {
+                delay(2000)
+                if (isAppConnectedToFirebase) {
+                    if (System.currentTimeMillis() - lastHeartbeatTimeMs > 10000L) {
+                        _connectionFlow.value = ConnectionState.DISCONNECTED
+                    } else {
+                        _connectionFlow.value = ConnectionState.CONNECTED
+                    }
+                }
+            }
+        }
     }
 
     override suspend fun initializeAuth() {
@@ -85,9 +111,9 @@ class FirebaseDeviceRepository(
     private fun startObserving() {
         deviceRef.child("telemetry").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val t = snapshot.getValue(Telemetry::class.java)
+                val t = snapshot.getValue(TelemetryDto::class.java)
                 if (t != null) {
-                    _telemetryFlow.value = t
+                    _telemetryFlow.value = t.toDomain()
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
@@ -95,9 +121,9 @@ class FirebaseDeviceRepository(
 
         deviceRef.child("shadow").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val s = snapshot.getValue(DeviceShadow::class.java)
+                val s = snapshot.getValue(DeviceShadowDto::class.java)
                 if (s != null) {
-                    _shadowFlow.value = s
+                    _shadowFlow.value = s.toDomain()
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
@@ -117,9 +143,9 @@ class FirebaseDeviceRepository(
             override fun onDataChange(snapshot: DataSnapshot) {
                 val eventsList = mutableListOf<com.smartflow.domain.DeviceEvent>()
                 for (child in snapshot.children) {
-                    val event = child.getValue(com.smartflow.domain.DeviceEvent::class.java)
-                    if (event != null) {
-                        eventsList.add(event)
+                    val event = child.getValue(DeviceEventDto::class.java)
+                    if (event != null && child.key != null) {
+                        eventsList.add(event.toDomain(child.key!!))
                     }
                 }
                 // Reverse the list to show newest first
@@ -127,11 +153,32 @@ class FirebaseDeviceRepository(
             }
             override fun onCancelled(error: DatabaseError) {}
         })
+
+        deviceRef.child("status").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val s = snapshot.getValue(DeviceStatusDto::class.java)
+                if (s != null) {
+                    lastHeartbeatTimeMs = System.currentTimeMillis()
+                    if (isAppConnectedToFirebase) {
+                        if (s.lifecycle.equals("ONLINE", ignoreCase = true)) {
+                            _connectionFlow.value = ConnectionState.CONNECTED
+                        } else {
+                            _connectionFlow.value = ConnectionState.DISCONNECTED
+                        }
+                    }
+                } else {
+                    if (isAppConnectedToFirebase) {
+                        _connectionFlow.value = ConnectionState.DISCONNECTED
+                    }
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
     }
 
     override fun updateDesiredState(desired: com.smartflow.domain.ShadowDesired) {
         if (_connectionFlow.value == ConnectionState.CONNECTED) {
-            deviceRef.child("shadow/desired").setValue(desired)
+            deviceRef.child("shadow/desired").setValue(desired.toDto())
         }
     }
 
