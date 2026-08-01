@@ -207,3 +207,4 @@ extern unsigned long lastDeviceConfigMs;
 // Heap diagnostics
 extern unsigned long lastHeapDiagMs;
 extern uint32_t      minFreeHeapObserved;
+extern bool forceCloudManualOverride;

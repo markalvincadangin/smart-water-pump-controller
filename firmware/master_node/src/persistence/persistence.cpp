@@ -135,7 +135,7 @@ void checkCrashLoop() {
   }
 
   // Clear crash counters and safe mode latch on a full power cycle or hardware reset
-  if (esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_EXT || esp_reset_reason() == ESP_RST_BROWNOUT) {
+  if (esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_EXT) {
     prefs.putULong("safe_mode_ms", 0);
     prefs.putInt("boot_count", 0);
     prefs.putUInt("safe_epoch", 0);
@@ -203,6 +203,7 @@ void loadStateFromNVS() {
   // Option B: Safest standard boot - force MANUAL mode on startup
   pumpMode = "MANUAL";
   manualDesired = false;
+  forceCloudManualOverride = true;
   
   if (savedMode != "MANUAL") {
     LOG(APP_LOG_LEVEL_WARN, "BOOT", "Previous mode was %s. Forcing to MANUAL OFF for safety.", savedMode.c_str());

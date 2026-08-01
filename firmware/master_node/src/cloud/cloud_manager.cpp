@@ -159,6 +159,12 @@ void CloudManager::sync() {
   lastSyncMs = now;
 
   readSettings();
+
+  if (forceCloudManualOverride && Firebase.ready()) {
+    setErrorFallbackDesiredState();
+    forceCloudManualOverride = false;
+  }
+
   readShadow();
   processWifiReprovisionRequest();
   processOwnershipPairingRequest();

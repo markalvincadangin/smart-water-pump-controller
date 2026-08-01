@@ -175,3 +175,4 @@ bool          emergencyStopLatched = false;
 bool          isCountdownActive = false;
 unsigned long countdownEndMs   = 0;
 int           cfgLastCountdownDurationMin = 15;
+bool forceCloudManualOverride = false;
