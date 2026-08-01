@@ -1,7 +1,11 @@
+/**
+ * @file config.h
+ * @brief Central compile-time configuration for ESP32 master.
+ *
+ * This file intentionally keeps macro-based settings aligned with the
+ * Arduino tab build for global configuration constants.
+ */
 #pragma once
-
-// Central compile-time configuration for ESP32 master.
-// This file intentionally keeps macro-based settings aligned with the Arduino tab build.
 
 #include <Arduino.h>
 
@@ -25,13 +29,13 @@
 // Copy `secrets.h.example` → `secrets.h` and fill in Firebase, bootstrap, and OTA credentials.
 // Never commit `secrets.h`.
 #if defined(__has_include)
-	#if __has_include("secrets.h")
-		#include "secrets.h"
-	#else
-		#include "secrets.h.example"
-	#endif
+#if __has_include("secrets.h")
+#include "secrets.h"
 #else
-	#include "secrets.h.example"
+#include "secrets.h.example"
+#endif
+#else
+#include "secrets.h.example"
 #endif
 
 #include "hardware.h"
@@ -147,39 +151,39 @@
 
 // Syslog configuration
 #ifndef APP_HOSTNAME
-	#define APP_HOSTNAME "smartflow-controller"
+#define APP_HOSTNAME "smartflow-controller"
 #endif
 
 #ifndef SYSLOG_SERVER
-	#define SYSLOG_SERVER "255.255.255.255"
+#define SYSLOG_SERVER "255.255.255.255"
 #endif
 
 #ifndef SYSLOG_PORT
-	#define SYSLOG_PORT 514
+#define SYSLOG_PORT 514
 #endif
 
 // ---- Logger Configuration ----
 #define ENABLE_SERIAL_LOG 1
 #ifndef ENABLE_DEV_TCP_LOG
-	#define ENABLE_DEV_TCP_LOG 0
+#define ENABLE_DEV_TCP_LOG 0
 #endif
 #define ENABLE_TELNET_LOG ENABLE_DEV_TCP_LOG
 #define ENABLE_SYSLOG_LOG 1
 
 #ifndef SMARTFLOW_OTA_PASSWORD
-	#define SMARTFLOW_OTA_PASSWORD ""
+#define SMARTFLOW_OTA_PASSWORD ""
 #endif
 
 #ifndef DEVICE_BOOTSTRAP_SECRET
-	#define DEVICE_BOOTSTRAP_SECRET ""
+#define DEVICE_BOOTSTRAP_SECRET ""
 #endif
 
 #ifndef DEVICE_BOOTSTRAP_URL
-	#define DEVICE_BOOTSTRAP_URL ""
+#define DEVICE_BOOTSTRAP_URL ""
 #endif
 
 #ifndef DEVICE_BOOTSTRAP_ROOT_CA
-	#define DEVICE_BOOTSTRAP_ROOT_CA ""
+#define DEVICE_BOOTSTRAP_ROOT_CA ""
 #endif
 
 // Redirect all Serial prints in the application to our AppLogger

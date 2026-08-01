@@ -1,3 +1,10 @@
+/**
+ * @file safety_pump.h
+ * @brief Pump and sensor safety logic.
+ *
+ * Implements hardware cutoff rules including dry-run protection,
+ * sensor stuck detection, and overall fault mitigation.
+ */
 #pragma once
 
 #include "../config/config.h"

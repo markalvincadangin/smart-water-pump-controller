@@ -1,11 +1,24 @@
+/**
+ * @file safety_pump.cpp
+ * @brief Implementation of pump and sensor safety logic.
+ *
+ * Implements hardware cutoff rules including dry-run protection,
+ * sensor stuck detection, and overall fault mitigation.
+ */
 #include "safety_pump.h"
 
 #include "../state/state.h"
 #include "../drivers/pump_driver.h"
 #include "../utils/time_utils.h"
 
+/**
+ * @brief Sets the physical pump relay state and tracks cycle metrics.
+ * @param on true to turn pump ON, false to turn OFF
+ */
 void setPump(bool on) {
-  if (on == isRunning) return;
+  if (on == isRunning) {
+    return;
+  }
 
   if (on && !isRunning) {
     totalPumpCycles++;
@@ -19,9 +32,9 @@ void setPump(bool on) {
   }
 
   if (on) {
-      PumpDriver::turnOn();
+    PumpDriver::turnOn();
   } else {
-      PumpDriver::turnOff();
+    PumpDriver::turnOff();
   }
   isRunning = on;
   if (!on) {
@@ -31,6 +44,10 @@ void setPump(bool on) {
   }
 }
 
+/**
+ * @brief Validates level sensor readings and manages auto-bypass logic.
+ * @param sensorReading The raw ultrasonic reading in cm, or -1 for failure.
+ */
 void checkLevelSensorFailure(int sensorReading) {
   bool prevLevelError = isLevelSensorError;
 
@@ -41,7 +58,9 @@ void checkLevelSensorFailure(int sensorReading) {
       app_logger.logCloudEvent(APP_LOG_LEVEL_ERROR, LogCategory::SENSOR, EventCode::EVT_SENSOR_LEVEL_FAIL, "Ultrasonic (level) failure: %d consecutive timeouts.", levelSensorFailCount);
     }
     if (isLevelSensorError && cfgAutoBypassOnSensorFail && !cfgBypassLevelSensor) {
-      if (levelSensorFailStartMs == 0) levelSensorFailStartMs = millis();
+      if (levelSensorFailStartMs == 0) {
+        levelSensorFailStartMs = millis();
+      }
       if (elapsedMillis32(millis(), levelSensorFailStartMs) >= (uint32_t)cfgAutoBypassDelaySec * 1000UL) {
         cfgBypassLevelSensor = true;
         autoBypassWasEngaged = true;
@@ -75,6 +94,9 @@ void checkLevelSensorFailure(int sensorReading) {
   }
 }
 
+/**
+ * @brief Detects if the flow sensor is stuck high while the pump is off.
+ */
 void checkFlowSensorStuck() {
   if (cfgBypassFlowSensor) {
     flowStuckTimerActive = false;
@@ -110,6 +132,10 @@ void checkFlowSensorStuck() {
 }
 
 
+/**
+ * @brief Monitors pump runtime to prevent tank overflow.
+ * @return OverflowStatus containing the decision and a warning flag.
+ */
 OverflowStatus checkOverflowProtection() {
   if (!isRunning) {
     pumpAutoStartTracking = false;
@@ -137,6 +163,10 @@ OverflowStatus checkOverflowProtection() {
   return {SafetyDecision::OK, nearThreshold};
 }
 
+/**
+ * @brief Monitors flow rate to detect dry-run conditions.
+ * @return SafetyDecision indicating whether to stop the pump.
+ */
 SafetyDecision checkDryRunProtection() {
   // If flow sensor bypass is on, clear any existing dry-run lockout and skip the check.
   // Bypass must recover the controller as well as prevent new dry-run trips.
@@ -194,6 +224,10 @@ SafetyDecision checkDryRunProtection() {
   return SafetyDecision::OK;
 }
 
+/**
+ * @brief Aggregates all safety checks into a single cutoff decision.
+ * @return SafetyStatus containing the overall decision and overflow warning flag.
+ */
 SafetyStatus checkSafetyCutoff() {
   SafetyDecision dryRunDecision = checkDryRunProtection();
   checkFlowSensorStuck();

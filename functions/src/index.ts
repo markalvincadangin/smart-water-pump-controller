@@ -197,19 +197,23 @@ export const onDeviceEventCreated = onValueCreated(
       return;
     }
 
-    const tokensSnap = await db().ref(`devices/${deviceId}/fcmTokens`).get();
-    if (!tokensSnap.exists()) return;
+    const configs = await getActiveNotificationConfigs();
+    if (!configs.length) return;
 
-    const tokensMap = tokensSnap.val() as Record<string, string>;
-    const tokens = Object.values(tokensMap).filter(Boolean);
-    if (tokens.length === 0) return;
+    for (const { uid, config } of configs) {
+      const userDevicesSnap = await db().ref(`users/${uid}/devices/${deviceId}`).get();
+      if (!userDevicesSnap.exists()) continue;
 
-    if (code === "DRY_RUN") {
-      await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", "dryRun");
-    } else if (code === "OVERFLOW") {
-      await sendPush(tokens, "⚠ Overflow Protection", "Max runtime exceeded. Check tank and sensor.", "overflow");
-    } else if (code === "COUNTDOWN_FINISHED") {
-      await sendPush(tokens, "⏱️ Countdown Finished", "The pump countdown has completed.", "countdown");
+      const tokens = getFcmTokens(config);
+      if (tokens.length === 0) continue;
+
+      if (code === "DRY_RUN" && (config.dryRunAlert ?? true)) {
+        await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", "dryRun");
+      } else if (code === "OVERFLOW" && (config.overflowAlert ?? true)) {
+        await sendPush(tokens, "⚠ Overflow Protection", "Max runtime exceeded. Check tank and sensor.", "overflow");
+      } else if (code === "COUNTDOWN_FINISHED") {
+        await sendPush(tokens, "⏱️ Countdown Finished", "The pump countdown has completed.", "countdown");
+      }
     }
   }
 );

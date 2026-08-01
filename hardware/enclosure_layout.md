@@ -26,7 +26,7 @@ Middle (Zone B, transition)
   [Neutral terminal block / bus] [5V adapter]
 
 Bottom (Zone C, LV)
-  [ESP32 DevKit] [Relay module] [MAX485 main transceiver]
+  [ESP32 DevKit] [Relay module] [MAX485 main transceiver] [Smart Reset Button]
 
 Bottom wall glands
   [PG16] Grid in   [PG16] Pump out   [PG9] CAT6 to tank box

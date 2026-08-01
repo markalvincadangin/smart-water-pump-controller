@@ -8,5 +8,9 @@ data class NotificationPrefs(
     val lastReadTimestamp: Long = 0L,
     val fcmTokens: Map<String, String> = emptyMap(),
     val readEventIds: Map<String, Boolean> = emptyMap(),
-    val deletedEventIds: Map<String, Boolean> = emptyMap()
+    val deletedEventIds: Map<String, Boolean> = emptyMap(),
+    val dryRunAlert: Boolean = true,
+    val lowLevelAlert: Boolean = true,
+    val pumpStartedAlert: Boolean = true,
+    val overflowAlert: Boolean = true
 )

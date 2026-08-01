@@ -21,10 +21,16 @@
 #include "utils/time_utils.h"
 #include "core/lifecycle/bootloader.h"
 
-// Forward declare local helper
+// Forward declare local helpers
 #if FEATURE_SENSOR_SERVICE
 static void updateFlowBasedEstimate();
+static void handleSensors(unsigned long now);
 #endif
+static void handlePhysicalControls(unsigned long now);
+static void handleSafeMode(unsigned long now);
+static void handleNetworkState();
+static void handleCloudCommands();
+static void handleStateTransitions();
 
 #ifdef ENABLE_OTA
 static bool otaInitialized = false;
@@ -56,6 +62,9 @@ void setup() {
   pinMode(PIN_RELAY, OUTPUT);
   digitalWrite(PIN_RELAY, HIGH); // Active-LOW: HIGH means OFF
 
+  // Physical Controls
+  pinMode(PIN_RESET_BUTTON, INPUT_PULLUP);
+
   Bootloader::executeSetup();
   app_logger.initSinks();
   app_logger.beginSinks();
@@ -65,195 +74,307 @@ void loop() {
   unsigned long now = millis();
   unsigned long loopStartMs = now;
 
+  handlePhysicalControls(now);
+
 #ifdef ENABLE_OTA
   serviceOta();
 #endif
 
   app_logger.handle();
-
   esp_task_wdt_reset();
 
   if (inSafeMode) {
-    // ... Existing Safe Mode Logic ...
-    // Note: Kept simplified for brevity if acceptable, but I should preserve it to not break things.
-    // Let's preserve the existing safe mode handling
-    uint32_t safeModeEpochSec = 0;
-    if (prefs.begin(NVS_STATE_NAMESPACE, true)) {
-      safeModeEpochSec = prefs.getUInt("safe_epoch", 0);
-      prefs.end();
-    }
-    if (ntpSynced && safeModeEpochSec == 0) {
-      struct tm ti;
-      if (getLocalTime(&ti, 1000)) {
-        time_t nowEpoch = mktime(&ti);
-        if (nowEpoch > 0) {
-          if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
-            prefs.putUInt("safe_epoch", (uint32_t)nowEpoch);
-            prefs.end();
-          }
-          safeModeEpochSec = (uint32_t)nowEpoch;
-          LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Epoch latched for wall-clock auto-clear.");
-        }
-      }
-    }
-    bool shouldClear = false;
-    if (ntpSynced && safeModeEpochSec > 0) {
-      struct tm ti;
-      if (getLocalTime(&ti, 1000)) {
-        time_t nowEpoch = mktime(&ti);
-        if (nowEpoch > 0 && (uint32_t)nowEpoch >= safeModeEpochSec) {
-          uint32_t age = (uint32_t)nowEpoch - safeModeEpochSec;
-          shouldClear = (age >= (SAFE_MODE_TIMEOUT_MS / 1000UL));
-        }
-      }
-    } else {
-      shouldClear = (now - safeModeEnteredMs >= SAFE_MODE_TIMEOUT_MS);
-    }
-    if (shouldClear) {
-      LOG(APP_LOG_LEVEL_ERROR, "SAFE MODE", "Timeout reached. Clearing latch and restarting...");
-      if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
-        prefs.putULong("safe_mode_ms", 0);
-        prefs.putUInt("safe_epoch", 0);
-        prefs.putInt("boot_count", 0);
-        prefs.end();
-      }
-      ESP.restart();
-    }
-    static unsigned long lastSafeModeLog = 0;
-    if (now - lastSafeModeLog >= 30000) {
-      lastSafeModeLog = now;
-      unsigned long remaining = (SAFE_MODE_TIMEOUT_MS - min(SAFE_MODE_TIMEOUT_MS, (now - safeModeEnteredMs))) / 60000UL;
-      LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Pump OFF. %lu min until auto-clear.", remaining);
-    }
+    handleSafeMode(now);
     delay(100);
     return;
   }
 
-  // BLE / WiFi Handlers
+  handleNetworkState();
+  CloudManager::sync();
+  handleCloudCommands();
+  handleStateTransitions();
+  
+  PumpApp::executeLogic();
+
+#if FEATURE_SENSOR_SERVICE
+  handleSensors(now);
+#endif
+
+  persistStateToNVS();
+  
+  uint32_t loopMs = (uint32_t)(millis() - loopStartMs);
+  if (loopMs > loopMaxMs) {
+    loopMaxMs = loopMs;
+  }
+
+  delay(1);
+}
+
+// -----------------------------------------------------------------------------
+// Orchestration Helpers
+// -----------------------------------------------------------------------------
+
+/**
+ * @brief Checks the hardware reset button state and executes Soft Reboot or Factory Reset.
+ *
+ * @param now Current uptime in milliseconds.
+ */
+static void handlePhysicalControls(unsigned long now) {
+  static uint32_t resetBtnPressStartMs = 0;
+  static bool resetBtnWasPressed = false;
+  if (digitalRead(PIN_RESET_BUTTON) == LOW) {
+    if (!resetBtnWasPressed) {
+      resetBtnWasPressed = true;
+      resetBtnPressStartMs = now;
+      LOG(APP_LOG_LEVEL_INFO, "SYSTEM", "Reset button pressed. 3s = Reboot, 10s = Factory Reset.");
+    } else {
+      if (elapsedMillis32(now, resetBtnPressStartMs) >= 10000UL) {
+        LOG(APP_LOG_LEVEL_WARN, "SYSTEM", "10-second hold met! Executing Factory Reset.");
+        char reqId[24];
+        snprintf(reqId, sizeof(reqId), "hw-btn-%lu", now);
+        Bootloader::applyWifiReprovisionRequest(reqId);
+        resetBtnWasPressed = false; // Reset in case apply fails
+      }
+    }
+  } else {
+    if (resetBtnWasPressed) {
+      uint32_t heldFor = elapsedMillis32(now, resetBtnPressStartMs);
+      resetBtnWasPressed = false;
+      
+      if (heldFor >= 3000UL) {
+        LOG(APP_LOG_LEVEL_WARN, "SYSTEM", "Button released after %lu ms. Executing Soft Reboot.", (unsigned long)heldFor);
+        
+        // Safety: Turn off pump
+        setPump(false);
+        
+        // Clear boot count and safe mode latch before restart
+        Preferences prefs;
+        if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
+          prefs.putInt("boot_count", 0);
+          prefs.putULong("safe_mode_ms", 0);
+          prefs.putUInt("safe_epoch", 0);
+          prefs.end();
+        }
+        
+        delay(500); // Small delay to let log flush
+        ESP.restart();
+      } else {
+        LOG(APP_LOG_LEVEL_INFO, "SYSTEM", "Reset button released after %lu ms. Ignored (needs 3s).", (unsigned long)heldFor);
+      }
+    }
+  }
+}
+
+/**
+ * @brief Manages the device state when booted into Safe Mode.
+ *
+ * Prevents logic execution and attempts to clear Safe Mode automatically 
+ * after the timeout elapses.
+ *
+ * @param now Current uptime in milliseconds.
+ */
+static void handleSafeMode(unsigned long now) {
+  static uint32_t safeModeEpochSec = 0;
+  static bool epochLoaded = false;
+  
+  if (!epochLoaded) {
+    Preferences prefs;
+    if (prefs.begin(NVS_STATE_NAMESPACE, true)) {
+      safeModeEpochSec = prefs.getUInt("safe_epoch", 0);
+      prefs.end();
+    }
+    epochLoaded = true;
+  }
+  
+  if (ntpSynced && safeModeEpochSec == 0) {
+    struct tm ti;
+    if (getLocalTime(&ti, 1000)) {
+      time_t nowEpoch = mktime(&ti);
+      if (nowEpoch > 0) {
+        Preferences prefs;
+        if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
+          prefs.putUInt("safe_epoch", (uint32_t)nowEpoch);
+          prefs.end();
+        }
+        safeModeEpochSec = (uint32_t)nowEpoch;
+        LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Epoch latched for wall-clock auto-clear.");
+      }
+    }
+  }
+  
+  bool shouldClear = false;
+  if (ntpSynced && safeModeEpochSec > 0) {
+    struct tm ti;
+    if (getLocalTime(&ti, 1000)) {
+      time_t nowEpoch = mktime(&ti);
+      if (nowEpoch > 0 && (uint32_t)nowEpoch >= safeModeEpochSec) {
+        uint32_t age = (uint32_t)nowEpoch - safeModeEpochSec;
+        shouldClear = (age >= (SAFE_MODE_TIMEOUT_MS / 1000UL));
+      }
+    }
+  } else {
+    shouldClear = (now - safeModeEnteredMs >= SAFE_MODE_TIMEOUT_MS);
+  }
+  
+  if (shouldClear) {
+    LOG(APP_LOG_LEVEL_ERROR, "SAFE MODE", "Timeout reached. Clearing latch and restarting...");
+    Preferences prefs;
+    if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
+      prefs.putULong("safe_mode_ms", 0);
+      prefs.putUInt("safe_epoch", 0);
+      prefs.putInt("boot_count", 0);
+      prefs.end();
+    }
+    ESP.restart();
+  }
+  
+  static unsigned long lastSafeModeLog = 0;
+  if (now - lastSafeModeLog >= 30000) {
+    lastSafeModeLog = now;
+    unsigned long remaining = (SAFE_MODE_TIMEOUT_MS - min(SAFE_MODE_TIMEOUT_MS, (now - safeModeEnteredMs))) / 60000UL;
+    LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Pump OFF. %lu min until auto-clear.", remaining);
+  }
+}
+
+/**
+ * @brief Processes network connections (BLE provisioning and Wi-Fi).
+ *
+ * Also syncs system time with NTP upon successful Wi-Fi connection.
+ */
+static void handleNetworkState() {
   if (BleProvisioning::isActive()) {
-      BleProvisioning::loop();
+    BleProvisioning::loop();
   }
   WifiManager::loop();
 
   if (WifiManager::isConnected()) {
-      if (!wifiWasConnected) {
-          wifiWasConnected = true;
-          configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
-          struct tm timeinfo;
-          if (getLocalTime(&timeinfo, 5000)) {
-              ntpSynced = true;
-              time_t nowEpoch = mktime(&timeinfo);
-              if (nowEpoch > 0) {
-                  ntpEpochSecAtLastSync = (uint32_t)nowEpoch;
-                  ntpLastSyncMs = millis();
-              }
-              LOG(APP_LOG_LEVEL_INFO, "NTP", "Time synced (post-reconnect).");
-              static bool bootEventSent = false;
-              if (!bootEventSent) {
-                  bootEventSent = true;
-                  LOG_CLOUD(APP_LOG_LEVEL_INFO, LogCategory::SYSTEM, EventCode::EVT_BOOT, "SmartFlow Controller Booted and Connected");
-              }
-          }
-      }
-  } else {
-      wifiWasConnected = false;
-  }
-
-  // Cloud Sync
-  CloudManager::sync();
-
-  // Extract Intent (Command)
-  PumpCommand cmd = DeviceShadow::getCommand();
-  if (cmd.type != CommandType::NONE) {
-      // Process CLEAR_ERROR specifically
-      if (cmd.type == CommandType::CLEAR_ERROR) {
-          isOverflowError = false;
-          isDryRunError = false;
-          isLevelSensorError = false;
-          isFlowSensorError = false;
-          if (currentState == PumpState::ERROR) {
-              currentState = PumpState::IDLE;
-          }
-          LOG(APP_LOG_LEVEL_INFO, "STATE", "ERROR cleared");
-      } else if (cmd.type == CommandType::STOP_AUTO) {
-          pumpMode = "AUTO";
-          currentState = PumpState::IDLE;
-          isCountdownActive = false;
-          manualDesired = false;
-          LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP_AUTO received, reverting to AUTO standby");
-      } else if (cmd.type == CommandType::STOP_MANUAL) {
-          pumpMode = "MANUAL";
-          currentState = PumpState::IDLE;
-          isCountdownActive = false;
-          manualDesired = false;
-          LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP_MANUAL received, entering MANUAL OFF");
-      } else if (cmd.type == CommandType::STOP_COUNTDOWN) {
-          pumpMode = "COUNTDOWN";
-          currentState = PumpState::IDLE;
-          isCountdownActive = false;
-          manualDesired = false;
-          LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP_COUNTDOWN received, entering COUNTDOWN standby");
-      } else if (cmd.type == CommandType::START_MANUAL && currentState != PumpState::ERROR) {
-          pumpMode = "MANUAL";
-          currentState = PumpState::MANUAL;
-          manualDesired = true;
-          isCountdownActive = false;
-          runStartMs = millis();
-          LOG(APP_LOG_LEVEL_INFO, "STATE", "START_MANUAL received, executing Manual mode");
-      } else if (cmd.type == CommandType::START_COUNTDOWN && currentState != PumpState::ERROR) {
-          pumpMode = "COUNTDOWN";
-          currentState = PumpState::COUNTDOWN;
-          isCountdownActive = true;
-          manualDesired = false;
-          runStartMs = millis(); // Track this to guard against extreme countdowns
-          countdownEndMs = millis() + (cmd.durationSeconds * 1000UL);
-          LOG(APP_LOG_LEVEL_INFO, "STATE", "START_COUNTDOWN received, executing Countdown mode");
-        } else if (cmd.type == CommandType::REBOOT_DEVICE) {
-            LOG(APP_LOG_LEVEL_WARN, "SYSTEM", "Remote REBOOT requested from Cloud!");
-            int retry = 0;
-            while (!CloudManager::clearRebootDesiredState() && retry < 3) {
-                delay(1000);
-                retry++;
-            }
-            if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
-                prefs.putInt("boot_count", 0);
-                prefs.end();
-            }
-            delay(1000); // Give time for clear state to hit network queue
-            ESP.restart();
+    if (!wifiWasConnected) {
+      wifiWasConnected = true;
+      configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+      struct tm timeinfo;
+      if (getLocalTime(&timeinfo, 5000)) {
+        ntpSynced = true;
+        time_t nowEpoch = mktime(&timeinfo);
+        if (nowEpoch > 0) {
+          ntpEpochSecAtLastSync = (uint32_t)nowEpoch;
+          ntpLastSyncMs = millis();
         }
-      DeviceShadow::clearCommand();
+        LOG(APP_LOG_LEVEL_INFO, "NTP", "Time synced (post-reconnect).");
+        static bool bootEventSent = false;
+        if (!bootEventSent) {
+          bootEventSent = true;
+          LOG_CLOUD(APP_LOG_LEVEL_INFO, LogCategory::SYSTEM, EventCode::EVT_BOOT, "SmartFlow Controller Booted and Connected");
+        }
+      }
+    }
+  } else {
+    wifiWasConnected = false;
+  }
+}
+
+/**
+ * @brief Processes incoming commands from the Cloud Device Shadow.
+ */
+static void handleCloudCommands() {
+  PumpCommand cmd = DeviceShadow::getCommand();
+  if (cmd.type == CommandType::NONE) {
+    return;
   }
 
-  // Update PumpState based on errors generated by pump_app.cpp
-  if (isDryRunError || isOverflowError || isLevelSensorError || isFlowSensorError) {
-      currentState = PumpState::ERROR;
-  } else if (pumpMode == "AUTO" && currentState != PumpState::ERROR) {
+  if (cmd.type == CommandType::CLEAR_ERROR) {
+    isOverflowError = false;
+    isDryRunError = false;
+    isLevelSensorError = false;
+    isFlowSensorError = false;
+    if (currentState == PumpState::ERROR) {
       currentState = PumpState::IDLE;
+    }
+    LOG(APP_LOG_LEVEL_INFO, "STATE", "ERROR cleared");
+  } else if (cmd.type == CommandType::STOP_AUTO) {
+    pumpMode = "AUTO";
+    currentState = PumpState::IDLE;
+    isCountdownActive = false;
+    manualDesired = false;
+    LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP_AUTO received, reverting to AUTO standby");
+  } else if (cmd.type == CommandType::STOP_MANUAL) {
+    pumpMode = "MANUAL";
+    currentState = PumpState::IDLE;
+    isCountdownActive = false;
+    manualDesired = false;
+    LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP_MANUAL received, entering MANUAL OFF");
+  } else if (cmd.type == CommandType::STOP_COUNTDOWN) {
+    pumpMode = "COUNTDOWN";
+    currentState = PumpState::IDLE;
+    isCountdownActive = false;
+    manualDesired = false;
+    LOG(APP_LOG_LEVEL_INFO, "STATE", "STOP_COUNTDOWN received, entering COUNTDOWN standby");
+  } else if (cmd.type == CommandType::START_MANUAL && currentState != PumpState::ERROR) {
+    pumpMode = "MANUAL";
+    currentState = PumpState::MANUAL;
+    manualDesired = true;
+    isCountdownActive = false;
+    runStartMs = millis();
+    LOG(APP_LOG_LEVEL_INFO, "STATE", "START_MANUAL received, executing Manual mode");
+  } else if (cmd.type == CommandType::START_COUNTDOWN && currentState != PumpState::ERROR) {
+    pumpMode = "COUNTDOWN";
+    currentState = PumpState::COUNTDOWN;
+    isCountdownActive = true;
+    manualDesired = false;
+    runStartMs = millis(); // Track this to guard against extreme countdowns
+    countdownEndMs = millis() + (cmd.durationSeconds * 1000UL);
+    LOG(APP_LOG_LEVEL_INFO, "STATE", "START_COUNTDOWN received, executing Countdown mode");
+  } else if (cmd.type == CommandType::REBOOT_DEVICE) {
+    LOG(APP_LOG_LEVEL_WARN, "SYSTEM", "Remote REBOOT requested from Cloud!");
+    int retry = 0;
+    while (!CloudManager::clearRebootDesiredState() && retry < 3) {
+      delay(1000);
+      retry++;
+    }
+    Preferences prefs;
+    if (prefs.begin(NVS_STATE_NAMESPACE, false)) {
+      prefs.putInt("boot_count", 0);
+      prefs.putULong("safe_mode_ms", 0);
+      prefs.putUInt("safe_epoch", 0);
+      prefs.end();
+    }
+    delay(1000); // Give time for clear state to hit network queue
+    ESP.restart();
+  }
+  DeviceShadow::clearCommand();
+}
+
+/**
+ * @brief Handles transitions between high-level states (e.g. entering ERROR state or finishing COUNTDOWN).
+ */
+static void handleStateTransitions() {
+  if (isDryRunError || isOverflowError || isLevelSensorError || isFlowSensorError) {
+    currentState = PumpState::ERROR;
+  } else if (pumpMode == "AUTO" && currentState != PumpState::ERROR) {
+    currentState = PumpState::IDLE;
   }
 
   // Handle countdown edge-cases on boot and prevent immediate re-trigger/crash loops
   if (isCountdownActive && countdownEndMs != 0 && (int32_t)(millis() - countdownEndMs) >= 0) {
-      LOG(APP_LOG_LEVEL_INFO, "STATE", "Countdown finished. Clearing desired state and reverting to MANUAL OFF.");
-      
-      // Force clear the desired state before shutting off the pump.
-      // This prevents the ESP32 from crash-looping back into COUNTDOWN if
-      // the relay de-energization causes an EMI-induced reset.
-      CloudManager::clearCountdownDesiredState();
-      delay(500);
-      
-      pumpMode = "MANUAL";
-      manualDesired = false;
-      currentState = PumpState::IDLE;
-      isCountdownActive = false;
-      countdownEndMs = 0;
+    LOG(APP_LOG_LEVEL_INFO, "STATE", "Countdown finished. Clearing desired state and reverting to MANUAL OFF.");
+    
+    CloudManager::clearCountdownDesiredState();
+    delay(500);
+    
+    pumpMode = "MANUAL";
+    manualDesired = false;
+    currentState = PumpState::IDLE;
+    isCountdownActive = false;
+    countdownEndMs = 0;
   }
-
-  // Execute unified application logic (Auto Mode, Cooldowns, Sensors, Dry-Run limits)
-  PumpApp::executeLogic();
+}
 
 #if FEATURE_SENSOR_SERVICE
-  // Optional Feature: Sensor Polling
+/**
+ * @brief Periodically polls hardware sensors (e.g. Ultrasonic via RS485).
+ *
+ * @param now Current uptime in milliseconds.
+ */
+static void handleSensors(unsigned long now) {
   unsigned long sensorInterval = SENSOR_INTERVAL_MS;
   if (now - lastSensorMs >= sensorInterval) {
     lastSensorMs = now;
@@ -268,19 +389,11 @@ void loop() {
     checkLevelSensorFailure(levelForFailureLogic);
     updateFlowBasedEstimate();
   }
-#endif
-
-  persistStateToNVS();
-  
-  uint32_t loopMs = (uint32_t)(millis() - loopStartMs);
-  if (loopMs > loopMaxMs) {
-    loopMaxMs = loopMs;
-  }
-
-  delay(1);
 }
 
-#if FEATURE_SENSOR_SERVICE
+/**
+ * @brief Approximates the current tank volume based on pump flow rate when ultrasonic data is unavailable.
+ */
 static void updateFlowBasedEstimate() {
   if (!isRunning || flowRateLpm < cfgDryRunThresholdLpm) {
     lastFlowEstimateMs = millis();
@@ -289,7 +402,9 @@ static void updateFlowBasedEstimate() {
   unsigned long now = millis();
   float dtSec = (now - lastFlowEstimateMs) / 1000.0f;
   lastFlowEstimateMs = now;
-  if (dtSec > 5.0f) return;
+  if (dtSec > 5.0f) {
+    return;
+  }
 
   flowVolumeAddedL += flowRateLpm * (dtSec / 60.0f);
   if (levelAnchorPct >= 0) {

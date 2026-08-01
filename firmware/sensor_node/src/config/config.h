@@ -120,9 +120,9 @@
 
 #if SENSOR_DEBUG_ENABLED
   #if DEBUG_USB_MODE
-    #define SENSOR_DBG_PORT Serial
+  #define SENSOR_DBG_PORT Serial
   #else
-    #define SENSOR_DBG_PORT Serial1
+  #define SENSOR_DBG_PORT Serial1
   #endif
   extern void send_syslog(const char* msg);
   extern void send_syslog_f(const char* format, ...);

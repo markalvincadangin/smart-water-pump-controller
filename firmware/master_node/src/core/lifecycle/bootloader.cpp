@@ -15,7 +15,7 @@
 #include "../../utils/time_utils.h"
 #include "../../config/feature_config.h"
 
-String Bootloader::getBootReasonString() {
+const char* Bootloader::getBootReasonString() {
   esp_reset_reason_t reason = esp_reset_reason();
   switch (reason) {
     case ESP_RST_POWERON:  return "Power-on";
@@ -33,21 +33,33 @@ String Bootloader::getBootReasonString() {
 }
 
 namespace {
-bool applyScopedWifiReprovisionRequest(const String& requestId) {
-  if (requestId.length() == 0) return false;
+bool applyScopedWifiReprovisionRequest(const char* requestId) {
+  if (requestId == nullptr || requestId[0] == '\0') {
+    return false;
+  }
   if (!prefs.begin(NVS_STATE_NAMESPACE, false)) {
     LOG(APP_LOG_LEVEL_ERROR, "REPROVISION", "Unable to inspect Wi-Fi recovery request.");
     return false;
   }
-  const bool alreadyApplied = prefs.getString("reprov_req_id", "") == requestId;
+  
+  char buf[32];
+  bool alreadyApplied = false;
+  if (prefs.getString("reprov_req_id", buf, sizeof(buf)) > 0) {
+    alreadyApplied = (strcmp(buf, requestId) == 0);
+  }
   prefs.end();
-  if (alreadyApplied) return false;
+  
+  if (alreadyApplied) {
+    return false;
+  }
 
   // This is deliberately the first state-changing action. Do not replace it
   // with a direct relay call: setPump() keeps safety/accounting state coherent.
   setPump(false);
   LOG(APP_LOG_LEVEL_WARN, "REPROVISION", "Applying scoped Wi-Fi recovery request.");
-  if (!clearNetworkEnrollment()) return false;
+  if (!clearNetworkEnrollment()) {
+    return false;
+  }
 
   if (!prefs.begin(NVS_STATE_NAMESPACE, false)) {
     LOG(APP_LOG_LEVEL_ERROR, "REPROVISION", "Enrollment cleared but request marker could not be saved.");
@@ -56,19 +68,31 @@ bool applyScopedWifiReprovisionRequest(const String& requestId) {
   }
   prefs.putString("reprov_req_id", requestId);
   prefs.end();
+  
+  // Also clear device configuration to ensure a complete factory reset
+  if (prefs.begin(NVS_NAMESPACE, false)) {
+    prefs.clear();
+    prefs.end();
+    LOG(APP_LOG_LEVEL_INFO, "REPROVISION", "Configuration namespace cleared to factory defaults.");
+  }
+
   LOG(APP_LOG_LEVEL_INFO, "REPROVISION", "Enrollment cleared; BLE provisioning will start.");
   return true;
 }
 
 void applyOneTimeReprovisionRequest() {
   const char* requestId = SMARTFLOW_REPROVISION_REQUEST_ID;
-  if (requestId[0] == '\0') return;
-  applyScopedWifiReprovisionRequest(String(requestId));
+  if (requestId[0] == '\0') {
+    return;
+  }
+  applyScopedWifiReprovisionRequest(requestId);
 }
 } // namespace
 
-bool Bootloader::applyWifiReprovisionRequest(const String& requestId) {
-  if (!applyScopedWifiReprovisionRequest(requestId)) return false;
+bool Bootloader::applyWifiReprovisionRequest(const char* requestId) {
+  if (!applyScopedWifiReprovisionRequest(requestId)) {
+    return false;
+  }
   LOG(APP_LOG_LEVEL_WARN, "REPROVISION", "Restarting into BLE provisioning after authorized recovery.");
   delay(50);
   esp_restart();
@@ -81,9 +105,6 @@ void Bootloader::executeSetup() {
   LOG(APP_LOG_LEVEL_INFO, "SYS", " SmartFlow");
   Serial.println("====================================");
 
-  bootReasonStr = getBootReasonString();
-  LOG(APP_LOG_LEVEL_INFO, "BOOT", "Reset reason: %s", bootReasonStr.c_str());
-
   // String heap-fragmentation mitigation (reserve once at boot)
   pumpMode.reserve(12);
   runMode.reserve(16);
@@ -93,6 +114,9 @@ void Bootloader::executeSetup() {
   firebaseLastError.reserve(200);
   bootReasonStr.reserve(32);
   lastPersistedMode.reserve(12);
+
+  bootReasonStr = String(getBootReasonString());
+  LOG(APP_LOG_LEVEL_INFO, "BOOT", "Reset reason: %s", bootReasonStr.c_str());
 
   PumpDriver::init();
 #if FEATURE_SENSOR_SERVICE
@@ -179,7 +203,7 @@ void Bootloader::executeSetup() {
   }
 
   if (deviceLifecycle == DeviceLifecycle::ONLINE) {
-      CloudManager::init();
+    CloudManager::init();
   }
 
   unsigned long nowInit = millis();

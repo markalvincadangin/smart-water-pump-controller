@@ -1,5 +1,8 @@
+/**
+ * @file rs485_comm.cpp
+ * @brief Manages RS485 communication with external sensors.
+ */
 #include "rs485_comm.h"
-
 #include "../state/state.h"
 #include "../utils/crc16_modbus.h"
 #include "../utils/time_utils.h"

@@ -13,6 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.collectAsState
 import com.smartflow.domain.ConnectionState
 import com.smartflow.domain.ControlMode
@@ -45,17 +47,23 @@ fun DashboardScreen(
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(uiState.connectionStatus) {
-        if (uiState.connectionStatus != ConnectionState.CONNECTED) {
-            showConfig = false
-            snackbarHostState.showSnackbar(
-                message = "Device is currently offline.",
-                duration = SnackbarDuration.Short
-            )
-        } else {
-            snackbarHostState.showSnackbar(
-                message = "Device connected.",
-                duration = SnackbarDuration.Short
-            )
+        when (uiState.connectionStatus) {
+            ConnectionState.DISCONNECTED -> {
+                showConfig = false
+                snackbarHostState.showSnackbar(
+                    message = "Device is currently offline.",
+                    duration = SnackbarDuration.Short
+                )
+            }
+            ConnectionState.CONNECTED -> {
+                snackbarHostState.showSnackbar(
+                    message = "Device connected.",
+                    duration = SnackbarDuration.Short
+                )
+            }
+            ConnectionState.CONNECTING -> {
+                showConfig = false
+            }
         }
     }
 
@@ -85,33 +93,33 @@ fun DashboardScreen(
         containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier.fillMaxSize()
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
         ) {
-            // Offline/Stale state banner
-            if (uiState.connectionStatus != ConnectionState.CONNECTED) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            if (uiState.connectionStatus == ConnectionState.CONNECTING) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Offline/Stale state banner
+                if (uiState.connectionStatus == ConnectionState.DISCONNECTED) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.error)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Device is offline. Data is stale.",
+                            color = MaterialTheme.colorScheme.onError,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
                         )
-                        .padding(8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (uiState.connectionStatus == ConnectionState.CONNECTING) 
-                                "Connecting to device..." 
-                               else "Device is offline. Data is stale.",
-                        color = MaterialTheme.colorScheme.onError,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    }
                 }
-            }
             
             // Main Content
             if (isLandscape) {
@@ -201,7 +209,12 @@ fun DashboardScreen(
                     ActivityPanel(events = uiState.events)
                 }
             }
-        }
+            } // end Column
+
+            if (uiState.connectionStatus == ConnectionState.CONNECTING) {
+                ConnectingOverlay()
+            }
+        } // end Box
 
         if (showConfig) {
             ConfigBottomSheet(
@@ -212,6 +225,34 @@ fun DashboardScreen(
                 onBypassChanged = viewModel::updateBypass,
                 onReboot = viewModel::rebootDevice,
                 onDismissRequest = { showConfig = false }
+            )
+        }
+    }
+}
+
+@Composable
+fun ConnectingOverlay(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            // Block touches from passing through to underlying UI
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            Text(
+                text = "Connecting to SmartFlow...",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground
             )
         }
     }

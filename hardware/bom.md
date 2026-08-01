@@ -27,6 +27,7 @@ Important:
 | LV-03 | AC-DC adapter (main box) | 5V, >=3A | 1 | Powers ESP32, relay, local RS-485 module |
 | LV-04 | RS-485 transceiver (main box) | MAX485-compatible | 1 | ESP32 UART2 to A/B bus |
 | LV-05 | Terminal blocks | DIN or enclosed strip, rated for use | as needed | Neutral/low-voltage distribution |
+| LV-06 | Push Button | Momentary, normally open (NO) | 1 | Smart Reset Button (Soft Reboot / Factory Reset) |
 
 ## 3) Tank-Side Sensor Node (Remote Enclosure)
 
@@ -70,6 +71,7 @@ ESP32 master pins:
 - RS485_TX_PIN = GPIO17
 - RS485_RX_PIN = GPIO25
 - RS485_DE_RE_PIN = GPIO5
+- PIN_RESET_BUTTON = GPIO32
 
 NodeMCU sensor node pins:
 - PIN_RS485_DE_RE = GPIO14 (D5)

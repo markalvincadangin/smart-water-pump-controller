@@ -57,36 +57,91 @@ fun NotificationSettingsScreen(
                     )
                 }
             }
+            
+            Text("Informational Alerts", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, top = 8.dp))
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Do Not Disturb", style = MaterialTheme.typography.titleMedium)
-                            Text("Mute non-critical notifications during these hours.", style = MaterialTheme.typography.bodyMedium)
+                            Text("Pump Started", style = MaterialTheme.typography.titleMedium)
+                            Text("Receive a notification when the pump starts running.", style = MaterialTheme.typography.bodyMedium)
                         }
                         Switch(
-                            checked = prefs.dndEnabled,
-                            onCheckedChange = { viewModel.updatePrefs(prefs.copy(dndEnabled = it)) }
+                            checked = prefs.pumpStartedAlert && prefs.enabled,
+                            enabled = prefs.enabled,
+                            onCheckedChange = { viewModel.updatePrefs(prefs.copy(pumpStartedAlert = it)) }
                         )
                     }
-
-                    if (prefs.dndEnabled) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Start Time: ${String.format("%02d:00", prefs.dndStartHour)}", style = MaterialTheme.typography.bodyMedium)
-                            // A real app would have a TimePicker here. 
-                            Text("End Time: ${String.format("%02d:00", prefs.dndEndHour)}", style = MaterialTheme.typography.bodyMedium)
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Low Tank Level", style = MaterialTheme.typography.titleMedium)
+                            Text("Receive a notification when the water level drops below the threshold.", style = MaterialTheme.typography.bodyMedium)
                         }
+                        Switch(
+                            checked = prefs.lowLevelAlert && prefs.enabled,
+                            enabled = prefs.enabled,
+                            onCheckedChange = { viewModel.updatePrefs(prefs.copy(lowLevelAlert = it)) }
+                        )
+                    }
+                }
+            }
+
+            Text("Critical Safety Alerts", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, top = 8.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Dry-Run Protection", style = MaterialTheme.typography.titleMedium)
+                            Text("Critical safety alert (Cannot be disabled)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        }
+                        Switch(
+                            checked = true,
+                            enabled = false,
+                            onCheckedChange = { }
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Overflow Protection", style = MaterialTheme.typography.titleMedium)
+                            Text("Critical safety alert (Cannot be disabled)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        }
+                        Switch(
+                            checked = true,
+                            enabled = false,
+                            onCheckedChange = { }
+                        )
                     }
                 }
             }

@@ -33,11 +33,15 @@ elseif ($TaskName -eq "app_logcat") {
 }
 elseif ($TaskName -eq "firmware_build") {
     Set-Location (Join-Path $WorkspaceRoot "firmware\master_node")
-    pio run -e esp32dev_usb_ota
+    python -m platformio run -e esp32dev_usb_ota
 }
 elseif ($TaskName -eq "firmware_flash_ota") {
     Set-Location (Join-Path $WorkspaceRoot "firmware\master_node")
-    pio run -e esp32dev_ota -t upload --upload-port $env:ESP32_IP
+    python -m platformio run -e esp32dev_ota -t upload --upload-port $env:ESP32_IP
+}
+elseif ($TaskName -eq "firmware_flash_usb") {
+    Set-Location (Join-Path $WorkspaceRoot "firmware\master_node")
+    python -m platformio run -e esp32dev_usb_ota -t upload
 }
 elseif ($TaskName -eq "firmware_monitor") {
     python -u read_telnet.py $env:ESP32_IP

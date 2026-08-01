@@ -61,6 +61,17 @@
       }
     },
     {
+      "label": "Firmware: Flash (USB)",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 firmware_flash_usb",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
       "label": "Firmware: Monitor (Telnet)",
       "type": "shell",
       "command": "pwsh -File .vscode/run_task.ps1 firmware_monitor",

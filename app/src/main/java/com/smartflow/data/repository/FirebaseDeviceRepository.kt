@@ -49,6 +49,7 @@ class FirebaseDeviceRepository(
     private val repositoryScope = CoroutineScope(Dispatchers.Default)
     private var lastHeartbeatTimeMs: Long = 0L
     private var isAppConnectedToFirebase: Boolean = false
+    private var lastLifecycle: String = "OFFLINE"
 
     private val _telemetryFlow = MutableStateFlow(Telemetry())
     override val telemetryFlow = _telemetryFlow.asStateFlow()
@@ -59,20 +60,36 @@ class FirebaseDeviceRepository(
     private val _configFlow = MutableStateFlow(DeviceConfig())
     override val configFlow = _configFlow.asStateFlow()
 
-    private val _connectionFlow = MutableStateFlow(ConnectionState.DISCONNECTED)
+    private val _connectionFlow = MutableStateFlow(ConnectionState.CONNECTING)
     override val connectionFlow = _connectionFlow.asStateFlow()
+
+    private var hasCompletedInitialCheck = false
 
     private val _eventsFlow = MutableStateFlow<List<com.smartflow.domain.DeviceEvent>>(emptyList())
     override val eventsFlow = _eventsFlow.asStateFlow()
 
     init {
+        // Timeout for initial connection grace period (5 seconds)
+        repositoryScope.launch {
+            delay(5000)
+            if (!hasCompletedInitialCheck) {
+                hasCompletedInitialCheck = true
+                if (_connectionFlow.value == ConnectionState.CONNECTING) {
+                    _connectionFlow.value = ConnectionState.DISCONNECTED
+                }
+            }
+        }
+
         // Track Firebase connected state (.info/connected)
         database.getReference(".info/connected").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 isAppConnectedToFirebase = snapshot.getValue(Boolean::class.java) ?: false
                 if (!isAppConnectedToFirebase) {
-                    _connectionFlow.value = ConnectionState.DISCONNECTED
-                } else if (System.currentTimeMillis() - lastHeartbeatTimeMs <= 10000L) {
+                    if (hasCompletedInitialCheck) {
+                        _connectionFlow.value = ConnectionState.DISCONNECTED
+                    }
+                } else if (System.currentTimeMillis() - lastHeartbeatTimeMs <= 10000L && lastLifecycle.equals("ONLINE", ignoreCase = true)) {
+                    hasCompletedInitialCheck = true
                     _connectionFlow.value = ConnectionState.CONNECTED
                 }
             }
@@ -84,8 +101,11 @@ class FirebaseDeviceRepository(
                 delay(2000)
                 if (isAppConnectedToFirebase) {
                     if (System.currentTimeMillis() - lastHeartbeatTimeMs > 10000L) {
-                        _connectionFlow.value = ConnectionState.DISCONNECTED
-                    } else {
+                        if (hasCompletedInitialCheck) {
+                            _connectionFlow.value = ConnectionState.DISCONNECTED
+                        }
+                    } else if (lastLifecycle.equals("ONLINE", ignoreCase = true)) {
+                        hasCompletedInitialCheck = true
                         _connectionFlow.value = ConnectionState.CONNECTED
                     }
                 }
@@ -95,7 +115,7 @@ class FirebaseDeviceRepository(
 
     override suspend fun initializeAuth() {
         try {
-            _connectionFlow.value = ConnectionState.CONNECTING
+            // Already initialized to CONNECTING in Flow
             if (AccountSession.refreshDurableState(auth) != DurableAccountState.ELIGIBLE) {
                 Log.w("FirebaseDeviceRepository", "A durable account is required before device access")
                 _connectionFlow.value = ConnectionState.DISCONNECTED
@@ -157,8 +177,10 @@ class FirebaseDeviceRepository(
         deviceRef.child("status").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val s = snapshot.getValue(DeviceStatusDto::class.java)
+                hasCompletedInitialCheck = true
                 if (s != null) {
                     lastHeartbeatTimeMs = System.currentTimeMillis()
+                    lastLifecycle = s.lifecycle ?: "OFFLINE"
                     if (isAppConnectedToFirebase) {
                         if (s.lifecycle.equals("ONLINE", ignoreCase = true)) {
                             _connectionFlow.value = ConnectionState.CONNECTED
@@ -167,6 +189,7 @@ class FirebaseDeviceRepository(
                         }
                     }
                 } else {
+                    lastLifecycle = "OFFLINE"
                     if (isAppConnectedToFirebase) {
                         _connectionFlow.value = ConnectionState.DISCONNECTED
                     }

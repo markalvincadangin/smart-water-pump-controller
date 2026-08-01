@@ -59,7 +59,7 @@ data class DashboardUiState(
     val lockoutActive: Boolean = false,
     val waterLevelPct: Int = 0,
     val flowRateLpm: Float = 0f,
-    val connectionStatus: ConnectionState = ConnectionState.DISCONNECTED,
+    val connectionStatus: ConnectionState = ConnectionState.CONNECTING,
     val config: DeviceConfig = DeviceConfig(),
     val countdownRemainingSec: Int = 0,
     val bypassLevelSensor: Boolean = true,

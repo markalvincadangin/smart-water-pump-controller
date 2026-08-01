@@ -1,8 +1,14 @@
+/**
+ * @file feature_config.h
+ * @brief Centralized control for SmartFlow Master Node capabilities.
+ *
+ * Use these flags to enable or disable major features (like RS-485
+ * polling or auto-mode capabilities) at compile time.
+ */
 #pragma once
 
 // =========================================================================
 // FEATURE FLAGS
-// Centralized control for SmartFlow Master Node capabilities.
 // =========================================================================
 
 // Enables RS-485 sensor node polling and communication.

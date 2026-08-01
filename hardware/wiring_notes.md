@@ -43,6 +43,7 @@ ESP32 master:
 - GPIO17 -> RS-485 DI (TX)
 - GPIO25 <- RS-485 RO (RX)
 - GPIO5  -> RS-485 DE/RE (tied)
+- GPIO32 -> Smart Reset Button (Normally Open, to GND)
 
 NodeMCU sensor node:
 - D5 / GPIO14 -> RS-485 DE/RE (tied)
