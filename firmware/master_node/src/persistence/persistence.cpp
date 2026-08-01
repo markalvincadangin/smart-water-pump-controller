@@ -134,8 +134,8 @@ void checkCrashLoop() {
     return;
   }
 
-  // Clear crash counters and safe mode latch on a full power cycle
-  if (esp_reset_reason() == ESP_RST_POWERON) {
+  // Clear crash counters and safe mode latch on a full power cycle or hardware reset
+  if (esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_EXT || esp_reset_reason() == ESP_RST_BROWNOUT) {
     prefs.putULong("safe_mode_ms", 0);
     prefs.putInt("boot_count", 0);
     prefs.putUInt("safe_epoch", 0);
