@@ -200,22 +200,18 @@ void loadStateFromNVS() {
   cfgLastCountdownDurationMin = prefs.getInt("cd_dur_min", 15);
   prefs.end();
 
-  // Only AUTO / MANUAL / COUNTDOWN are valid modes. Invalid values map to AUTO.
-  savedMode.trim();
-  savedMode.toUpperCase();
-  if (savedMode == "AUTO" || savedMode == "COUNTDOWN" || savedMode == "MANUAL") {
-    pumpMode = savedMode;
+  // Option B: Safest standard boot - force MANUAL mode on startup
+  pumpMode = "MANUAL";
+  manualDesired = false;
+  
+  if (savedMode != "MANUAL") {
+    LOG(APP_LOG_LEVEL_WARN, "BOOT", "Previous mode was %s. Forcing to MANUAL OFF for safety.", savedMode.c_str());
+    // Leave lastPersistedMode as the old mode so persistStateToNVS() will see the change
+    // and sync the new MANUAL mode back to NVS and Cloud on the first loop.
     lastPersistedMode = savedMode;
-    if (savedMode == "COUNTDOWN") {
-      LOG(APP_LOG_LEVEL_INFO, "BOOT", "Restored COUNTDOWN mode from NVS. Pump idle until user starts a new timer.");
-    } else if (savedMode == "MANUAL") {
-      manualDesired = false;  // never auto-start after reboot
-      LOG(APP_LOG_LEVEL_INFO, "BOOT", "Restored MANUAL mode. Pump remains OFF until manual_desired is true.");
-    }
   } else {
-    pumpMode = "AUTO";
-    lastPersistedMode = "AUTO";
-    LOG(APP_LOG_LEVEL_INFO, "BOOT", "Legacy/invalid mode '%s' not restored. Defaulting to AUTO.", savedMode.c_str());
+    LOG(APP_LOG_LEVEL_INFO, "BOOT", "Restored MANUAL mode. Pump remains OFF.");
+    lastPersistedMode = "MANUAL";
   }
   isDryRunError = savedDryRun;
   lastPersistedDryRun = savedDryRun;
