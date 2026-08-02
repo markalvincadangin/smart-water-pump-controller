@@ -1,6 +1,8 @@
 #include "bootloader.h"
 #include <Arduino.h>
 #include <esp_task_wdt.h>
+#include <soc/soc.h>
+#include <soc/rtc_cntl_reg.h>
 
 #include "../../config/config.h"
 #include "../../state/state.h"
@@ -100,6 +102,11 @@ bool Bootloader::applyWifiReprovisionRequest(const char* requestId) {
 }
 
 void Bootloader::executeSetup() {
+  // Disable the hardware brownout detector so that relay coil current spikes
+  // cannot trigger a spurious reset.  The application relies on its own safety
+  // guards (dry-run, overflow, task watchdog) for protection instead.
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
   Serial.begin(115200);
   Serial.println("\n====================================");
   LOG(APP_LOG_LEVEL_INFO, "SYS", " SmartFlow");

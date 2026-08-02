@@ -5,6 +5,7 @@
 #include "telnet_sink.h"
 #include "../app_logger.h"
 #include "../../config/config.h"
+#include "../../core/lifecycle/bootloader.h"
 
 TelnetSink::TelnetSink() : server(TELNET_PORT), serverStarted(false), ringHead(0), ringCount(0) {
   currentLine.reserve(128);
@@ -63,21 +64,19 @@ void TelnetSink::handle() {
   }
 
   if (server.hasClient()) {
-    if (!client) {
-      client = server.available();
-      client.setNoDelay(true);
-      replayBuffer();
-      // This records a deterministic live event after the client is
-      // attached.  It is useful both to a developer and to the initial
-      // TCP-console verification, while exercising the same AppLogger
-      // dispatch path as all other firmware events.
-      app_logger.logEvent(APP_LOG_LEVEL_INFO, "LOGGER", "TCP console client connected.");
-    } else {
-      // Reject new client since one is already connected
-      WiFiClient newClient = server.available();
-      newClient.println("Console already in use.");
-      newClient.stop();
+    if (client) {
+      // Drop the old (potentially dead) client in favor of the new connection
+      client.stop();
     }
+    client = server.available();
+    client.setNoDelay(true);
+    replayBuffer();
+    // Emit deterministic live events after the client attaches so that every
+    // session begins with a clear status header, regardless of ring-buffer
+    // coverage.  The restart reason is re-emitted here because the early-boot
+    // Serial log fires before the Telnet server is ready.
+    app_logger.logEvent(APP_LOG_LEVEL_INFO, "LOGGER", "TCP console client connected.");
+    app_logger.logEvent(APP_LOG_LEVEL_INFO, "BOOT",   "Last restart reason: %s", Bootloader::getBootReasonString());
   }
 }
 

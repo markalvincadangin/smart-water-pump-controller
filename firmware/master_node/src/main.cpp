@@ -56,7 +56,6 @@ static void serviceOta() {
   ArduinoOTA.handle();
 }
 #endif
-
 void setup() {
   // Boot Safety: Ensure the relay is safely OFF immediately upon MCU boot
   pinMode(PIN_RELAY, OUTPUT);
@@ -290,6 +289,7 @@ static void handleCloudCommands() {
       currentState = PumpState::IDLE;
     }
     LOG(APP_LOG_LEVEL_INFO, "STATE", "ERROR cleared");
+    CloudManager::clearErrorDesiredState();
   } else if (cmd.type == CommandType::STOP_AUTO) {
     pumpMode = "AUTO";
     currentState = PumpState::IDLE;
@@ -353,13 +353,16 @@ static void handleStateTransitions() {
     currentState = PumpState::IDLE;
   }
 
-  // Handle countdown edge-cases on boot and prevent immediate re-trigger/crash loops
+  // Handle countdown expiry: timer reached zero naturally.
   if (isCountdownActive && countdownEndMs != 0 && (int32_t)(millis() - countdownEndMs) >= 0) {
-    LOG(APP_LOG_LEVEL_INFO, "STATE", "Countdown finished. Clearing desired state and reverting to MANUAL OFF.");
-    
+    LOG(APP_LOG_LEVEL_INFO, "STATE", "Countdown finished. Reverting to MANUAL OFF.");
+
+    // First clear countdown_start so it doesn't re-trigger on reboot.
     CloudManager::clearCountdownDesiredState();
-    delay(500);
-    
+    delay(100);
+    // Then update the cloud mode to MANUAL so the app reflects the finished state.
+    CloudManager::setErrorFallbackDesiredState();
+
     pumpMode = "MANUAL";
     manualDesired = false;
     currentState = PumpState::IDLE;

@@ -25,11 +25,11 @@ public:
    * @brief Check if the device is currently connected to Wi-Fi.
    * @return true if connected, false otherwise.
    */
-  static bool isConnected();
+  [[nodiscard]] static bool isConnected();
 
   /**
    * @brief Get the current Received Signal Strength Indicator (RSSI).
    * @return RSSI in dBm.
    */
-  static int getRssi();
+  [[nodiscard]] static int getRssi();
 };

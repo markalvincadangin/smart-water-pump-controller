@@ -37,11 +37,13 @@ class DashboardViewModel(
             else -> desiredMode
         }
         
+        val lockoutActive = shadow.reported.isError || shadow.reported.isOverflowError || shadow.reported.emergencyStopLatched
+        
         DashboardUiState(
             isPumpRunning = shadow.reported.isRunning,
             mode = currentMode,
             desiredMode = desiredMode,
-            lockoutActive = shadow.reported.isError || shadow.reported.isOverflowError || shadow.reported.emergencyStopLatched,
+            lockoutActive = lockoutActive,
             waterLevelPct = telemetry.waterLevel,
             flowRateLpm = telemetry.flowRate,
             connectionStatus = connection,
@@ -52,7 +54,8 @@ class DashboardViewModel(
             isManualDesired = shadow.desired.manualDesired,
             isCountdownStartDesired = shadow.desired.countdownStart,
             lastFaultMessage = shadow.reported.lastFaultMessage,
-            events = events
+            events = events,
+            isSyncing = (desiredMode != currentMode) || (desiredMode == ControlMode.MANUAL && shadow.desired.manualDesired != shadow.reported.isRunning && !lockoutActive)
         )
     }.stateIn(
         scope = viewModelScope,

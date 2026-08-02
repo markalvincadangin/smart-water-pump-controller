@@ -22,7 +22,7 @@ public:
    * @brief Check if the device is authenticated with the cloud.
    * @return true if authenticated, false otherwise.
    */
-  static bool isAuthenticated();
+  [[nodiscard]] static bool isAuthenticated();
 
   /**
    * @brief Check if the current pairing verifier has been successfully published.
@@ -32,7 +32,7 @@ public:
    * 
    * @return true if the verifier is published, false otherwise.
    */
-  static bool isPairingVerifierPublished();
+  [[nodiscard]] static bool isPairingVerifierPublished();
 
   /**
    * @brief Queue a pairing verifier for publication.
@@ -64,7 +64,12 @@ public:
    * @brief Clear the reboot desired state in the cloud.
    * @return true if successfully cleared, false otherwise.
    */
-  static bool clearRebootDesiredState();
+  [[nodiscard]] static bool clearRebootDesiredState();
+
+  /**
+   * @brief Clear the error desired state in the cloud.
+   */
+  static void clearErrorDesiredState();
 
   /**
    * @brief Set the error fallback desired state in the cloud.
@@ -72,14 +77,55 @@ public:
   static void setErrorFallbackDesiredState();
 
 private:
+  /**
+   * @brief Pushes current telemetry (water level, flow rate, ultrasonic).
+   */
   static void pushTelemetry();
+
+  /**
+   * @brief Pushes device operational status and lifecycle state.
+   */
   static void pushStatus();
+
+  /**
+   * @brief Pushes the local reported state of the device shadow.
+   */
   static void pushShadow();
+
+  /**
+   * @brief Reads the desired state of the device shadow and applies it.
+   */
   static void readShadow();
-  static bool pushMetadata();
+
+  /**
+   * @brief Publishes device metadata (firmware version, hardware info).
+   * @return true if metadata was successfully published, false otherwise.
+   */
+  [[nodiscard]] static bool pushMetadata();
+
+  /**
+   * @brief Fetches configuration settings from the cloud.
+   */
   static void readSettings();
+
+  /**
+   * @brief Processes a pending Wi-Fi reprovisioning request.
+   */
   static void processWifiReprovisionRequest();
+
+  /**
+   * @brief Processes a pending ownership pairing/transfer request.
+   */
   static void processOwnershipPairingRequest();
+
+  /**
+   * @brief Pushes periodic diagnostic data (heap, WiFi RSSI, boot reason).
+   */
   static void pushDiagnostics();
-  static bool bootstrapAndStartFirebase();
+
+  /**
+   * @brief Uses the bootstrap secret to authenticate via custom token.
+   * @return true if successfully authenticated, false otherwise.
+   */
+  [[nodiscard]] static bool bootstrapAndStartFirebase();
 };

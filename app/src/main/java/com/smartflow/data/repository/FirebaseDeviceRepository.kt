@@ -88,7 +88,7 @@ class FirebaseDeviceRepository(
                     if (hasCompletedInitialCheck) {
                         _connectionFlow.value = ConnectionState.DISCONNECTED
                     }
-                } else if (System.currentTimeMillis() - lastHeartbeatTimeMs <= 10000L && lastLifecycle.equals("ONLINE", ignoreCase = true)) {
+                } else if (System.currentTimeMillis() - lastHeartbeatTimeMs <= 60000L && lastLifecycle.equals("ONLINE", ignoreCase = true)) {
                     hasCompletedInitialCheck = true
                     _connectionFlow.value = ConnectionState.CONNECTED
                 }
@@ -100,7 +100,8 @@ class FirebaseDeviceRepository(
             while (true) {
                 delay(2000)
                 if (isAppConnectedToFirebase) {
-                    if (System.currentTimeMillis() - lastHeartbeatTimeMs > 10000L) {
+                    // Firmware pushes status every 15s. Allow 35s to miss 2 heartbeats before considering it offline.
+                    if (System.currentTimeMillis() - lastHeartbeatTimeMs > 60000L) {
                         if (hasCompletedInitialCheck) {
                             _connectionFlow.value = ConnectionState.DISCONNECTED
                         }

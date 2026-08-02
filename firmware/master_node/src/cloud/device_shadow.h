@@ -1,6 +1,19 @@
 /**
  * @file device_shadow.h
  * @brief Manages the local representation of the cloud device shadow.
+ * 
+ * The Device Shadow pattern implements a robust device twin synchronization flow:
+ * 
+ * 1. **Reported State:** The device continuously publishes its true operational 
+ *    state (e.g., actual run mode, fault codes, safety triggers) via `getReportedJson()`.
+ * 
+ * 2. **Desired State:** The cloud writes to the `desired` node. The device listens 
+ *    to this stream, evaluates the requested state via `evaluateDesired()`, and 
+ *    generates internal commands.
+ * 
+ * 3. **Convergence:** The device executes the commands. If successful, the new 
+ *    true state is published back to `reported`, confirming the state convergence 
+ *    to the cloud.
  */
 #pragma once
 
@@ -33,13 +46,13 @@ public:
    * @brief Get the reported JSON string representing the current state.
    * @return A JSON string of the reported state.
    */
-  static String getReportedJson();
+  [[nodiscard]] static String getReportedJson();
 
   /**
    * @brief Get the generated pump command based on the desired state evaluation.
    * @return The resulting PumpCommand.
    */
-  static PumpCommand getCommand();
+  [[nodiscard]] static PumpCommand getCommand();
 
   /**
    * @brief Clear the current generated pump command.

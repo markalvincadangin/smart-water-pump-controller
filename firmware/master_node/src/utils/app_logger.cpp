@@ -118,23 +118,25 @@ void AppLogger::logEvent(int level, const char* comp, const char* fmt, ...) {
   }
 }
 void AppLogger::logCloudEvent(int level, LogCategory cat, EventCode code, const char* fmt, ...) {
-  char details[512];
+  // Static buffers prevent large stack allocations in deep call chains
+  // (setPump -> logCloudEvent -> pushCloudEvent).  Safe because loop() runs
+  // in a single FreeRTOS task with no re-entrancy.
+  static char details[512];
+  static char buf[768];
+
   va_list args;
   va_start(args, fmt);
   vsnprintf(details, sizeof(details), fmt, args);
   va_end(args);
 
-  // 1. Format the standard text for local serial debugging
-  const char* catStr = getCategoryString(cat);
+  const char* catStr  = getCategoryString(cat);
   const char* codeStr = getEventCodeString(code);
-  
-  char buf[768];
   snprintf(buf, sizeof(buf), "[%s] %s", codeStr, details);
-  
-  // Log locally
+
   logEvent(level, catStr, buf);
-  
-  // 2. Push explicitly to the cloud with the structured code
-  String levelStr = (level == APP_LOG_LEVEL_ERROR) ? "ERROR" : (level == APP_LOG_LEVEL_WARN ? "WARN" : "INFO");
+
+  const String levelStr = (level == APP_LOG_LEVEL_ERROR) ? "ERROR"
+                        : (level == APP_LOG_LEVEL_WARN)  ? "WARN"
+                                                         : "INFO";
   CloudManager::pushCloudEvent(levelStr, catStr, codeStr, details);
 }

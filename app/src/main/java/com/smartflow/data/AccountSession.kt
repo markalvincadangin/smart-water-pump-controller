@@ -27,9 +27,16 @@ object AccountSession {
             user.getIdToken(true).await()
             user.reload().await()
             state(auth.currentUser)
-        } catch (_: Exception) {
+        } catch (e: com.google.firebase.auth.FirebaseAuthInvalidUserException) {
             auth.signOut()
             DurableAccountState.SIGNED_OUT
+        } catch (e: com.google.firebase.auth.FirebaseAuthInvalidCredentialsException) {
+            auth.signOut()
+            DurableAccountState.SIGNED_OUT
+        } catch (e: Exception) {
+            // Network errors or temporary issues should not sign the user out.
+            // Fallback to the cached local state.
+            state(auth.currentUser)
         }
     }
 }

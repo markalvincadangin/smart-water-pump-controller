@@ -119,6 +119,21 @@ fun DashboardScreen(
                             fontWeight = FontWeight.Bold
                         )
                     }
+                } else if (uiState.isSyncing) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.tertiaryContainer)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Syncing with device...",
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             
             // Main Content
@@ -164,7 +179,8 @@ fun DashboardScreen(
                             onEmergencyStop = viewModel::triggerEmergencyStop,
                             onPowerToggle = viewModel::setPumpPower,
                             onCountdownStart = viewModel::startCountdown,
-                            onClearError = viewModel::clearErrors
+                            onClearError = viewModel::clearErrors,
+                            maxRuntimeLimitMins = uiState.config.maxOverflowTimeoutMins
                         )
                         ActivityPanel(events = uiState.events)
                     }
@@ -203,7 +219,8 @@ fun DashboardScreen(
                         onEmergencyStop = viewModel::triggerEmergencyStop,
                         onPowerToggle = viewModel::setPumpPower,
                         onCountdownStart = viewModel::startCountdown,
-                        onClearError = viewModel::clearErrors
+                        onClearError = viewModel::clearErrors,
+                        maxRuntimeLimitMins = uiState.config.maxOverflowTimeoutMins
                     )
 
                     ActivityPanel(events = uiState.events)

@@ -67,7 +67,8 @@ data class DashboardUiState(
     val isManualDesired: Boolean = false,
     val isCountdownStartDesired: Boolean = false,
     val lastFaultMessage: String = "",
-    val events: List<DeviceEvent> = emptyList()
+    val events: List<DeviceEvent> = emptyList(),
+    val isSyncing: Boolean = false
 )
 
 data class DeviceEvent(

@@ -39,6 +39,7 @@ fun ControlPanel(
     onPowerToggle: (Boolean) -> Unit,
     onCountdownStart: (Int) -> Unit,
     onClearError: () -> Unit,
+    maxRuntimeLimitMins: Int = 120,
     modifier: Modifier = Modifier
 ) {
     val isConnected = connectionState == ConnectionState.CONNECTED
@@ -92,10 +93,10 @@ fun ControlPanel(
                     Text("${countdownDuration.toInt()} mins", style = MaterialTheme.typography.labelLarge)
                 }
                 Slider(
-                    value = countdownDuration,
+                    value = countdownDuration.coerceAtMost(maxRuntimeLimitMins.toFloat()),
                     onValueChange = { countdownDuration = it },
-                    valueRange = 1f..120f,
-                    steps = 119,
+                    valueRange = 1f..maxRuntimeLimitMins.toFloat(),
+                    steps = (maxRuntimeLimitMins - 1).coerceAtLeast(0),
                     colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary)
                 )
                 Button(
