@@ -84,44 +84,80 @@ fun ControlPanel(
             )
         }
 
+        val isCountdownRunning = mode == ControlMode.COUNTDOWN && isPumpRunning
+
         if (mode == ControlMode.COUNTDOWN) {
             Column(
-                modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp)).padding(16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
             ) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Duration", style = MaterialTheme.typography.bodyMedium)
-                    Text("${countdownDuration.toInt()} mins", style = MaterialTheme.typography.labelLarge)
-                }
-                Slider(
-                    value = countdownDuration.coerceAtMost(maxRuntimeLimitMins.toFloat()),
-                    onValueChange = { countdownDuration = it },
-                    valueRange = 1f..maxRuntimeLimitMins.toFloat(),
-                    steps = (maxRuntimeLimitMins - 1).coerceAtLeast(0),
-                    colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary)
-                )
-                Button(
-                    onClick = { 
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onCountdownStart(countdownDuration.toInt()) 
-                    },
-                    enabled = isConnected && !lockoutActive && !(isCountdownStartDesired && !isPumpRunning),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                if (isCountdownRunning) {
+                    // Timer is active — show only a STOP TIMER button.
+                    Text(
+                        "Timer running",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    Button(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onEmergencyStop()
+                        },
+                        enabled = isConnected && !lockoutActive,
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
-                        if (isCountdownStartDesired && !isPumpRunning) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                        Text("STOP TIMER", fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    // Timer is in standby — show duration picker and START TIMER.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Duration", style = MaterialTheme.typography.bodyMedium)
+                        Text("${countdownDuration.toInt()} mins", style = MaterialTheme.typography.labelLarge)
+                    }
+                    Slider(
+                        value = countdownDuration.coerceAtMost(maxRuntimeLimitMins.toFloat()),
+                        onValueChange = { countdownDuration = it },
+                        valueRange = 1f..maxRuntimeLimitMins.toFloat(),
+                        steps = (maxRuntimeLimitMins - 1).coerceAtLeast(0),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    Button(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onCountdownStart(countdownDuration.toInt())
+                        },
+                        enabled = isConnected && !lockoutActive && !(isCountdownStartDesired && !isPumpRunning),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            if (isCountdownStartDesired && !isPumpRunning) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text("START TIMER", fontWeight = FontWeight.Bold)
                         }
-                        Text("START TIMER", fontWeight = FontWeight.Bold)
                     }
                 }
             }
