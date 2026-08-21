@@ -1,164 +1,78 @@
 # Security Policy
 
-## Reporting Vulnerabilities
+SmartFlow is a personal, field-deployed prototype maintained by one developer. This policy explains how to report a vulnerability safely; it does not represent a commercial support agreement or guaranteed response schedule.
 
-We take security seriously, especially for code that controls physical hardware and electrical systems.
+## Supported version
 
-**If you discover a security vulnerability, please report it responsibly:**
+Only the latest commit on the default branch is currently considered for security fixes. SmartFlow has no supported public release or long-term-support version.
 
-### DO NOT:
-- ❌ Open a public GitHub issue
-- ❌ Post on social media
-- ❌ Disclose the vulnerability before we have a fix
+| Version | Supported |
+|---------|-----------|
+| Latest default-branch revision | Yes, on a best-effort basis |
+| Private development history and retired experiments | No |
 
-### DO:
-- ✅ Email the details to: **markc.dev.iot@gmail.com**
-- ✅ Include a clear description of the vulnerability
-- ✅ Provide steps to reproduce (if possible)
-- ✅ Specify which version(s) are affected
+## Reporting a vulnerability
 
----
+Do not open a public issue containing exploit details, credentials, personal data, or instructions that could operate physical equipment.
 
-## Scope: What We Consider Security Issues
+Report privately by email:
 
-### In-Scope (Serious)
-- **Command injection** — Ability to execute arbitrary code on ESP32 or Node.js
-- **Authentication bypass** — Circumventing Firebase auth or dashboard login
-- **Unsafe cryptography** — Weak keys, unencrypted secrets
-- **Buffer overflows** — Memory corruption in firmware
-- **Logic flaws in safety** — Pump control bypasses (dry-run, overflow, emergency stop)
-- **Sensor spoofing** — Ability to forge RS-485 frames and trigger false levels
-- **Denial of Service (DoS)** — Crashing the controller via malformed input
+- **Address:** `markc.dev.iot@gmail.com`
+- **Subject:** `[SmartFlow Security]` followed by a short title
 
-### Out-of-Scope (Research/Non-Critical)
-- Missing rate-limiting on non-critical API endpoints
-- UI/UX issues that don't affect safety
-- Documentation typos
-- Performance issues
-- Vulnerabilities in third-party libraries (report to the library maintainer)
+Include, where available:
 
----
+- the affected component and revision;
+- a concise description of the impact;
+- safe reproduction steps using your own test environment;
+- logs or screenshots with secrets and personal data removed;
+- whether you believe physical safety could be affected.
 
-## Response Timeline
+After the repository becomes public, GitHub private vulnerability reporting should be used when it is enabled. The email address above remains the fallback.
 
-We aim to:
+## Responsible research boundaries
 
-| Severity | Time to Acknowledge | Time to Fix | Disclosure |
-|----------|-------------------|------------|-----------|
-| **Critical** (Exploitable safety bypass) | 24 hours | 1 week | 30 days after patch |
-| **High** (Auth bypass, RCE) | 48 hours | 2 weeks | 60 days after patch |
-| **Medium** (Minor logic flaw) | 1 week | 1 month | 90 days after patch |
+- Test only systems, accounts, devices, and data you own or are explicitly authorized to test.
+- Do not send commands to the field installation or attempt to discover its network, cloud project, accounts, or device identifiers.
+- Do not energize pumps, contactors, mains wiring, or exposed prototype hardware for security testing.
+- Do not access, retain, or disclose data beyond what is necessary to explain the issue.
+- Stop testing if it could affect people, property, water supply, electrical equipment, or third-party services.
+- Do not use denial-of-service, social-engineering, persistence, destructive, or credential-stuffing techniques.
 
----
+## In scope
 
-## Security Best Practices (For Users)
+- Unauthorized pump-control intent or safety-control bypass
+- Authentication, device bootstrap, pairing, ownership, or account-isolation failures
+- Firebase Security Rules or Cloud Functions authorization errors
+- Exposure of bootstrap secrets, service-account credentials, signing material, passwords, or deployment tokens
+- Firmware memory-safety problems reachable through supported interfaces
+- Malformed RS-485 or cloud input that causes unsafe controller behavior
+- Dependency vulnerabilities that materially affect SmartFlow
 
-### Credential Rotation (Required After Any Exposure)
-- [ ] Rotate WiFi credentials used by controllers
-- [ ] Rotate Firebase Email/Password service user credentials
-- [ ] Rotate Firebase API keys and any server-side keys/tokens
-- [ ] Rotate OTA credentials in `secrets_ota.h`
-- [ ] Rotate any local service account keys used by scripts/automation
-- [ ] Reflash devices with new credentials
-- [ ] Revoke old sessions/tokens where applicable
-- [ ] Verify old secrets are removed from git history
+Documentation errors, ordinary UI defects, theoretical issues without a meaningful SmartFlow impact, and physical attacks requiring possession of the prototype may be handled as normal issues rather than security vulnerabilities.
 
-### Deployment
-- [ ] Use strong WiFi passwords (WPA3 if available)
-- [ ] Change Firebase email/password from defaults
-- [ ] Never commit `secrets.h` to version control
-- [ ] Keep firmware updated to latest version
-- [ ] Monitor telemetry for unusual activity
+## Response expectations
 
-### Monitoring
-- [ ] Check dashboard logs weekly for errors
-- [ ] Verify pump cycle counts are reasonable
-- [ ] Alert if level readings become erratic (possible sensor tampering)
-- [ ] Audit Firebase rules periodically
+Reports are reviewed on a best-effort basis. I may not be able to acknowledge or fix an issue within a specific period. If a report is valid, I will aim to reproduce it safely, assess physical and data risk, prepare a fix or mitigation, and coordinate disclosure when practical.
 
-### Access Control
-- [ ] Limit dashboard user accounts to trusted operators
-- [ ] Disable public read-write on Firebase RTDB
-- [ ] Use Firebase Security Rules: Operator role + Admin role (separate)
-- [ ] Revoke access for users no longer active
+There is no bug-bounty program and no promise of payment. Credit may be offered with the reporter's permission.
 
----
+## Known security limitations
 
-## Known Limitations
+- The prototype has not completed an independently audited secure-boot and signed-firmware deployment chain.
+- The local RS-485 sensor link provides framing and CRC-based error detection, not encryption or cryptographic peer authentication.
+- Physical access to the controller, sensor node, wiring, or debug interfaces is outside the software trust boundary.
+- Remote communication depends on Firebase's authenticated TLS services and correctly deployed Security Rules and backend authorization.
+- The system is installed at one residential site and has not undergone a commercial penetration test or product certification.
 
-We acknowledge these security constraints:
+These limitations must not be interpreted as permission to test the installed system.
 
-1. **WiFi Security**
-   - SmartFlow transmits control commands over WiFi
-   - An attacker on the same network could intercept or replay commands
-   - **Mitigation:** Use WPA3 encryption; consider VPN for remote access
+## Credential exposure
 
-2. **Firebase RTDB Limits**
-   - Real-time database uses standard Firebase auth
-   - No end-to-end encryption between client and RTDB
-   - **Mitigation:** Use HTTPS; assume network is untrusted
+If a real credential is exposed, revoke or rotate it first. Removing it from the latest commit is not sufficient because it may remain in Git history, caches, forks, or local clones. Relevant examples include service-account keys, device bootstrap secrets, passwords, OTA credentials, and deployment tokens.
 
-3. **Firmware Integrity**
-   - No secure boot or attestation (ESP32 doesn't have it by default)
-   - Firmware could be replaced with malicious version if attacker has USB access
-   - **Mitigation:** Physical security of the ESP32/enclosure
+Firebase client configuration identifiers should still be restricted and monitored appropriately, but they are not a replacement for backend authorization or Security Rules.
 
-4. **RS-485 Network**
-   - RS-485 is not encrypted
-   - Sensor node could be impersonated if cable is accessible
-   - **Mitigation:** Use isolated network; monitor for unexpected messages
+## Physical safety
 
----
-
-## Responsible Disclosure
-
-If we receive a valid security report, we will:
-
-1. Acknowledge receipt within 24 hours (critical issues)
-2. Investigate and reproduce the issue
-3. Develop a fix
-4. Test the fix thoroughly
-5. Release a patched version
-6. Credit the finder UNLESS they request anonymity
-
-We ask that you:
-- Give us reasonable time to fix before disclosure
-- Not access data beyond what's needed to demonstrate the vulnerability
-- Not disrupt service or damage systems
-- Work with us cooperatively
-
----
-
-## Security Contact
-
-**Email:** markc.dev.iot@gmail.com  
-**Subject:** `[SmartFlow Security]` + brief title
-
-Example:
-```
-Subject: [SmartFlow Security] Unauthenticated Pump Control via Firebase Rules
-```
-
----
-
-## Supported Versions
-
-Only the latest release receives security updates.
-
-| Version | Released | Security Support |
-|---------|----------|------------------|
-| v1.0.0 | 2026-04 | ✅ Active |
-| v0.9.0 | 2026-03 | ⚠️ Limited (critical only) |
-
-If you're running an older version, please upgrade to v1.0.0 or later.
-
----
-
-## Security Incidents History
-
-*None yet — this is a new project (2026). Security history will be logged here.*
-
----
-
-**Last Updated:** 2026-04-04  
-**Maintained By:** Mark Alvin Cadangin
+A software license, security review, or successful build does not certify the electrical installation. SmartFlow must fail toward pump OFF, and the independent contactor and thermal overload protections must not be replaced or bypassed by software.

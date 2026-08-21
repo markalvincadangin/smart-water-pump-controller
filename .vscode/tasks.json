@@ -1,0 +1,97 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "App: Build",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 app_build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "App: Pair Device",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 app_pair",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "App: Run Debug",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 app_run",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "App: Logcat",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 app_logcat",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "Firmware: Build",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 firmware_build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "Firmware: Flash (OTA)",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 firmware_flash_ota",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "Firmware: Flash (USB)",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 firmware_flash_usb",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "Firmware: Monitor (Telnet)",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 firmware_monitor",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    }
+  ]
+}

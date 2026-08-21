@@ -1,15 +1,19 @@
+/**
+ * @file pump_hal.cpp
+ * @brief Hardware Abstraction Layer for the water pump relay.
+ */
 #include "pump_hal.h"
 #include "../config/hardware.h"
 
 void PumpHal::init() {
-    pinMode(PIN_RELAY, OUTPUT);
-    digitalWrite(PIN_RELAY, HIGH); // Active-LOW: HIGH means OFF initially
+  pinMode(PIN_RELAY, OUTPUT);
+  digitalWrite(PIN_RELAY, HIGH); // Active-LOW: HIGH means OFF initially
 }
 
 void PumpHal::enable(bool on) {
-    digitalWrite(PIN_RELAY, on ? LOW : HIGH); // Active-LOW
+  digitalWrite(PIN_RELAY, on ? LOW : HIGH); // Active-LOW
 }
 
 bool PumpHal::isEnabled() {
-    return digitalRead(PIN_RELAY) == LOW; // Active-LOW
+  return digitalRead(PIN_RELAY) == LOW; // Active-LOW
 }

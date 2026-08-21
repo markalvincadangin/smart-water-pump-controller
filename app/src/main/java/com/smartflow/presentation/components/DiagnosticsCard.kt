@@ -10,15 +10,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.smartflow.domain.ConnectionState
-import com.smartflow.presentation.theme.EmeraldSecondary
-import com.smartflow.presentation.theme.GrayText
-import com.smartflow.presentation.theme.RedError
+import com.smartflow.ui.theme.LocalSpacing
+
 
 @Composable
 fun DiagnosticsCard(
     connectionState: ConnectionState,
     modifier: Modifier = Modifier
 ) {
+    val spacing = LocalSpacing.current
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -28,20 +29,20 @@ fun DiagnosticsCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(spacing.medium),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 text = "System Diagnostics",
                 style = MaterialTheme.typography.bodyMedium,
-                color = GrayText
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             
             val (statusText, color) = when (connectionState) {
-                ConnectionState.CONNECTED -> "ONLINE" to EmeraldSecondary
-                ConnectionState.CONNECTING -> "CONNECTING..." to GrayText
-                ConnectionState.DISCONNECTED -> "OFFLINE" to RedError
+                ConnectionState.CONNECTED -> "ONLINE" to MaterialTheme.colorScheme.secondary
+                ConnectionState.CONNECTING -> "CONNECTING..." to MaterialTheme.colorScheme.onSurfaceVariant
+                ConnectionState.DISCONNECTED -> "OFFLINE" to MaterialTheme.colorScheme.error
             }
 
             Text(

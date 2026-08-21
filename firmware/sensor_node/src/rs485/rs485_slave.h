@@ -1,10 +1,18 @@
+/**
+ * @file rs485_slave.h
+ * @brief RS-485 slave transceiver management for sensor nodes.
+ */
 #pragma once
 
 #include "../config/config.h"
 
-// Initialize DE/RE GPIO and put transceiver in RX mode.
+/**
+ * @brief Initialize DE/RE GPIO and put transceiver in RX mode.
+ */
 void rs485_slave_init();
 
-// Service UART RX; responds to REQ frames.
+/**
+ * @brief Service UART RX; responds to REQ frames.
+ */
 void rs485_slave_poll();
 

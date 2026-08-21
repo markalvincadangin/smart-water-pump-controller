@@ -1,11 +1,19 @@
+/**
+ * @file state.h
+ * @brief Central declaration of all firmware runtime state variables.
+ *
+ * Every mutable global is declared here with extern linkage and defined
+ * exactly once in state.cpp. Variables are grouped by subsystem for
+ * navigability.
+ */
 #pragma once
 
 #include "../config/config.h"
 
 enum class DeviceLifecycle {
-    UNCLAIMED,
-    PROVISIONING,
-    ONLINE
+  UNCLAIMED,
+  PROVISIONING,
+  ONLINE
 };
 
 extern DeviceLifecycle deviceLifecycle;
@@ -45,6 +53,14 @@ extern bool  isRunning;
 extern int   prevWaterLevelPct;
 
 // Mode and faults
+enum class PumpState {
+  IDLE,
+  MANUAL,
+  COUNTDOWN,
+  ERROR
+};
+
+extern PumpState currentState;
 extern String pumpMode;
 extern bool   isDryRunError;
 extern bool   isLevelSensorError;
@@ -66,11 +82,7 @@ extern bool          emergencyStopLatched;
 // COUNTDOWN
 extern bool          isCountdownActive;
 extern unsigned long countdownEndMs;
-extern bool          pendingModeWriteback;
-extern unsigned long pendingModeWritebackSentMs;
 extern int           cfgLastCountdownDurationMin;
-extern int           statusPushRetryCount;
-extern unsigned long statusPushRetryMs;
 
 // Sensor failure + estimate
 extern int           levelSensorFailCount;
@@ -195,4 +207,4 @@ extern unsigned long lastDeviceConfigMs;
 // Heap diagnostics
 extern unsigned long lastHeapDiagMs;
 extern uint32_t      minFreeHeapObserved;
-
+extern bool forceCloudManualOverride;

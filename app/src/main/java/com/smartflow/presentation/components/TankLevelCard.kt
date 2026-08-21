@@ -6,29 +6,31 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
-import com.smartflow.domain.ConnectionState
-import com.smartflow.presentation.theme.CyanPrimary
-import com.smartflow.presentation.theme.GrayText
+import com.smartflow.domain.TelemetryValue
+import com.smartflow.presentation.components.core.TelemetryMetric
+import com.smartflow.ui.theme.LocalMotion
+import com.smartflow.ui.theme.LocalSpacing
 import kotlin.math.sin
 
 @Composable
 fun TankLevelCard(
-    waterLevelPct: Int,
-    connectionState: ConnectionState,
+    waterLevel: TelemetryValue<Int>,
     modifier: Modifier = Modifier
 ) {
-    val isStale = connectionState != ConnectionState.CONNECTED
-    val waveColor = if (isStale) GrayText else CyanPrimary
+    val isStale = waterLevel is TelemetryValue.Stale
+    val waveColor = if (isStale) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
+    val tankBackgroundColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val spacing = LocalSpacing.current
+    val motion = LocalMotion.current
 
     val infiniteTransition = rememberInfiniteTransition()
     val phaseOffset by infiniteTransition.animateFloat(
@@ -37,19 +39,34 @@ fun TankLevelCard(
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
-        )
+        ),
+        label = "wave_phase"
     )
 
     // Smoothly animate water level changes
+    val levelValue = when (waterLevel) {
+        is TelemetryValue.Available -> waterLevel.value
+        is TelemetryValue.Stale -> waterLevel.lastKnownValue
+        is TelemetryValue.Unavailable -> 0
+    }
+    
     val animatedLevel by animateFloatAsState(
-        targetValue = waterLevelPct.coerceIn(0, 100) / 100f,
-        animationSpec = tween(1000, easing = FastOutSlowInEasing)
+        targetValue = levelValue.coerceIn(0, 100) / 100f,
+        animationSpec = tween(motion.durationExtraSlow * 2, easing = FastOutSlowInEasing),
+        label = "water_level"
     )
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(200.dp),
+            .height(200.dp)
+            .clearAndSetSemantics {
+                contentDescription = when (waterLevel) {
+                    is TelemetryValue.Stale -> "Tank level ${waterLevel.lastKnownValue} percent, but data is stale"
+                    is TelemetryValue.Unavailable -> "Tank level unavailable. Check level sensor."
+                    is TelemetryValue.Available -> "Tank level ${waterLevel.value} percent"
+                }
+            },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -57,7 +74,7 @@ fun TankLevelCard(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(spacing.medium),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Tank visual
@@ -74,7 +91,7 @@ fun TankLevelCard(
                         addRoundRect(
                             androidx.compose.ui.geometry.RoundRect(
                                 rect = Rect(0f, 0f, width, height),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx())
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(spacing.medium.toPx())
                             )
                         )
                     }
@@ -82,7 +99,7 @@ fun TankLevelCard(
                     // Background empty tank
                     drawPath(
                         path = containerPath,
-                        color = Color.Black.copy(alpha = 0.2f)
+                        color = tankBackgroundColor
                     )
 
                     clipPath(containerPath) {
@@ -116,32 +133,19 @@ fun TankLevelCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(24.dp))
+            Spacer(modifier = Modifier.width(spacing.large))
 
-            // Text info
-            Column(
+            // Text info using TelemetryMetric
+            Box(
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Tank Level",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = GrayText
+                TelemetryMetric(
+                    label = "Tank Level",
+                    telemetry = waterLevel,
+                    formatValue = { "$it%" },
+                    isLarge = true
                 )
-                Text(
-                    text = "$waterLevelPct%",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = if (isStale) GrayText else MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold
-                )
-                if (isStale) {
-                    Text(
-                        text = "Stale Data",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
             }
         }
     }

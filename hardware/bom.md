@@ -27,6 +27,7 @@ Important:
 | LV-03 | AC-DC adapter (main box) | 5V, >=3A | 1 | Powers ESP32, relay, local RS-485 module |
 | LV-04 | RS-485 transceiver (main box) | MAX485-compatible | 1 | ESP32 UART2 to A/B bus |
 | LV-05 | Terminal blocks | DIN or enclosed strip, rated for use | as needed | Neutral/low-voltage distribution |
+| LV-06 | Push Button | Momentary, normally open (NO) | 1 | Smart Reset Button (Soft Reboot / Factory Reset) |
 
 ## 3) Tank-Side Sensor Node (Remote Enclosure)
 
@@ -58,6 +59,7 @@ Important:
 |---|---|---|---:|---|
 | SC-01 | JSN ECHO divider resistors | 10k (series) + 20k (to GND) | 1 set | 5V ECHO to ~3.3V MCU-safe |
 | SC-02 | Flow SIG divider resistors | 1k (series) + 2k or 2.2k (to GND) | 1 set | Use if measured flow signal exceeds 3.3V |
+| SC-03 | RC Snubber (Suppressor) | 0.1uF + 100 ohm (or pre-made 220V AC snubber) | 1 | Across contactor A1/A2 to absorb back-EMF |
 
 ## 6) Firmware Pin Baseline (As Deployed)
 
@@ -70,6 +72,7 @@ ESP32 master pins:
 - RS485_TX_PIN = GPIO17
 - RS485_RX_PIN = GPIO25
 - RS485_DE_RE_PIN = GPIO5
+- PIN_RESET_BUTTON = GPIO32
 
 NodeMCU sensor node pins:
 - PIN_RS485_DE_RE = GPIO14 (D5)

@@ -1,3 +1,10 @@
+/**
+ * @file state.cpp
+ * @brief Single translation unit for all firmware runtime state variables.
+ *
+ * Defines every extern declared in state.h exactly once. Grouped by
+ * subsystem to mirror the header layout.
+ */
 #include "state.h"
 
 // Definitions (single translation unit)
@@ -35,6 +42,7 @@ bool  isRunning               = false;
 int   prevWaterLevelPct       = 0;
 
 String pumpMode          = "AUTO";
+PumpState currentState   = PumpState::IDLE;
 bool   isDryRunError     = false;
 bool   isLevelSensorError = false;
 bool   isFlowSensorError = false;
@@ -145,7 +153,6 @@ unsigned long ntpLastSyncMs          = 0;
 unsigned long lastSensorMs       = 0;
 unsigned long lastFirebaseMs     = 0;
 unsigned long lastDeviceConfigMs = 0;
-unsigned long lastWifiRetryMs    = 0;
 
 unsigned long lastHeapDiagMs      = 0;
 uint32_t      minFreeHeapObserved = 0;
@@ -167,9 +174,5 @@ bool          emergencyStopLatched = false;
 
 bool          isCountdownActive = false;
 unsigned long countdownEndMs   = 0;
-bool          pendingModeWriteback = false;
-unsigned long pendingModeWritebackSentMs = 0;
 int           cfgLastCountdownDurationMin = 15;
-int           statusPushRetryCount   = 0;
-unsigned long statusPushRetryMs      = 0;
-
+bool forceCloudManualOverride = false;

@@ -1,15 +1,27 @@
+/**
+ * @file pump_hal.h
+ * @brief Hardware Abstraction Layer for the water pump relay.
+ */
 #pragma once
 
 #include <Arduino.h>
 
 class PumpHal {
 public:
-    // Initialize the GPIO pin for the pump relay
-    static void init();
+  /**
+   * @brief Initialize the GPIO pin for the pump relay.
+   */
+  static void init();
 
-    // Turn the pump on (true) or off (false)
-    static void enable(bool on);
+  /**
+   * @brief Turn the pump on or off.
+   * @param on true to enable, false to disable.
+   */
+  static void enable(bool on);
 
-    // Get the current physical state of the pump pin
-    static bool isEnabled();
+  /**
+   * @brief Get the current physical state of the pump pin.
+   * @return true if the pump is enabled, false otherwise.
+   */
+  static bool isEnabled();
 };

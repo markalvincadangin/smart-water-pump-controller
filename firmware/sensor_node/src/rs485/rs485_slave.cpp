@@ -1,3 +1,7 @@
+/**
+ * @file rs485_slave.cpp
+ * @brief RS-485 slave transceiver implementation.
+ */
 #include "rs485_slave.h"
 
 #include "../state/state.h"
@@ -16,8 +20,8 @@ static bool parsePingSeq(const char* cmd, uint32_t& seqOut) {
   if (!cmd) return false;
   if (strncmp(cmd, "PING", 4) != 0) return false;
   if (cmd[4] == '\0') {
-    seqOut = 0;
-    return true;
+  seqOut = 0;
+  return true;
   }
   if (cmd[4] != ':') return false;
   char* end = nullptr;
@@ -52,7 +56,7 @@ static void sendFrame() {
   uint8_t ldsc = (snLevelDiscardCount > 255) ? 255 : (uint8_t)snLevelDiscardCount;
   char payload[104];
   int n = snprintf(payload, sizeof(payload), "LVL:%d;DIST:%.1f;FLOW:%.2f;ERR:%d;LDSC:%u;SEQ:%u;",
-                   lvl, dist, flow, err, (unsigned)ldsc, (unsigned)seq);
+           lvl, dist, flow, err, (unsigned)ldsc, (unsigned)seq);
   if (n <= 0 || (size_t)n >= sizeof(payload)) return;
   uint16_t crc = crc16_modbus((const uint8_t*)payload, (size_t)n);
 
@@ -100,39 +104,39 @@ void rs485_slave_poll() {
   // Reset partial frame if inter-byte stall exceeds 20ms.
   static uint32_t lastByteMs = 0;
   if (rxPos > 0 && (millis() - lastByteMs) > 20) {
-    rxPos = 0;
+  rxPos = 0;
   }
 
   while (Serial.available() > 0) {
-    int c = Serial.read();
-    if (c < 0) return;
-    lastByteMs = millis();
-    if (c == '\r') continue;
+  int c = Serial.read();
+  if (c < 0) return;
+  lastByteMs = millis();
+  if (c == '\r') continue;
 
-    if (c == '\n') {
-      rxLine[rxPos] = '\0';
-      rxPos = 0;
+  if (c == '\n') {
+    rxLine[rxPos] = '\0';
+    rxPos = 0;
 
-      if (isReqCommand(rxLine)) {
-        sendFrame();
-      } else {
-        uint32_t pingSeq = 0;
-        if (parsePingSeq(rxLine, pingSeq)) {
-          sendPingAckFrame(pingSeq);
-          return;
-        }
-#if SENSOR_DEBUG_ENABLED
-        SENSOR_DBGF("[SN][INFO] RX unknown cmd: '%s'\n", rxLine);
-#endif
-      }
+    if (isReqCommand(rxLine)) {
+    sendFrame();
+    } else {
+    uint32_t pingSeq = 0;
+    if (parsePingSeq(rxLine, pingSeq)) {
+      sendPingAckFrame(pingSeq);
       return;
     }
-
-    if ((size_t)(rxPos + 1) < sizeof(rxLine)) {
-      rxLine[rxPos++] = (char)c;
-    } else {
-      rxPos = 0;
+#if SENSOR_DEBUG_ENABLED
+    SENSOR_DBGF("[SN][INFO] RX unknown cmd: '%s'\n", rxLine);
+#endif
     }
+    return;
+  }
+
+  if ((size_t)(rxPos + 1) < sizeof(rxLine)) {
+    rxLine[rxPos++] = (char)c;
+  } else {
+    rxPos = 0;
+  }
   }
 }
 

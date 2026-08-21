@@ -2,6 +2,12 @@
 
 #include "../state/state.h"
 
+/**
+ * @brief Loads device configuration from NVS and validates against firmware schema.
+ *
+ * Reads all hardware and policy parameters. Falls back to firmware defaults
+ * if the schema version is outdated or stored values fail range checks.
+ */
 void loadDeviceConfigFromNVS() {
   if (!prefs.begin(NVS_NAMESPACE, true)) {
     LOG(APP_LOG_LEVEL_ERROR, "NVS", "Namespace open failed. Using firmware defaults.");
@@ -12,19 +18,19 @@ void loadDeviceConfigFromNVS() {
     LOG(APP_LOG_LEVEL_INFO, "NVS", "No saved config. Using firmware defaults.");
     return;
   }
-  int te = prefs.getInt("tank_empty", TANK_EMPTY_CM);
-  int tf = prefs.getInt("tank_full", TANK_FULL_CM);
-  int ps = prefs.getInt("pump_start", PUMP_START_LEVEL);
-  int po = prefs.getInt("pump_stop", PUMP_STOP_LEVEL);
-  float drLpm = prefs.getFloat("dry_run_lpm", DRY_RUN_THRESHOLD_LPM);
-  int drSec = prefs.getInt("dry_run_sec", (int)(DRY_RUN_TIMEOUT_MS / 1000UL));
+  int tankEmptyCm = prefs.getInt("tank_empty", TANK_EMPTY_CM);
+  int tankFullCm = prefs.getInt("tank_full", TANK_FULL_CM);
+  int pumpStartLevel = prefs.getInt("pump_start", PUMP_START_LEVEL);
+  int pumpStopLevel = prefs.getInt("pump_stop", PUMP_STOP_LEVEL);
+  float dryRunLpm = prefs.getFloat("dry_run_lpm", DRY_RUN_THRESHOLD_LPM);
+  int dryRunSec = prefs.getInt("dry_run_sec", (int)(DRY_RUN_TIMEOUT_MS / 1000UL));
   float flowCal = prefs.getFloat("flow_cal", FLOW_CALIBRATION_FACTOR);
   int maxRuntime = prefs.getInt("max_runtime", MAX_PUMP_RUNTIME_MIN);
 
-  bool slpEn = prefs.getBool("slp_en", SLEEP_DEFAULT_ENABLED);
-  int slpStart = prefs.getInt("slp_start", SLEEP_DEFAULT_START_HOUR);
-  int slpEnd = prefs.getInt("slp_end", SLEEP_DEFAULT_END_HOUR);
-  int slpEmerg = prefs.getInt("slp_emerg", SLEEP_DEFAULT_EMERGENCY_LVL);
+  bool sleepEnabled = prefs.getBool("slp_en", SLEEP_DEFAULT_ENABLED);
+  int sleepStart = prefs.getInt("slp_start", SLEEP_DEFAULT_START_HOUR);
+  int sleepEnd = prefs.getInt("slp_end", SLEEP_DEFAULT_END_HOUR);
+  int sleepEmerg = prefs.getInt("slp_emerg", SLEEP_DEFAULT_EMERGENCY_LVL);
 
   int sensThresh = prefs.getInt("sens_thresh", SENSOR_FAILURE_THRESHOLD);
   int idleSens = prefs.getInt("idle_sens_ms", IDLE_SENSOR_INTERVAL_MS_DEF);
@@ -42,35 +48,52 @@ void loadDeviceConfigFromNVS() {
   if (schemaVer < NVS_SCHEMA_VERSION) {
     LOG(APP_LOG_LEVEL_INFO, "NVS", "Schema v%d loaded into firmware v%d — new fields use defaults.", schemaVer, NVS_SCHEMA_VERSION);
   }
-  if (te < 5 || te > 200 || tf < 1 || tf >= te || ps < 0 || ps > 100 || po < 0 || po > 100 || po <= ps
-      || drLpm < 0.1f || drLpm > 10.0f || drSec < 10 || drSec > 300
+  if (tankEmptyCm < 5 || tankEmptyCm > 200 || tankFullCm < 1 || tankFullCm >= tankEmptyCm || pumpStartLevel < 0 || pumpStartLevel > 100 || pumpStopLevel < 0 || pumpStopLevel > 100 || pumpStopLevel <= pumpStartLevel
+      || dryRunLpm < 0.1f || dryRunLpm > 10.0f || dryRunSec < 10 || dryRunSec > 300
       || flowCal < 0.1f || flowCal > 20.0f || maxRuntime < 30 || maxRuntime > 480) {
     LOG(APP_LOG_LEVEL_INFO, "NVS", "Stored config invalid. Using firmware defaults.");
     return;
   }
-  cfgTankEmptyCm = te;
-  cfgTankFullCm = tf;
-  cfgPumpStartLevel = ps;
-  cfgPumpStopLevel = po;
-  cfgDryRunThresholdLpm = drLpm;
-  cfgDryRunTimeoutSec = drSec;
+  cfgTankEmptyCm = tankEmptyCm;
+  cfgTankFullCm = tankFullCm;
+  cfgPumpStartLevel = pumpStartLevel;
+  cfgPumpStopLevel = pumpStopLevel;
+  cfgDryRunThresholdLpm = dryRunLpm;
+  cfgDryRunTimeoutSec = dryRunSec;
   cfgFlowCalibration = flowCal;
   cfgMaxPumpRuntimeMin = maxRuntime;
 
-  if (slpStart >= 0 && slpStart <= 23) cfgSleepStartHour = slpStart;
-  if (slpEnd >= 0 && slpEnd <= 23) cfgSleepEndHour = slpEnd;
-  if (slpEmerg >= 0 && slpEmerg <= 100) cfgSleepEmergencyLevel = slpEmerg;
-  cfgSleepEnabled = slpEn;
+  if (sleepStart >= 0 && sleepStart <= 23) {
+    cfgSleepStartHour = sleepStart;
+  }
+  if (sleepEnd >= 0 && sleepEnd <= 23) {
+    cfgSleepEndHour = sleepEnd;
+  }
+  if (sleepEmerg >= 0 && sleepEmerg <= 100) {
+    cfgSleepEmergencyLevel = sleepEmerg;
+  }
+  cfgSleepEnabled = sleepEnabled;
 
-  if (sensThresh >= 3 && sensThresh <= 20) cfgLevelSensorFailureThreshold = sensThresh;
-  if (idleSens >= 5000 && idleSens <= 60000) cfgIdleSensorIntervalMs = idleSens;
-  if (idleFb >= 10000 && idleFb <= 120000) cfgIdleFirebaseIntervalMs = idleFb;
+  if (sensThresh >= 3 && sensThresh <= 20) {
+    cfgLevelSensorFailureThreshold = sensThresh;
+  }
+  if (idleSens >= 5000 && idleSens <= 60000) {
+    cfgIdleSensorIntervalMs = idleSens;
+  }
+  if (idleFb >= 10000 && idleFb <= 120000) {
+    cfgIdleFirebaseIntervalMs = idleFb;
+  }
   cfgAutoBypassOnSensorFail = autoBypassEn;
-  if (autoBypassSec >= 10 && autoBypassSec <= 300) cfgAutoBypassDelaySec = autoBypassSec;
+  if (autoBypassSec >= 10 && autoBypassSec <= 300) {
+    cfgAutoBypassDelaySec = autoBypassSec;
+  }
 
-  LOG(APP_LOG_LEVEL_INFO, "NVS", "Device config loaded.");
+  app_logger.logCloudEvent(APP_LOG_LEVEL_INFO, LogCategory::SYSTEM, EventCode::EVT_CONFIG_RESTORED, "Device config loaded.");
 }
 
+/**
+ * @brief Persists the current device configuration to NVS.
+ */
 void saveDeviceConfigToNVS() {
   if (!prefs.begin(NVS_NAMESPACE, false)) {
     LOG(APP_LOG_LEVEL_ERROR, "NVS", "Failed to open for write. Config not persisted.");
@@ -98,22 +121,21 @@ void saveDeviceConfigToNVS() {
   LOG(APP_LOG_LEVEL_INFO, "NVS", "Device config saved.");
 }
 
-bool isInSleepWindow(int currentHour) {
-  if (cfgSleepStartHour <= cfgSleepEndHour) {
-    return (currentHour >= cfgSleepStartHour && currentHour < cfgSleepEndHour);
-  } else {
-    return (currentHour >= cfgSleepStartHour) || (currentHour < cfgSleepEndHour);
-  }
-}
-
+/**
+ * @brief Detects crash loops and latches Safe Mode when threshold is exceeded.
+ *
+ * Increments a boot counter each startup. If the firmware survives
+ * CRASH_LOOP_THRESHOLD consecutive reboots without reaching stable uptime
+ * (60 s), the device enters Safe Mode until a full power cycle or timeout.
+ */
 void checkCrashLoop() {
   if (!prefs.begin(NVS_STATE_NAMESPACE, false)) {
     LOG(APP_LOG_LEVEL_ERROR, "BOOT", "NVS state namespace open failed.");
     return;
   }
 
-  // Clear crash counters and safe mode latch on a full power cycle
-  if (esp_reset_reason() == ESP_RST_POWERON) {
+  // Clear crash counters and safe mode latch on a full power cycle or hardware reset
+  if (esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_EXT) {
     prefs.putULong("safe_mode_ms", 0);
     prefs.putInt("boot_count", 0);
     prefs.putUInt("safe_epoch", 0);
@@ -144,7 +166,7 @@ void checkCrashLoop() {
     lastFaultCode = "SAFE_MODE";
     lastFaultMessage = "Crash loop detected. Controller in safe mode. Power cycle to recover.";
     prefs.putULong("safe_mode_ms", safeModeEnteredMs);
-    LOG(APP_LOG_LEVEL_INFO, "ERROR", "CRASH LOOP DETECTED: %d boots without reaching stable uptime. Entering SAFE MODE.", bootCount);
+    app_logger.logCloudEvent(APP_LOG_LEVEL_ERROR, LogCategory::SYSTEM, EventCode::EVT_CRASH_LOOP_SAFE_MODE, "CRASH LOOP DETECTED: %d boots without reaching stable uptime. Entering SAFE MODE.", bootCount);
     LOG(APP_LOG_LEVEL_INFO, "SAFE MODE", "Pump OFF. Firebase disabled. Serial only.");
   } else {
     LOG(APP_LOG_LEVEL_INFO, "BOOT", "Boot count (uncleared): %d/%d", bootCount, CRASH_LOOP_THRESHOLD);
@@ -153,10 +175,19 @@ void checkCrashLoop() {
   prefs.end();
 }
 
+/**
+ * @brief Restores pump mode, error flags, bypass settings, and telemetry from NVS.
+ */
 void loadStateFromNVS() {
-  if (!prefs.begin(NVS_STATE_NAMESPACE, true)) return;
+  if (!prefs.begin(NVS_STATE_NAMESPACE, true)) {
+    return;
+  }
 
-  String savedMode = prefs.getString("mode", "AUTO");
+  char modeBuf[16];
+  if (prefs.getString("mode", modeBuf, sizeof(modeBuf)) == 0) {
+    strcpy(modeBuf, "AUTO");
+  }
+  String savedMode = String(modeBuf);
   bool savedDryRun = prefs.getBool("dry_run_err", false);
   bool savedBypass = prefs.getBool("bypass_lvl", false);
   bool savedBypassFlow = prefs.getBool("bypass_flow", false);
@@ -169,22 +200,19 @@ void loadStateFromNVS() {
   cfgLastCountdownDurationMin = prefs.getInt("cd_dur_min", 15);
   prefs.end();
 
-  // Only AUTO / MANUAL / COUNTDOWN are valid modes. Invalid values map to AUTO.
-  savedMode.trim();
-  savedMode.toUpperCase();
-  if (savedMode == "AUTO" || savedMode == "COUNTDOWN" || savedMode == "MANUAL") {
-    pumpMode = savedMode;
+  // Option B: Safest standard boot - force MANUAL mode on startup
+  pumpMode = "MANUAL";
+  manualDesired = false;
+  forceCloudManualOverride = true;
+  
+  if (savedMode != "MANUAL") {
+    LOG(APP_LOG_LEVEL_WARN, "BOOT", "Previous mode was %s. Forcing to MANUAL OFF for safety.", savedMode.c_str());
+    // Leave lastPersistedMode as the old mode so persistStateToNVS() will see the change
+    // and sync the new MANUAL mode back to NVS and Cloud on the first loop.
     lastPersistedMode = savedMode;
-    if (savedMode == "COUNTDOWN") {
-      LOG(APP_LOG_LEVEL_INFO, "BOOT", "Restored COUNTDOWN mode from NVS. Pump idle until user starts a new timer.");
-    } else if (savedMode == "MANUAL") {
-      manualDesired = false;  // never auto-start after reboot
-      LOG(APP_LOG_LEVEL_INFO, "BOOT", "Restored MANUAL mode. Pump remains OFF until manual_desired is true.");
-    }
   } else {
-    pumpMode = "AUTO";
-    lastPersistedMode = "AUTO";
-    LOG(APP_LOG_LEVEL_INFO, "BOOT", "Legacy/invalid mode '%s' not restored. Defaulting to AUTO.", savedMode.c_str());
+    LOG(APP_LOG_LEVEL_INFO, "BOOT", "Restored MANUAL mode. Pump remains OFF.");
+    lastPersistedMode = "MANUAL";
   }
   isDryRunError = savedDryRun;
   lastPersistedDryRun = savedDryRun;
@@ -197,6 +225,13 @@ void loadStateFromNVS() {
                 (unsigned long)totalPumpCycles, (unsigned long)totalPumpRunSec);
 }
 
+/**
+ * @brief Persists runtime state to NVS with delta-write optimization.
+ *
+ * Only writes parameters that have actually changed since the last persist
+ * call, minimizing flash wear. Also clears the crash-loop counter once
+ * the firmware reaches stable uptime (60 s).
+ */
 void persistStateToNVS() {
   bool modeChanged = (pumpMode != lastPersistedMode);
   bool dryRunChanged = (isDryRunError != lastPersistedDryRun);
@@ -206,17 +241,20 @@ void persistStateToNVS() {
   int levelDelta = abs(waterLevelPct - lastPersistedLevel);
   unsigned long now = millis();
   bool levelNeedsWrite = (lastPersistedLevel == -1)
-    || (levelDelta >= NVS_LEVEL_DELTA_THRESHOLD)
-    || (now - lastLevelWriteMs >= NVS_LEVEL_INTERVAL_MS);
-  bool uptimeNeedsWrite = (now - lastUptimeWriteMs >= NVS_UPTIME_INTERVAL_MS);
+    || (levelDelta >= NVS_LEVEL_DELTA_THRESHOLD);
   // After the controller has been up for a while, clear crash-loop counter.
   // This is the "stable uptime" signal used by checkCrashLoop().
   static bool crashLoopClearedThisBoot = false;
   bool crashLoopClearDue = (!crashLoopClearedThisBoot) && (now >= 60000UL);
 
-  if (!modeChanged && !dryRunChanged && !bypassChanged && !bypassFlowChanged && !telemetryChanged && !levelNeedsWrite && !uptimeNeedsWrite && !crashLoopClearDue) return;
+  if (!modeChanged && !dryRunChanged && !bypassChanged && !bypassFlowChanged
+      && !telemetryChanged && !levelNeedsWrite && !crashLoopClearDue) {
+    return;
+  }
 
-  if (!prefs.begin(NVS_STATE_NAMESPACE, false)) return;
+  if (!prefs.begin(NVS_STATE_NAMESPACE, false)) {
+    return;
+  }
 
   if (modeChanged) {
     prefs.putString("mode", pumpMode);
@@ -248,9 +286,6 @@ void persistStateToNVS() {
     lastPersistedLevel = waterLevelPct;
     lastLevelWriteMs = now;
   }
-  if (uptimeNeedsWrite) {
-    lastUptimeWriteMs = now;
-  }
 
   if (crashLoopClearDue) {
     prefs.putInt("boot_count", 0);
@@ -261,6 +296,14 @@ void persistStateToNVS() {
   prefs.end();
 }
 
+/**
+ * @brief Clears local Wi-Fi and enrollment material from NVS.
+ *
+ * Preserves safety latches, pump state, counters, and crash-loop data
+ * that must survive a reprovisioning event.
+ *
+ * @return true if successfully cleared, false if NVS could not be opened.
+ */
 bool clearNetworkEnrollment() {
   if (!prefs.begin(NVS_STATE_NAMESPACE, false)) {
     LOG(APP_LOG_LEVEL_ERROR, "NVS", "Unable to clear local enrollment state.");
@@ -279,4 +322,3 @@ bool clearNetworkEnrollment() {
   LOG(APP_LOG_LEVEL_INFO, "NVS", "Local Wi-Fi and enrollment material cleared.");
   return true;
 }
-

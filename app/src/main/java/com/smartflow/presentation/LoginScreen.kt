@@ -17,6 +17,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.smartflow.ui.theme.LocalSpacing
 
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit) {
@@ -24,6 +25,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    val spacing = LocalSpacing.current
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val auth = FirebaseAuth.getInstance()
@@ -44,21 +46,39 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(spacing.medium),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("SmartFlow", style = MaterialTheme.typography.headlineLarge)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Sign in to claim and control your devices.")
-        Spacer(modifier = Modifier.height(24.dp))
+        val themePref = com.smartflow.ui.theme.LocalThemePreference.current
+        val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+        val logoRes = when (themePref) {
+            com.smartflow.ui.theme.ThemePreference.MONOCHROME_LIGHT -> com.smartflow.R.drawable.logo_stacked_black
+            com.smartflow.ui.theme.ThemePreference.MONOCHROME_DARK -> com.smartflow.R.drawable.logo_stacked_white
+            com.smartflow.ui.theme.ThemePreference.LIGHT -> com.smartflow.R.drawable.logo_stacked_light
+            com.smartflow.ui.theme.ThemePreference.DARK -> com.smartflow.R.drawable.logo_stacked_dark
+            com.smartflow.ui.theme.ThemePreference.SYSTEM_DEFAULT -> if (isSystemDark) com.smartflow.R.drawable.logo_stacked_dark else com.smartflow.R.drawable.logo_stacked_light
+        }
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = logoRes),
+            contentDescription = "SmartFlow Logo",
+            modifier = Modifier.height(120.dp).fillMaxWidth().padding(horizontal = spacing.extraLarge),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+        )
+        Spacer(modifier = Modifier.height(spacing.extraLarge))
+        Text(
+            text = "Sign in to claim and control your devices.",
+            color = MaterialTheme.colorScheme.onBackground,
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Spacer(modifier = Modifier.height(spacing.large))
         OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(spacing.small))
         OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(spacing.medium))
         if (error.isNotEmpty()) {
             Text(error, color = MaterialTheme.colorScheme.error)
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(spacing.mediumSmall))
         }
         if (isLoading) {
             CircularProgressIndicator()
@@ -78,7 +98,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                     }
                 }
             }, modifier = Modifier.fillMaxWidth()) { Text("Sign In") }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(spacing.small))
             OutlinedButton(onClick = {
                 isLoading = true; error = ""
                 coroutineScope.launch {
@@ -91,7 +111,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                     } finally { isLoading = false }
                 }
             }, modifier = Modifier.fillMaxWidth()) { Text("Create Account") }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(spacing.small))
             OutlinedButton(onClick = {
                 val webClientIdRes = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
                 if (webClientIdRes == 0) {
@@ -104,6 +124,19 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                     .build()
                 googleLauncher.launch(GoogleSignIn.getClient(context, options).signInIntent)
             }, modifier = Modifier.fillMaxWidth()) { Text("Continue with Google") }
+            Spacer(modifier = Modifier.height(spacing.small))
+            TextButton(onClick = {
+                isLoading = true; error = ""
+                coroutineScope.launch {
+                    try {
+                        auth.signInAnonymously().await()
+                        onLoginSuccess()
+                    } catch (exception: Exception) {
+                        error = exception.localizedMessage ?: "Anonymous sign-in failed"
+                        isLoading = false
+                    }
+                }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Continue as Guest") }
         }
     }
 }

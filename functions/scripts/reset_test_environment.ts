@@ -7,8 +7,8 @@
  * local device secrets; it deletes only RTDB data and Firebase Auth users.
  *
  * Usage:
- *   npm run reset-test-env -- --project smartflow-example --database-url https://...  # plan
- *   npm run reset-test-env -- --project smartflow-example --database-url https://... --apply --acknowledge-delete-all-test-data
+ *   npm run reset-test-env -- --project your-test-project --database-url https://...  # plan
+ *   npm run reset-test-env -- --project your-test-project --database-url https://... --apply --acknowledge-delete-all-test-data
  */
 import * as admin from "firebase-admin";
 import { mkdir, writeFile } from "node:fs/promises";

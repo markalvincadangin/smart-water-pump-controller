@@ -18,12 +18,12 @@ Resets Firebase Authentication and Realtime Database for fresh testing of the pr
 1. **Preview the exact reset:**
    ```bash
    cd functions
-   npm run reset-test-env -- --project smartflow-example --database-url https://smartflow-example-default-rtdb.asia-southeast1.firebasedatabase.app
+   npm run reset-test-env -- --project your-test-project --database-url https://your-test-project-default-rtdb.asia-southeast1.firebasedatabase.app
    ```
 
 2. **Apply only after reviewing the plan.** For a clean ESP32 provisioning test, reseed the one required non-secret bootstrap registry entry after the root wipe:
    ```bash
-   npm run reset-test-env -- --project smartflow-example --database-url https://smartflow-example-default-rtdb.asia-southeast1.firebasedatabase.app --apply --acknowledge-delete-all-test-data --seed-device-id SF-TEST01 --seed-secret-name projects/smartflow-example/secrets/smartflow-bootstrap-sf-test01
+   npm run reset-test-env -- --project your-test-project --database-url https://your-test-project-default-rtdb.asia-southeast1.firebasedatabase.app --apply --acknowledge-delete-all-test-data --seed-device-id SF-TEST01 --seed-secret-name projects/your-test-project/secrets/smartflow-bootstrap-sf-test01
    ```
 
 The command uses Application Default Credentials. Authenticate your shell first, for example with `firebase login` / an existing Firebase CLI session or an explicitly configured service account.
@@ -84,13 +84,13 @@ firebase auth:export users.json
 Dry-run-first. It migrates only consistent legacy ownership records and freezes ambiguous records; it never guesses or transfers an owner.
 
 ```bash
-npm run migrate-legacy-ownership -- --project smartflow-example --database-url https://smartflow-example-default-rtdb.asia-southeast1.firebasedatabase.app
+npm run migrate-legacy-ownership -- --project your-test-project --database-url https://your-test-project-default-rtdb.asia-southeast1.firebasedatabase.app
 ```
 
 Apply a reviewed plan:
 
 ```bash
-npm run migrate-legacy-ownership -- --project smartflow-example --database-url https://smartflow-example-default-rtdb.asia-southeast1.firebasedatabase.app --apply --acknowledge-ownership-migration
+npm run migrate-legacy-ownership -- --project your-test-project --database-url https://your-test-project-default-rtdb.asia-southeast1.firebasedatabase.app --apply --acknowledge-ownership-migration
 ```
 
 ### Resolve Ownership Conflicts
@@ -98,11 +98,11 @@ npm run migrate-legacy-ownership -- --project smartflow-example --database-url h
 Operator-only and per-device. The operator must have Firebase's `admin` custom claim, the selected owner must be a durable account, and the supplied non-secret evidence reference becomes part of the audit record.
 
 ```bash
-npm run resolve-ownership-conflict -- --project smartflow-example --database-url https://smartflow-example-default-rtdb.asia-southeast1.firebasedatabase.app --device-id SF-TEST01 --owner-uid <durable-owner-uid> --operator-uid <admin-uid> --evidence CASE-123
+npm run resolve-ownership-conflict -- --project your-test-project --database-url https://your-test-project-default-rtdb.asia-southeast1.firebasedatabase.app --device-id SF-TEST01 --owner-uid <durable-owner-uid> --operator-uid <admin-uid> --evidence CASE-123
 ```
 
 Apply a reviewed resolution:
 
 ```bash
-npm run resolve-ownership-conflict -- --project smartflow-example --database-url https://smartflow-example-default-rtdb.asia-southeast1.firebasedatabase.app --device-id SF-TEST01 --owner-uid <durable-owner-uid> --operator-uid <admin-uid> --evidence CASE-123 --apply --acknowledge-ownership-resolution
+npm run resolve-ownership-conflict -- --project your-test-project --database-url https://your-test-project-default-rtdb.asia-southeast1.firebasedatabase.app --device-id SF-TEST01 --owner-uid <durable-owner-uid> --operator-uid <admin-uid> --evidence CASE-123 --apply --acknowledge-ownership-resolution
 ```
