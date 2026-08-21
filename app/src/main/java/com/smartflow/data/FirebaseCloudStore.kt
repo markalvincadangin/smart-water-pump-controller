@@ -11,6 +11,8 @@ import kotlinx.coroutines.tasks.await
 import com.google.firebase.database.ChildEventListener
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
+import com.smartflow.domain.DeviceEvent
+import com.smartflow.data.dto.DeviceEventDto
 
 class FirebaseCloudStore {
     private val database = FirebaseDatabase.getInstance().reference
@@ -115,16 +117,16 @@ class FirebaseCloudStore {
     }
 
     fun streamEvents(deviceId: String): Flow<List<DeviceEvent>> = callbackFlow {
-        val ref = database.child("devices").child(deviceId).child("events").orderByChild("timestamp").limitToLast(50)
+        val ref = database.child("devices").child(deviceId).child("events").orderByKey().limitToLast(50)
         val eventsList = mutableListOf<DeviceEvent>()
 
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 eventsList.clear()
                 for (child in snapshot.children) {
-                    val ev = child.getValue(DeviceEvent::class.java)
-                    if (ev != null) {
-                        eventsList.add(ev.copy(id = child.key ?: ""))
+                    val ev = child.getValue(DeviceEventDto::class.java)
+                    if (ev != null && child.key != null) {
+                        eventsList.add(ev.toDomain(child.key!!))
                     }
                 }
                 trySend(eventsList.toList())
@@ -137,5 +139,57 @@ class FirebaseCloudStore {
         
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
+    }
+
+    fun observeNotificationPrefs(uid: String): Flow<NotificationPrefs> = callbackFlow {
+        val ref = database.child("users").child(uid).child("notification_prefs")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val prefs = snapshot.getValue(NotificationPrefs::class.java) ?: NotificationPrefs()
+                trySend(prefs)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                close(error.toException())
+            }
+        }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
+    suspend fun updateNotificationPrefs(uid: String, prefs: NotificationPrefs) {
+        val updates = mapOf(
+            "users/$uid/notification_prefs/enabled" to prefs.enabled,
+            "users/$uid/notification_prefs/dndEnabled" to prefs.dndEnabled,
+            "users/$uid/notification_prefs/dndStartHour" to prefs.dndStartHour,
+            "users/$uid/notification_prefs/dndEndHour" to prefs.dndEndHour,
+            "users/$uid/notification_prefs/pumpStartedAlert" to prefs.pumpStartedAlert,
+            "users/$uid/notification_prefs/lowLevelAlert" to prefs.lowLevelAlert,
+            "users/$uid/notification_prefs/dryRunAlert" to prefs.dryRunAlert,
+            "users/$uid/notification_prefs/overflowAlert" to prefs.overflowAlert
+        )
+        database.updateChildren(updates).await()
+    }
+
+    suspend fun markNotificationsAsRead(uid: String) {
+        database.child("users").child(uid).child("notification_prefs")
+            .child("lastReadTimestamp").setValue(System.currentTimeMillis()).await()
+    }
+
+    suspend fun markSpecificNotificationsAsRead(uid: String, eventIds: List<String>) {
+        if (eventIds.isEmpty()) return
+        val updates = mutableMapOf<String, Any>()
+        eventIds.forEach { id ->
+            updates["users/$uid/notification_prefs/readEventIds/$id"] = true
+        }
+        database.updateChildren(updates).await()
+    }
+
+    suspend fun deleteSpecificNotifications(uid: String, eventIds: List<String>) {
+        if (eventIds.isEmpty()) return
+        val updates = mutableMapOf<String, Any>()
+        eventIds.forEach { id ->
+            updates["users/$uid/notification_prefs/deletedEventIds/$id"] = true
+        }
+        database.updateChildren(updates).await()
     }
 }

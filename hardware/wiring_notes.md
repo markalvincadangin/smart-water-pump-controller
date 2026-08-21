@@ -43,6 +43,7 @@ ESP32 master:
 - GPIO17 -> RS-485 DI (TX)
 - GPIO25 <- RS-485 RO (RX)
 - GPIO5  -> RS-485 DE/RE (tied)
+- GPIO32 -> Smart Reset Button (Normally Open, to GND)
 
 NodeMCU sensor node:
 - D5 / GPIO14 -> RS-485 DE/RE (tied)
@@ -79,6 +80,10 @@ Typical path:
 MCB line -> relay COM -> relay NO -> TOR NC 95-96 -> contactor A1
 MCB neutral ----------------------------------------> contactor A2
 ```
+
+**Inductive load suppression (CRITICAL):**
+- An **RC Snubber** MUST be installed directly across contactor terminals **A1 and A2**.
+- Failure to install the snubber will result in massive back-EMF spikes that crash the ESP32 (causing a hardware brownout reset) when the relay de-energizes.
 
 Manual bypass (if installed) must be documented and labeled clearly as service/diagnostic use.
 
@@ -140,6 +145,10 @@ No RS-485 data:
 - Verify DE/RE control pin behavior on both nodes.
 - Confirm shared reference GND continuity.
 - Confirm termination resistors present only at bus ends.
+
+ESP32 resets (Brownout/Software Reset) when pump turns on/off:
+- Verify the **RC Snubber** is securely connected across contactor terminals A1 and A2.
+- Ensure the 5V power supply has adequate current overhead.
 
 Unstable tank node:
 - Recheck LM2596 output under load.

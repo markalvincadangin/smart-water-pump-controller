@@ -1,8 +1,6 @@
 package com.smartflow.presentation.components
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -10,17 +8,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.smartflow.presentation.theme.GrayText
+import com.smartflow.domain.DeviceEvent
+import com.smartflow.presentation.components.domain.ActivityTimeline
+import com.smartflow.ui.theme.LocalSpacing
 
 @Composable
 fun ActivityPanel(
-    events: List<String> = emptyList(), // Placeholder for real DeviceEvent if re-added
+    events: List<DeviceEvent> = emptyList(),
     modifier: Modifier = Modifier
 ) {
+    val spacing = LocalSpacing.current
+
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(150.dp),
+            .height(280.dp), // Increased height for better UX
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -28,33 +30,19 @@ fun ActivityPanel(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(spacing.medium)
         ) {
             Text(
-                text = "Activity Log",
-                style = MaterialTheme.typography.bodyMedium,
-                color = GrayText
+                text = "Recent Activity",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(spacing.mediumSmall))
 
-            if (events.isEmpty()) {
-                Text(
-                    text = "No recent activity.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            } else {
-                LazyColumn {
-                    items(events) { event ->
-                        Text(
-                            text = event,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    }
-                }
-            }
+            ActivityTimeline(
+                events = events,
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }

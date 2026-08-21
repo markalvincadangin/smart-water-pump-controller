@@ -1,13 +1,25 @@
+/**
+ * @file ultrasonic_hal.h
+ * @brief Hardware Abstraction Layer for the ultrasonic water level sensor.
+ */
 #pragma once
 
 class UltrasonicHal {
 public:
-    // Initialize the ultrasonic hardware (or its communication bus)
-    static void init();
+  /**
+   * @brief Initialize the ultrasonic hardware (or its communication bus).
+   */
+  static void init();
 
-    // Read the current water level percentage (0-100)
-    static int readLevelPercent();
+  /**
+   * @brief Read the current water level.
+   * @return Water level percentage (0-100).
+   */
+  static int readLevelPercent();
 
-    // Check if the sensor is responding
-    static bool isOnline();
+  /**
+   * @brief Check if the ultrasonic sensor is responding.
+   * @return true if online, false otherwise.
+   */
+  static bool isOnline();
 };

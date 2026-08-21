@@ -11,12 +11,21 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import android.content.Intent
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import androidx.compose.ui.platform.LocalContext
 import com.smartflow.viewmodel.ProvisioningState
 import com.smartflow.viewmodel.ProvisioningViewModel
+import com.smartflow.presentation.components.SmartFlowTopAppBar
+import com.smartflow.ui.theme.LocalSpacing
 
 @Composable
-fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: () -> Unit) {
+fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: () -> Unit, onBack: () -> Unit) {
     val state by viewModel.provisioningState.collectAsState()
+    val spacing = LocalSpacing.current
 
     var ssid by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -27,20 +36,48 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
         arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
+    val context = LocalContext.current
+    val bluetoothManager = context.getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    val bluetoothAdapter = bluetoothManager?.adapter
+
+    val enableBluetoothLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.values.all { it }) {
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
             viewModel.startScanning()
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        when (val s = state) {
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.all { it }) {
+            if (bluetoothAdapter?.isEnabled == true) {
+                viewModel.startScanning()
+            } else {
+                enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            SmartFlowTopAppBar(
+                title = "Add Device",
+                showBackButton = true,
+                onBackClick = onBack
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(spacing.medium),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            when (val s = state) {
             is ProvisioningState.Idle -> {
                 Button(onClick = { permissionLauncher.launch(permissions) }) {
                     Text("Scan for SmartFlow Device")
@@ -48,36 +85,36 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
             }
             is ProvisioningState.Scanning -> {
                 CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 Text("Scanning for devices...")
             }
             is ProvisioningState.DeviceFound -> {
                 Text("Device Found: ${s.macAddress}")
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 Button(onClick = { viewModel.scanWifiNetworks(s.macAddress) }) {
                     Text("Scan Wi-Fi Networks")
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(spacing.small))
                 OutlinedButton(onClick = { viewModel.claimOwnershipPairing(s.macAddress) }) {
                     Text("Claim nearby transfer or release")
                 }
             }
             is ProvisioningState.ScanningWifi -> {
                 CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 Text("Scanning Wi-Fi Networks...")
             }
             is ProvisioningState.WifiListReceived -> {
                 Text("Select your Wi-Fi Network", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(spacing.small))
 
                 if (s.isScanning) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(spacing.small))
                         Text("Finding networks...", style = MaterialTheme.typography.bodySmall)
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(spacing.small))
                 }
 
                 var expanded by remember { mutableStateOf(false) }
@@ -110,20 +147,20 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 OutlinedTextField(
                     value = ssid,
                     onValueChange = { ssid = it },
                     label = { Text("Wi-Fi SSID") }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(spacing.small))
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text("Wi-Fi Password") },
                     visualTransformation = PasswordVisualTransformation()
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 Button(
                     onClick = { viewModel.provisionDevice(s.macAddress, ssid, password) },
                     enabled = ssid.isNotEmpty() && (!s.isScanning || s.networks.isNotEmpty())
@@ -133,29 +170,29 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
             }
             is ProvisioningState.Provisioning -> {
                 CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 Text("Sending credentials to device...")
             }
             is ProvisioningState.OwnershipPairing -> {
                 CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 Text("Retrieving the secure nearby ownership proof...")
             }
             is ProvisioningState.ProvisioningUpdate -> {
                 CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 Text("Device status: ${s.message}")
             }
             is ProvisioningState.WaitingForCloud -> {
                 CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 Text("Connecting device to SmartFlow Cloud…")
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(spacing.small))
                 Text(
                     "Checking secure registration (${s.attempt}/${s.maxAttempts})",
                     style = MaterialTheme.typography.bodySmall
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(spacing.small))
                 Text(
                     "The device has left Bluetooth to join Wi-Fi. Keep this screen open.",
                     style = MaterialTheme.typography.bodySmall
@@ -163,21 +200,21 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
             }
             is ProvisioningState.Success -> {
                 Text("Provisioning Successful!")
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(spacing.small))
                 Text("Device ${s.claimToken} is now registered to your account.", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 Button(onClick = { onProvisioningSuccess() }) {
                     Text("Continue to Dashboard")
                 }
             }
             is ProvisioningState.Error -> {
                 Text("Error: ${s.message}", color = MaterialTheme.colorScheme.error)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(spacing.medium))
                 if (s.canRetryCloudClaim) {
                     Button(onClick = { viewModel.retryPendingCloudClaim() }) {
                         Text("Retry cloud registration")
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(spacing.small))
                     OutlinedButton(onClick = { viewModel.startScanning() }) {
                         Text("Start provisioning again")
                     }
@@ -189,4 +226,6 @@ fun ProvisioningScreen(viewModel: ProvisioningViewModel, onProvisioningSuccess: 
             }
         }
     }
+}
+
 }

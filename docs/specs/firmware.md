@@ -55,6 +55,7 @@ Changes to these pins require updating both the source constants and this table.
 | `RS485_TX_PIN` | GPIO 17 (UART2 TX2) | OUT | RS-485 transmit → MAX485 DI |
 | `RS485_RX_PIN` | GPIO 25 (UART2 RX2) | IN | RS-485 receive ← MAX485 RO |
 | `RS485_DE_RE_PIN` | GPIO 5 | OUT | RS-485 direction — LOW = RX, HIGH = TX |
+| `PIN_RESET_BUTTON` | GPIO 32 | IN (PULLUP) | Smart Reset Button (3s = Soft Reboot, 10s = Factory Reset) |
 
 **NodeMCU V2 sensor node** (`firmware/sensor_node/src/config/config.h`)
 
@@ -173,11 +174,15 @@ The authoritative owner is `/devices/{device_id}/ownership/ownerUid`; the legacy
 
 `provisioned` ends the BLE exchange, not necessarily the user-visible setup flow. The device may intentionally close BLE while it joins Wi-Fi and completes cloud registration. The Android app must show a bounded cloud-registration wait state and retry the secure callable claim for up to 45 attempts at two-second intervals (90 seconds). A retry during that window must reuse the in-memory pairing proof and must not restart BLE scanning; the user may explicitly begin a new provisioning attempt only after that path is exhausted. The app must not use a direct RTDB ownership/readiness preflight as a substitute for the callable claim.
 
-The BLE `reset` command is a scoped local reprovisioning operation, not a factory erase. Its first state-changing action is `setPump(false)`; it clears only local Wi-Fi credentials and enrollment material, then restarts into BLE provisioning. It retains safety latches, pump configuration, counters, cloud ownership, and immutable device identity.
+**Smart Reset Button (GPIO 32)**:
+The master node features a single consolidated hardware button.
+- **Soft Reboot (Hold 3-10 seconds):** Automatically stops the pump safely, clears the boot count, and restarts the ESP32. Retains all safety latches, configuration, cloud ownership, and device identity.
+- **Factory Reset (Hold > 10 seconds):** Automatically stops the pump safely, wipes local Wi-Fi credentials, clears the user configuration namespace (`pump_cfg`) to factory defaults, and restarts into BLE provisioning. It retains cloud ownership and immutable device identity.
 
 #### Production diagnostics
 
-Production firmware publishes the `/devices/{device_id}/diagnostics` snapshot with `freeHeap`, `wifiRSSI`, and `restartReason`. Its cloud event history contains only WARN/ERROR records. The trusted `retainDeviceEvents` backend trigger atomically retains the newest 50 push-ID-ordered records, including repair of oversized histories left by an older firmware version. Firmware application code logs through the transport-independent `AppLogger`/`LogSink` boundary; development-only sinks may expose bounded local history and live diagnostics on a trusted LAN, but the TCP implementation is compile-time gated and is not a production support interface.
+Production firmware publishes the `/devices/{device_id}/diagnostics` snapshot with `freeHeap`, `wifiRSSI`, and `restartReason`.
+The firmware uses a strictly structured event registry mapping to `EventCode` and `LogCategory` enums (e.g. `EVT_PUMP_ON`, `EVT_DRY_RUN_LOCKOUT`). The legacy unstructured `LOG()` string macro is now strictly isolated to local debugging (Serial/Syslog) and does not push to Firebase. This ensures the Android app's Activity Log remains completely standardized and localizable. The trusted `retainDeviceEvents` backend trigger atomically retains the newest 50 push-ID-ordered records. Firmware application code logs through the transport-independent `AppLogger`/`LogSink` boundary; development-only sinks may expose bounded local history and live diagnostics on a trusted LAN, but the TCP implementation is compile-time gated and is not a production support interface.
 
 **Status (ESP32 → cloud)**: `/devices/{device_id}/telemetry` and `/devices/{device_id}/shadow/reported`
 
@@ -232,5 +237,5 @@ Core fields:
 
 - JSN‑SR04T **ECHO must be level shifted to 3.3V** on ESP8266.
 - RS‑485 termination/biasing must be correct for cable length.
-- Buck converter sizing and wiring must tolerate pump-induced transients; brownouts are expected and the system fails safe.
+- An **RC Snubber** MUST be installed across the A1 and A2 terminals of the magnetic contactor coil to absorb back-EMF and prevent 3.3V rail brownout resets. The system fails safe if a brownout does occur.
 

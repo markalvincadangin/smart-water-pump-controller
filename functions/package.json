@@ -1,6 +1,7 @@
 {
   "name": "smart-pump-functions",
   "version": "1.0.0",
+  "license": "UNLICENSED",
   "private": true,
   "scripts": {
     "build": "tsc",
@@ -18,15 +19,15 @@
   "main": "lib/index.js",
   "dependencies": {
     "@google-cloud/secret-manager": "^6.3.0",
-    "firebase-admin": "^13.7.0",
-    "firebase-functions": "^7.0.6",
+    "firebase-admin": "13.10.0",
+    "firebase-functions": "7.3.2",
     "resend": "^3.2.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
-    "@types/node": "^22.10.2",
+    "@types/node": "22.20.1",
     "jest": "^29.7.0",
-    "ts-jest": "^29.2.5",
+    "ts-jest": "29.4.12",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
   }

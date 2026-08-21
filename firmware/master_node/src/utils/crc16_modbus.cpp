@@ -1,3 +1,7 @@
+/**
+ * @file crc16_modbus.cpp
+ * @brief CRC-16 Modbus calculation utility implementation.
+ */
 #include "crc16_modbus.h"
 
 uint16_t Crc16::calculateModbus(const uint8_t* data, size_t len) {
@@ -11,4 +15,3 @@ uint16_t Crc16::calculateModbus(const uint8_t* data, size_t len) {
   }
   return crc;
 }
-

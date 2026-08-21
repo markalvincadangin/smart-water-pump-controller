@@ -135,16 +135,10 @@ export const onDeviceUpdated = onValueWritten(
     // Extract data from V2 schema
     const waterLevel = after.telemetry?.waterLevel ?? 0;
     const flowRate = after.telemetry?.flowRate ?? 0;
-    const isRunning = after.shadow?.reported?.pumpState ?? false;
-    const wasRunning = before?.shadow?.reported?.pumpState ?? false;
+    const isRunning = after.shadow?.reported?.is_running ?? false;
+    const wasRunning = before?.shadow?.reported?.is_running ?? false;
 
-    // Check for recent error events
-    const eventsMap = after.events as Record<string, any> | undefined;
-    const latestEvent = eventsMap
-      ? Object.values(eventsMap).sort((a, b) => b.timestamp - a.timestamp)[0]
-      : null;
-    const isDryRunError = latestEvent?.code === "DRY_RUN";
-    const isOverflowError = latestEvent?.code === "OVERFLOW";
+    // Check for recent error events (kept for telemetry alerts if needed, but error pushes moved to onDeviceEventCreated)
 
     const configs = await getActiveNotificationConfigs();
     if (!configs.length) return;
@@ -157,32 +151,6 @@ export const onDeviceUpdated = onValueWritten(
       const threshold = config.lowLevelThreshold ?? 20;
       const tokens = getFcmTokens(config);
       if (tokens.length === 0) continue;
-
-      // 1. Dry-Run Lockout
-      if (isDryRunError && (config.dryRunAlert ?? true)) {
-        if (await canSend(db(), uid, "dryRun")) {
-          await sendPush(
-            tokens,
-            "⚠ Dry-Run Lockout",
-            `No flow detected. Tank: ${waterLevel}%. Check pump and water source.`,
-            "dryRun"
-          );
-          await recordSent(db(), uid, "dryRun");
-        }
-      }
-
-      // 2. Overflow Protection
-      if (isOverflowError && (config.overflowAlert ?? true)) {
-        if (await canSend(db(), uid, "overflow")) {
-          await sendPush(
-            tokens,
-            "⚠ Overflow Protection",
-            `Max runtime exceeded. Tank: ${waterLevel}%. Check tank and sensor.`,
-            "overflow"
-          );
-          await recordSent(db(), uid, "overflow");
-        }
-      }
 
       // 3. Low tank level
       if (waterLevel <= threshold && (config.lowLevelAlert ?? true)) {
@@ -208,6 +176,43 @@ export const onDeviceUpdated = onValueWritten(
           );
           await recordSent(db(), uid, "pumpStarted");
         }
+      }
+    }
+  }
+);
+
+export const onDeviceEventCreated = onValueCreated(
+  {
+    ref: "/devices/{deviceId}/events/{eventId}",
+    region: "asia-southeast1",
+  },
+  async (event) => {
+    const eventData = event.data.val();
+    if (!eventData) return;
+
+    const deviceId = event.params.deviceId;
+    const code = eventData.code;
+
+    if (code !== "DRY_RUN" && code !== "OVERFLOW" && code !== "COUNTDOWN_FINISHED") {
+      return;
+    }
+
+    const configs = await getActiveNotificationConfigs();
+    if (!configs.length) return;
+
+    for (const { uid, config } of configs) {
+      const userDevicesSnap = await db().ref(`users/${uid}/devices/${deviceId}`).get();
+      if (!userDevicesSnap.exists()) continue;
+
+      const tokens = getFcmTokens(config);
+      if (tokens.length === 0) continue;
+
+      if (code === "DRY_RUN" && (config.dryRunAlert ?? true)) {
+        await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", "dryRun");
+      } else if (code === "OVERFLOW" && (config.overflowAlert ?? true)) {
+        await sendPush(tokens, "⚠ Overflow Protection", "Max runtime exceeded. Check tank and sensor.", "overflow");
+      } else if (code === "COUNTDOWN_FINISHED") {
+        await sendPush(tokens, "⏱️ Countdown Finished", "The pump countdown has completed.", "countdown");
       }
     }
   }

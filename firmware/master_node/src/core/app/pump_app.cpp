@@ -4,21 +4,38 @@
 #include "../../safety/safety_pump.h"
 #include "../../utils/time_utils.h"
 #include "../../config/config.h"
+#include "../../cloud/cloud_manager.h"
 
-void PumpApp::checkCountdownExpiry() {
-  if (!isCountdownActive || pumpMode != "COUNTDOWN") return;
-  uint32_t now = millis();
-  if (countdownEndMs != 0 && millisDeadlineReached(now, countdownEndMs)) {
-    LOG(APP_LOG_LEVEL_INFO, "COUNTDOWN", "Timer expired. Pump stopped. Mode stays COUNTDOWN.");
+/**
+ * @brief Transitions the system into a safe error-fallback state.
+ *
+ * Stops the pump, cancels any active countdown, reverts the mode to MANUAL OFF,
+ * and synchronizes the fallback state to the cloud.
+ */
+void PumpApp::enterErrorFallback() {
+  setPump(false);
+  if (isCountdownActive) {
     isCountdownActive = false;
-    countdownEndMs    = 0;
-    // Keep COUNTDOWN mode active; user must explicitly start a new timer.
+    countdownEndMs = 0;
+  }
+  if (pumpMode != "MANUAL" || manualDesired) {
+    pumpMode = "MANUAL";
+    manualDesired = false;
+    CloudManager::setErrorFallbackDesiredState();
   }
 }
 
+/**
+ * @brief Executes the core pump control state machine.
+ *
+ * Evaluates safety gates in strict priority order, determines the active run
+ * mode, and actuates the pump relay accordingly. Called once per loop iteration.
+ */
 void PumpApp::executeLogic() {
-  // Suspend control decisions until the first valid level sample.
-  if (waterLevelPct < 0) return;
+  // Suspend control decisions until the first valid level sample, UNLESS the sensor is bypassed.
+  if (waterLevelPct < 0 && !cfgBypassLevelSensor) {
+    return;
+  }
 
   isManualRun = (pumpMode == "MANUAL");
 
@@ -26,7 +43,7 @@ void PumpApp::executeLogic() {
   if (emergencyStopLatched) {
     lastFaultCode    = "E_STOP";
     lastFaultMessage = "Emergency stop is latched. Reset stop to resume operation.";
-    setPump(false);
+    enterErrorFallback();
     return;
   }
 
@@ -49,22 +66,14 @@ void PumpApp::executeLogic() {
   if (status.decision == SafetyDecision::STOP_DRYRUN || isDryRunError) {
     lastFaultCode    = "DRY_RUN";
     lastFaultMessage = "Dry-run lockout: low flow while pump was running.";
-    setPump(false);
-    if (isCountdownActive) {
-      isCountdownActive = false; countdownEndMs = 0;
-      // Keep COUNTDOWN mode active; pump remains off until user starts again.
-    }
+    enterErrorFallback();
     return;
   }
   
   if (status.decision == SafetyDecision::STOP_OVERFLOW || isOverflowError) {
     lastFaultCode    = "OVERFLOW";
     lastFaultMessage = "Overflow protection: max runtime exceeded.";
-    setPump(false);
-    if (isCountdownActive) {
-      isCountdownActive = false; countdownEndMs = 0;
-      // Keep COUNTDOWN mode active; pump remains off until user starts again.
-    }
+    enterErrorFallback();
     return;
   }
 
@@ -114,15 +123,11 @@ void PumpApp::executeLogic() {
     // Common safety checks for MANUAL and COUNTDOWN
     if (!cfgBypassLevelSensor && !allowStartFromSensors) {
       if (isRunning || pumpMode == "COUNTDOWN") {
+        LOG_CLOUD(APP_LOG_LEVEL_ERROR, LogCategory::NETWORK, EventCode::EVT_RS485_TIMEOUT, "No fresh/stable level data. Pump stopped (failsafe).");
         lastFaultCode = (!remoteSensorStable || !levelFreshOk) ? "COMM_LOSS" : "STALE_LEVEL";
         lastFaultMessage = "No fresh/stable level data. Pump stopped (failsafe).";
       }
-      if (isRunning) {
-        setPump(false);
-      }
-      if (pumpMode == "COUNTDOWN") {
-        isCountdownActive = false; countdownEndMs = 0;
-      }
+      enterErrorFallback();
       return;
     }
 
@@ -132,12 +137,7 @@ void PumpApp::executeLogic() {
         lastFaultCode    = "LEVEL_SENSOR";
         lastFaultMessage = "Level sensor offline: pump stopped (fail-safe).";
       }
-      if (isRunning) {
-        setPump(false);
-      }
-      if (pumpMode == "COUNTDOWN") {
-        isCountdownActive = false; countdownEndMs = 0;
-      }
+      enterErrorFallback();
       return;
     }
 
@@ -145,7 +145,8 @@ void PumpApp::executeLogic() {
       LOG(APP_LOG_LEVEL_INFO, pumpMode.c_str(), "Tank full (%d%%). Stopping pump.", waterLevelPct);
       setPump(false);
       if (pumpMode == "COUNTDOWN") {
-        isCountdownActive = false; countdownEndMs = 0;
+        isCountdownActive = false;
+        countdownEndMs = 0;
       }
       return;
     }
@@ -174,10 +175,15 @@ void PumpApp::executeLogic() {
   // HARD SAFETY: stale or unstable comm => pump OFF and block start.
   if (!allowStartFromSensors) {
     if (isRunning) {
-      LOG(APP_LOG_LEVEL_ERROR, "AUTO", "No fresh/stable level data — stopping pump (fail-safe).");
+      LOG_CLOUD(APP_LOG_LEVEL_ERROR, LogCategory::NETWORK, EventCode::EVT_RS485_TIMEOUT, "No fresh/stable level data - stopping pump (fail-safe).");
       lastFaultCode = (!remoteSensorStable || !levelFreshOk) ? "COMM_LOSS" : "STALE_LEVEL";
       lastFaultMessage = "No fresh/stable level data: controller stopped pump (failsafe).";
       setPump(false);
+    }
+    if (pumpMode != "MANUAL" || manualDesired) {
+      pumpMode = "MANUAL";
+      manualDesired = false;
+      CloudManager::setErrorFallbackDesiredState();
     }
     return;
   }

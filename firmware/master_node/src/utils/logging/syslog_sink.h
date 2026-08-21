@@ -1,3 +1,7 @@
+/**
+ * @file syslog_sink.h
+ * @brief UDP Syslog logging sink.
+ */
 #pragma once
 #include "log_sink.h"
 #include <WiFi.h>
@@ -14,18 +18,21 @@
 #define SMARTFLOW_HAS_SYSLOG 0
 #endif
 
+/**
+ * @brief Log sink that outputs via UDP Syslog.
+ */
 class SyslogSink : public LogSink {
 private:
-    WiFiUDP udpClient;
+  WiFiUDP udpClient;
 #if SMARTFLOW_HAS_SYSLOG
-    Syslog* syslog;
+  Syslog* syslog;
 #endif
-    String logBuffer;
+  String logBuffer;
 
 public:
-    SyslogSink(const char* server, uint16_t port, const char* hostname, const char* appName);
-    ~SyslogSink();
+  SyslogSink(const char* server, uint16_t port, const char* hostname, const char* appName);
+  ~SyslogSink();
 
-    virtual void begin() override;
-    virtual size_t write(uint8_t c) override;
+  virtual void begin() override;
+  virtual size_t write(uint8_t c) override;
 };

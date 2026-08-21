@@ -20,13 +20,13 @@ Rule:
 
 ```text
 Top (Zone A, HV)
-  [MCB 2P 20A] [Contactor CJX2 + TOR LR2-D13] [PE lug]
+  [MCB 2P 20A] [Contactor CJX2 + RC Snubber + TOR LR2-D13] [PE lug]
 
 Middle (Zone B, transition)
   [Neutral terminal block / bus] [5V adapter]
 
 Bottom (Zone C, LV)
-  [ESP32 DevKit] [Relay module] [MAX485 main transceiver]
+  [ESP32 DevKit] [Relay module] [MAX485 main transceiver] [Smart Reset Button]
 
 Bottom wall glands
   [PG16] Grid in   [PG16] Pump out   [PG9] CAT6 to tank box
@@ -35,7 +35,7 @@ Bottom wall glands
 ## 3) Main Box Wiring Boundaries
 
 Zone A:
-- MCB, contactor, TOR, and all pump-path conductors.
+- MCB, contactor (with RC Snubber on A1/A2), TOR, and all pump-path conductors.
 - Coil trigger path components may terminate near this zone but LV control wires must stay isolated.
 
 Zone B:
