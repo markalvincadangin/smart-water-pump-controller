@@ -1,24 +1,48 @@
-# SmartFlow
+<div align="center">
 
-**Automated controller for a residential deep-well water pump system**, combining high-voltage motor control switchgear with a Firebase Realtime Database backend and a native Android application for live tank telemetry, timer controls, and safety lockouts.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/smartflow-lockup-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/smartflow-lockup-light.png">
+  <img alt="SmartFlow Official Brand Lockup" src="assets/smartflow-lockup-dark.png" width="380">
+</picture>
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-ESP32%20%7C%20ESP8266-orange.svg)](firmware/)
-[![Firmware](https://img.shields.io/badge/Firmware-PlatformIO-yellow.svg)](firmware/)
-[![App](https://img.shields.io/badge/App-Kotlin%20%7C%20Jetpack%20Compose-green.svg)](app/)
-[![Database](https://img.shields.io/badge/Cloud-Firebase%20RTDB-red.svg)](database.rules.json)
+### Residential IoT Deep-Well Pump & Water-Tank Automation System
+
+**Hardware Controller · C++ Firmware (PlatformIO) · Native Android App (Kotlin & Jetpack Compose)**  
+*Field-deployed operating prototype installed in Leon, Iloilo, Philippines*
+
+[![Firmware](https://img.shields.io/badge/Firmware-PlatformIO%20%7C%20C%2B%2B-00599C?style=flat-square&logo=cplusplus&logoColor=white)](firmware/)
+[![Platform](https://img.shields.io/badge/Platform-ESP32%20%7C%20ESP8266-E7352C?style=flat-square&logo=espressif&logoColor=white)](firmware/)
+[![App](https://img.shields.io/badge/App-Kotlin%20%7C%20Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](app/)
+[![Bus](https://img.shields.io/badge/Bus-Wired%20RS--485%20(CRC16)-4B5563?style=flat-square)](hardware/wiring_notes.md)
+[![Database](https://img.shields.io/badge/Database-Firebase%20RTDB-FFCA28?style=flat-square&logo=firebase&logoColor=black)](database.rules.json)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
+[![Case Study](https://img.shields.io/badge/Case_Study-markcadangin.me-0f172a?style=flat-square&logo=googlechrome&logoColor=white)](https://markcadangin.me/projects/smartflow)
+
+<br/>
+
+<a href="#about-the-project">Overview</a> •
+<a href="#how-it-works">Architecture</a> •
+<a href="#three-layer-safety-architecture">Safety Engineering</a> •
+<a href="#features">Features</a> •
+<a href="#technical-specifications">Hardware Specs</a> •
+<a href="#getting-started">Getting Started</a> •
+<a href="#why-i-built-it-this-way">Design Rationale</a> •
+<a href="https://markcadangin.me/projects/smartflow">Live Case Study</a>
+
+</div>
 
 ---
 
 ## About the Project
 
-In rural and suburban areas like Leon, Iloilo, residential water systems frequently rely on deep-well submersible or surface pumps to fill elevated storage tanks. During hot or dry months, the water table drops, leading to pump cavitation and dry-running that can burn out an expensive motor within minutes if left unattended.
+In rural and suburban areas like Leon, Iloilo, residential water systems frequently rely on deep-well submersible or surface pumps to fill elevated storage tanks. During hot or dry months, the local water table drops, leading to pump cavitation and dry-running that can burn out an expensive motor within minutes if left unattended.
 
 I built **SmartFlow** to solve this problem for my family's home setup: an automated two-node controller that manages a 1.5 HP deep-well pump filling a 660-liter overhead storage tank.
 
 The system uses an ultrasonic sensor at the tank and a hall-effect flow sensor at the pipe to track water levels and flow rates in real time. If the pump turns on but water fails to flow within 15 seconds, firmware automatically cuts power and enters a dry-run lockout before the pump can overheat.
 
-**Deployment status:** Field-installed operating prototype at 1 residential site in Leon, Iloilo. Monitored and maintained personally.
+**Deployment status:** Field-installed operating prototype at 1 residential site in Leon, Iloilo. Monitored and maintained personally as an operating prototype, not a commercial product.
 
 ---
 
@@ -49,14 +73,16 @@ The system uses an ultrasonic sensor at the tank and a hall-effect flow sensor a
                                     Physical Manual Bypass Switch
 ```
 
-### Three-Layer Safety Architecture
+---
 
-A primary design requirement was that software should never be the single point of failure:
+## Three-Layer Safety Architecture
+
+A primary design requirement was that software should never be the single point of failure when switching inductive mains power:
 
 1. **Hardware Layer (Always Active)**:
-   - An **LR2-D13 thermal overload relay** sits directly between the contactor and the pump motor. If the motor pulls excessive current (> 8–9A FLA), the bimetallic strip trips mechanically, cutting circuit power regardless of what any microcontroller or cloud server is doing.
+   - An **LR2-D13 thermal overload relay** sits directly between the contactor and the pump motor. If the motor pulls excessive current (> 8–9A FLA), the bimetallic strip trips mechanically, cutting circuit power regardless of microcontroller or cloud state.
    - A **20A miniature circuit breaker (MCB)** provides short-circuit and branch protection.
-   - The relay module driving the contactor coil is wired **normally open** (fail-safe). If the ESP32 loses power or crashes, the contactor coil de-energizes and the pump turns off.
+   - The relay module driving the contactor coil is wired **normally open** (fail-safe). If the ESP32 loses power or resets, the contactor coil de-energizes and the pump turns off.
 
 2. **Firmware Safeguards (Local Autonomy)**:
    - **Dry-run lockout**: When the pump energizes, firmware monitors the flow meter. If flow stays below 0.5 L/min for 15 consecutive seconds, the pump shuts down immediately with a dry-run fault.
@@ -129,8 +155,10 @@ smart-water-pump-controller/
 │   ├── setup/environment-setup.md   # Developer credential and toolchain guide
 │   ├── operations/safety.md         # Commissioning and safety protocol
 │   └── specs/rs485_protocol.md      # RS-485 packet framing and CRC16 specification
-├── archive/                         # Legacy components
-│   └── dashboard/                   # Initial prototype Next.js web dashboard
+├── assets/                          # Official brand lockups and visual assets
+│   ├── smartflow-lockup-dark.png    # High-resolution dark theme brand lockup
+│   ├── smartflow-lockup-light.png   # High-resolution light theme brand lockup
+│   └── smartflow-brandmark.png      # Brand icon asset
 ├── database.rules.json              # Firebase Realtime Database security rules
 └── DEPLOYMENT_SAFETY.md             # Pre-energization verification checklist
 ```
@@ -202,6 +230,15 @@ Before energizing the 220V mains supply, complete the steps outlined in [DEPLOYM
 
 - **Why an Android app instead of a web dashboard?**  
   While the project initially had a Next.js prototype dashboard, an Android app made far more sense for the actual user in the household: it connects via Bluetooth Low Energy to configure Wi-Fi credentials directly, receives push notifications, and is immediately accessible on mobile devices without relying on browser caching or web hosting.
+
+---
+
+## Author & Attribution
+
+Developed by **[Mark Alvin Cadangin](https://markcadangin.me)**  
+3rd-Year BSIT Student majoring in Software Development Technologies at West Visayas State University  
+DOST-SEI Scholar (Batch 2024) · Leon, Iloilo, Philippines  
+Portfolio: [markcadangin.me](https://markcadangin.me) · Email: [markcadangin@gmail.com](mailto:markcadangin@gmail.com)
 
 ---
 
