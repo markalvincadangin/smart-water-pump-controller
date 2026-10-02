@@ -301,8 +301,8 @@ const stale = now - last > 5000;              // ✗
 
 ### Branching Strategy
 
-- **`master`** — Stable production branch. Only receives PRs from `dev` when a release or integration milestone is verified.
-- **`dev`** — Active integration branch. All feature branches and bug fixes branch off and PR into `dev`.
+- **`main`** — Stable production branch. Only receives PRs from `develop` when a release or integration milestone is verified.
+- **`develop`** — Active integration branch. All feature branches and bug fixes branch off and PR into `develop`.
 
 ### Branch Naming
 
