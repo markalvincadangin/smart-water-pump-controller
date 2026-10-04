@@ -357,7 +357,17 @@ Events should contain at least:
 - code
 - message
 
-The canonical event namespace is the firmware/Android `EVT_*` registry. Cloud Functions must consume the same identifiers.
+The canonical event namespace is the firmware `EVT_*` event-code namespace consumed by backend and Android.
+
+Event identity and notification delivery are separate concerns:
+
+- The firmware event code is the stable cross-system identifier.
+- Android `EventRegistry` is a local presentation mapping. It may provide category, local title, log text, and presentation/notification text for events displayed by the app.
+- Android `EventRegistry` does **not** decide whether an FCM push is delivered.
+- Cloud Functions owns push-delivery policy in `functions/src/notificationPolicy.ts`.
+- A canonical firmware event may therefore exist without a push policy. This is intentional.
+- Adding an Android `EventRegistry` entry must never implicitly enable push delivery.
+- Adding a backend notification policy must reference an existing canonical firmware event code rather than inventing an Android-only event identity.
 
 Examples currently represented by the firmware event system include:
 
