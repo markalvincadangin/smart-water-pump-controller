@@ -1,6 +1,6 @@
 # WP-10 N-FIX-08 — Device Identity / Display Name in Push Notifications
 
-**Status:** IMPLEMENTATION COMPLETE — VERIFICATION PENDING  
+**Status:** VERIFIED  
 **Scope:** Cloud Functions notification copy, canonical device display identity, RTDB protection
 
 ## 1. Finding
@@ -67,32 +67,25 @@ Updated `database.rules.json` so device-authenticated firmware writes must prese
 6. 64-character length bound
 7. non-string metadata rejection
 
-## 5. Verification Required
+## 5. Verification Results
 
-Run:
+### Cloud Functions
+- `npm test -- --runInBand` passed (43 / 43 tests passed across all 5 test suites).
+  - `notificationIdentity.test.ts`: all 5 test scenarios passed (valid display name, missing/blank fallback, internal device ID rejection, whitespace/control-character normalization and length bounds, non-string metadata rejection).
+- `npm run build` (`tsc`) compiled cleanly with 0 errors.
 
-```powershell
-cd functions
-npm test -- --runInBand
-npm run build
-```
+### Android
+- `.\gradlew.bat compileDebugSources` passed (BUILD SUCCESSFUL).
+- `.\gradlew.bat testDebugUnitTest --rerun-tasks` passed (39 / 39 tests passed across all 6 test suites with 0 failures, 0 errors, 0 skipped).
 
-Also run the existing Android verification suite because the notification payload/routing contract remains unchanged:
-
-```powershell
-cd ..
-.\gradlew.bat compileDebugSources
-.\gradlew.bat testDebugUnitTest --rerun-tasks
-```
-
-Expected acceptance:
-
+### Acceptance criteria satisfied
 - all existing Cloud Functions tests pass
 - new notification identity tests pass
 - TypeScript build passes
 - Android compilation/tests remain green
 - no notification title/body contains a raw internal device ID
 - missing/blank display name produces `SmartFlow Pump`
+
 
 ## 6. Scope Boundary
 

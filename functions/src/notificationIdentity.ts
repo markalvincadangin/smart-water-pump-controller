@@ -9,8 +9,8 @@ export function resolveDeviceDisplayName(metadata: unknown, deviceId?: string): 
   if (typeof raw !== "string") return DEFAULT_DEVICE_DISPLAY_NAME;
 
   const normalized = raw
-    .replace(/[\u0000-\u001F\u007F]/g, "")
     .replace(/\s+/g, " ")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
     .trim()
     .slice(0, MAX_DEVICE_DISPLAY_NAME_LENGTH);
 
