@@ -204,6 +204,128 @@ Choose a consistent user-facing vocabulary while retaining contract identifiers 
 
 Do not expose internal compatibility terms such as overflow for maximum-runtime protection.
 
+
+## Runtime Visual Evidence
+
+**Evidence source:** user-provided screenshots captured from the running Android application.
+
+The screenshots are treated as runtime UX evidence rather than as a replacement for source inspection. They confirm several source-level findings and expose additional state-presentation issues that are difficult to judge from code alone.
+
+### Evidence A — Device list / Manage Device
+
+The device-list screenshot shows a large amount of unused vertical space below the device card, while the bottom navigation and floating action button occupy a strong visual area. This supports the broader hierarchy/layout review but is not itself a functional defect.
+
+The Manage Device screenshot shows two large explanatory cards for Wi-Fi configuration and ownership transfer. The copy is useful, but the page is information-dense and would benefit from stronger grouping between routine device configuration and high-impact ownership operations.
+
+The ownership transfer area also places a disabled “Start transfer” action directly among active actions. The disabled state is visible, but its reason is not immediately apparent from the button alone. The validation/error explanation should remain close to the action when the user cannot proceed.
+
+### Evidence B — Device Configuration
+
+The configuration screenshot confirms the compact-height/scrollability concern identified as UI-05.
+
+The visible content reaches the Maximum Pump Runtime description near the bottom edge, with the explanatory text visibly clipped by the viewport. This demonstrates that the configuration surface needs adaptive vertical scrolling rather than relying on a fixed-height presentation.
+
+The configuration screen also has a large amount of vertical spacing between controls. Once scrolling is introduced, spacing can be tightened selectively so users can review the complete safety configuration without excessive travel.
+
+The current labels themselves are substantially aligned with the canonical contract after WP-07C:
+
+- Pump Start Level
+- Pump Stop Level
+- Dry-Run Threshold
+- Maximum Pump Runtime
+
+This is an improvement over the previously identified legacy “Max Overflow” wording.
+
+### Evidence C — Main Dashboard
+
+The dashboard screenshot confirms that AUTO is visibly exposed as a normal selectable mode. This elevates UI-01 from a source-level concern to a directly observed runtime issue.
+
+The screenshot also shows a potentially confusing combination of states:
+
+- `Manual` remains visually selected
+- `Switching to Auto...` is displayed
+- `STARTING PUMP...` and `Stopping...` appear as disabled/pending controls
+- `Awaiting device confirmation` is displayed
+
+These elements demonstrate that the command lifecycle is present, but the hierarchy between **desired state**, **pending command**, and **reported physical state** is not yet sufficiently explicit.
+
+## UI-11 — Desired, Pending, and Reported State Need Clearer Visual Separation
+
+**Severity: P1**
+
+Runtime evidence shows that a user can see a selected mode, a mode-transition message, pending command controls, and a device-confirmation message at the same time.
+
+SmartFlow's contract intentionally separates:
+
+1. user intent / desired state,
+2. command pending,
+3. reported device state,
+4. completed or rejected outcome.
+
+The UI should preserve that distinction rather than allowing multiple independent indicators to compete for attention.
+
+### Recommended direction
+
+Use a clear hierarchy:
+
+**Primary state**
+
+- Pump Running
+- Pump Stopped
+- Safety Interlocked
+- Fault
+
+**Secondary device state**
+
+- Manual
+- Countdown — remaining time
+- Connected / Offline / Data stale
+
+**Transient command state**
+
+- Starting pump…
+- Stopping pump…
+- Switching to Countdown…
+- Awaiting device confirmation
+
+The transient state should be visually subordinate to the authoritative reported state until the device confirms the requested change.
+
+A pending command should not imply that the physical pump has already changed state.
+
+### Acceptance criteria
+
+- A pending command never visually masquerades as confirmed physical state.
+- Reported pump state remains the authoritative primary status.
+- Mode transition feedback identifies the requested transition without replacing reported mode.
+- Safety interlock/fault state overrides ordinary pending-command messaging.
+- E-STOP remains independently available according to UI-02.
+- AUTO cannot be presented as a normal validated MVP operation.
+
+## Runtime Evidence Summary
+
+| Evidence | Source-level finding confirmed | New insight |
+|---|---|---|
+| AUTO selector visible | UI-01 | Confirms the MVP boundary is visible to users, not merely present in code |
+| `Switching to Auto...` while Manual remains selected | Command lifecycle review | Desired/pending/reported hierarchy needs stronger visual separation |
+| Disabled starting/stopping controls + confirmation message | WP-07B lifecycle implementation | Pending state needs clearer contextual grouping |
+| Configuration content clipped near bottom | UI-05 | Scroll/height problem is observable on a real compact-height viewport |
+| Tank `--` / `Unavailable` | UI-07 | Unavailable telemetry should remain cause-neutral |
+| Large card-based dashboard surfaces | UI-08 / visual polish | Hierarchy can be simplified after safety/state issues are fixed |
+| Manage Device long explanatory cards | General visual review | Routine and high-impact device-management actions should be more clearly grouped |
+
+## Runtime Evidence Handling
+
+The supplied screenshots are evidence for this audit but are **not recommended as-is for the public repository**. They contain a visible device identifier and should be redacted/cropped before becoming public documentation assets.
+
+For the eventual README/portfolio documentation, use sanitized screenshots with:
+
+- device IDs replaced by non-identifying examples,
+- personal/status information removed where unnecessary,
+- consistent screenshot framing,
+- representative connected and offline states,
+- one configuration example,
+- one command-state example.
+
 ## Visual and Material 3 Assessment
 
 ### Strengths
