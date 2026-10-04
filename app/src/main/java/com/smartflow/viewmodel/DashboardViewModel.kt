@@ -9,6 +9,7 @@ import com.smartflow.domain.DashboardUiState
 import com.smartflow.domain.DeviceConfig
 import com.smartflow.domain.DeviceConfigValidator
 import com.smartflow.domain.CommandState
+import com.smartflow.domain.PendingCommandType
 import com.smartflow.domain.SensorAvailability
 import com.smartflow.domain.ControlAuthority
 import com.smartflow.domain.DataFreshness
@@ -90,6 +91,7 @@ class DashboardViewModel(
             lastFaultMessage = reported.lastFaultMessage,
             lastFaultCode = reported.lastFaultCode,
             events = events,
+            pendingCommandType = pending?.let(::pendingCommandType),
             commandState = outcome ?: deriveCommandState(
                 command = pending,
                 connection = connection,
@@ -136,6 +138,16 @@ class DashboardViewModel(
             }
         }
     }
+
+    private fun pendingCommandType(command: DashboardCommand): PendingCommandType =
+        when (command) {
+            is DashboardCommand.ManualPower -> PendingCommandType.MANUAL_POWER
+            is DashboardCommand.ModeChange -> PendingCommandType.MODE_CHANGE
+            DashboardCommand.CountdownStart -> PendingCommandType.COUNTDOWN_START
+            DashboardCommand.CountdownStop -> PendingCommandType.COUNTDOWN_STOP
+            DashboardCommand.EmergencyStop -> PendingCommandType.EMERGENCY_STOP
+            DashboardCommand.ClearErrors -> PendingCommandType.CLEAR_ERRORS
+        }
 
     private fun submitCommand(
         command: DashboardCommand,
