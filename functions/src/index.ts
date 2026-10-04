@@ -74,7 +74,6 @@ interface NotificationConfig {
   lowLevelThreshold?: number;
   pumpStartedAlert?: boolean;
   maxRuntimeAlert?: boolean; // canonical
-  maxRuntimeAlert?: boolean;
   overflowAlert?: boolean; // legacy read-only fallback during migration
   dndEnabled?: boolean;
   dndStartHour?: number;
