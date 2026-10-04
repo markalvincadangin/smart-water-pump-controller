@@ -2,9 +2,31 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Environment: Verify Setup",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 env_check",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
       "label": "App: Build",
       "type": "shell",
       "command": "pwsh -File .vscode/run_task.ps1 app_build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "App: Check Connection",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 app_check",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -53,6 +75,17 @@
       "label": "Firmware: Build",
       "type": "shell",
       "command": "pwsh -File .vscode/run_task.ps1 firmware_build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      }
+    },
+    {
+      "label": "Firmware: Check Connection",
+      "type": "shell",
+      "command": "pwsh -File .vscode/run_task.ps1 firmware_check",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
