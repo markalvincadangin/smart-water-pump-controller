@@ -162,10 +162,11 @@ class FirebaseCloudStore {
             "users/$uid/notification_prefs/dndEnabled" to prefs.dndEnabled,
             "users/$uid/notification_prefs/dndStartHour" to prefs.dndStartHour,
             "users/$uid/notification_prefs/dndEndHour" to prefs.dndEndHour,
+            "users/$uid/notification_prefs/timezone" to prefs.timezone,
             "users/$uid/notification_prefs/pumpStartedAlert" to prefs.pumpStartedAlert,
             "users/$uid/notification_prefs/lowLevelAlert" to prefs.lowLevelAlert,
             "users/$uid/notification_prefs/dryRunAlert" to prefs.dryRunAlert,
-            "users/$uid/notification_prefs/overflowAlert" to prefs.overflowAlert
+            "users/$uid/notification_prefs/maxRuntimeAlert" to prefs.maxRuntimeAlert
         )
         database.updateChildren(updates).await()
     }
