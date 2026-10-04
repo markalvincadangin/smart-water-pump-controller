@@ -28,8 +28,7 @@ import com.smartflow.presentation.components.PumpStatusCard
 import com.smartflow.presentation.components.TankLevelCard
 import com.smartflow.presentation.components.SmartFlowTopAppBar
 import com.smartflow.viewmodel.DashboardViewModel
-
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import com.smartflow.ui.theme.LocalSpacing
 import kotlinx.coroutines.launch
 
@@ -38,12 +37,11 @@ import kotlinx.coroutines.launch
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onBack: () -> Unit,
+    windowWidthSizeClass: WindowWidthSizeClass,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showConfig by remember { mutableStateOf(false) }
-    val configuration = LocalConfiguration.current
-    val isExpanded = configuration.screenWidthDp >= 600
     val spacing = LocalSpacing.current
 
     val snackbarHostState = com.smartflow.LocalSnackbarHostState.current
@@ -130,7 +128,6 @@ fun DashboardScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Global Status Banner
                 if (uiState.connectionStatus == ConnectionState.DISCONNECTED) {
                     Box(
                         modifier = Modifier
@@ -147,103 +144,37 @@ fun DashboardScreen(
                         )
                     }
                 }
-            
-            // Main Content
-            if (isExpanded) {
-                // Two column layout for wider screens
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(spacing.medium),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.medium)
-                ) {
-                    // Left Column
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(spacing.medium)
-                    ) {
-                        DiagnosticsCard(connectionState = uiState.connectionStatus)
-                        TankLevelCard(waterLevel = uiState.waterLevel)
-                        PumpStatusCard(
-                            pumpState = uiState.pumpState,
-                            operatingMode = uiState.operatingMode,
-                            flowRate = uiState.flowRate,
-                            connectionState = uiState.connectionStatus
+
+                when (windowWidthSizeClass) {
+                    WindowWidthSizeClass.Compact -> {
+                        DashboardSingleColumn(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            spacing = spacing
                         )
                     }
-                    // Right Column
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(spacing.medium)
-                    ) {
-                        ControlPanel(
-                            operatingMode = uiState.operatingMode,
-                            desiredMode = uiState.desiredMode,
-                            pumpState = uiState.pumpState,
-                            connectionState = uiState.connectionStatus,
-                            commandState = uiState.commandState,
-                            pendingCommandType = uiState.pendingCommandType,
-                            lastFaultMessage = uiState.lastFaultMessage,
-                            lastFaultCode = uiState.lastFaultCode,
-                            countdownRemainingSec = uiState.countdownRemainingSec,
-                            countdownDurationMin = uiState.countdownDurationMin,
-                            onModeChanged = { viewModel.setControlMode(it) },
-                            onEmergencyStop = viewModel::triggerEmergencyStop,
-                            onPowerToggle = viewModel::setPumpPower,
-                            onCountdownStart = viewModel::startCountdown,
-                            onCountdownStop = viewModel::stopCountdown,
-                            onClearError = viewModel::clearErrors
+                    WindowWidthSizeClass.Medium,
+                    WindowWidthSizeClass.Expanded -> {
+                        DashboardTwoColumn(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            spacing = spacing
                         )
-                        ActivityPanel(events = uiState.events)
                     }
-                }
-            } else {
-                // Single column layout strictly matching requested hierarchy
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(spacing.medium),
-                    verticalArrangement = Arrangement.spacedBy(spacing.medium)
-                ) {
-                    DiagnosticsCard(connectionState = uiState.connectionStatus)
-
-                    TankLevelCard(waterLevel = uiState.waterLevel)
-
-                    PumpStatusCard(
-                        pumpState = uiState.pumpState,
-                        operatingMode = uiState.operatingMode,
-                        flowRate = uiState.flowRate,
-                        connectionState = uiState.connectionStatus
-                    )
-
-                    ControlPanel(
-                        operatingMode = uiState.operatingMode,
-                        desiredMode = uiState.desiredMode,
-                        pumpState = uiState.pumpState,
-                        connectionState = uiState.connectionStatus,
-                        commandState = uiState.commandState,
-                        pendingCommandType = uiState.pendingCommandType,
-                        lastFaultMessage = uiState.lastFaultMessage,
-                        lastFaultCode = uiState.lastFaultCode,
-                        countdownRemainingSec = uiState.countdownRemainingSec,
-                        countdownDurationMin = uiState.countdownDurationMin,
-                        onModeChanged = { viewModel.setControlMode(it) },
-                        onEmergencyStop = viewModel::triggerEmergencyStop,
-                        onPowerToggle = viewModel::setPumpPower,
-                        onCountdownStart = viewModel::startCountdown,
-                        onCountdownStop = viewModel::stopCountdown,
-                        onClearError = viewModel::clearErrors
-                    )
-
-                    ActivityPanel(events = uiState.events)
+                    else -> {
+                        DashboardSingleColumn(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            spacing = spacing
+                        )
+                    }
                 }
             }
-            } // end Column
 
             if (uiState.connectionStatus == ConnectionState.CONNECTING) {
                 ConnectingOverlay()
             }
-        } // end Box
+        }
 
         if (showConfig) {
             ConfigBottomSheet(
@@ -256,6 +187,103 @@ fun DashboardScreen(
                 onDismissRequest = { showConfig = false }
             )
         }
+    }
+}
+
+@Composable
+private fun DashboardSingleColumn(
+    uiState: com.smartflow.domain.DashboardUiState,
+    viewModel: DashboardViewModel,
+    spacing: com.smartflow.ui.theme.Spacing
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(spacing.medium),
+        verticalArrangement = Arrangement.spacedBy(spacing.medium)
+    ) {
+        DashboardStatusColumn(uiState = uiState, spacing = spacing)
+        DashboardControlsColumn(uiState = uiState, viewModel = viewModel, spacing = spacing)
+    }
+}
+
+@Composable
+private fun DashboardTwoColumn(
+    uiState: com.smartflow.domain.DashboardUiState,
+    viewModel: DashboardViewModel,
+    spacing: com.smartflow.ui.theme.Spacing
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(spacing.medium),
+        horizontalArrangement = Arrangement.spacedBy(spacing.medium)
+    ) {
+        DashboardStatusColumn(
+            uiState = uiState,
+            spacing = spacing,
+            modifier = Modifier.weight(1f)
+        )
+        DashboardControlsColumn(
+            uiState = uiState,
+            viewModel = viewModel,
+            spacing = spacing,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun DashboardStatusColumn(
+    uiState: com.smartflow.domain.DashboardUiState,
+    spacing: com.smartflow.ui.theme.Spacing,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(spacing.medium)
+    ) {
+        DiagnosticsCard(connectionState = uiState.connectionStatus)
+        TankLevelCard(waterLevel = uiState.waterLevel)
+        PumpStatusCard(
+            pumpState = uiState.pumpState,
+            operatingMode = uiState.operatingMode,
+            flowRate = uiState.flowRate,
+            connectionState = uiState.connectionStatus
+        )
+    }
+}
+
+@Composable
+private fun DashboardControlsColumn(
+    uiState: com.smartflow.domain.DashboardUiState,
+    viewModel: DashboardViewModel,
+    spacing: com.smartflow.ui.theme.Spacing,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(spacing.medium)
+    ) {
+        ControlPanel(
+            operatingMode = uiState.operatingMode,
+            desiredMode = uiState.desiredMode,
+            pumpState = uiState.pumpState,
+            connectionState = uiState.connectionStatus,
+            commandState = uiState.commandState,
+            pendingCommandType = uiState.pendingCommandType,
+            lastFaultMessage = uiState.lastFaultMessage,
+            lastFaultCode = uiState.lastFaultCode,
+            countdownRemainingSec = uiState.countdownRemainingSec,
+            countdownDurationMin = uiState.countdownDurationMin,
+            onModeChanged = { viewModel.setControlMode(it) },
+            onEmergencyStop = viewModel::triggerEmergencyStop,
+            onPowerToggle = viewModel::setPumpPower,
+            onCountdownStart = viewModel::startCountdown,
+            onCountdownStop = viewModel::stopCountdown,
+            onClearError = viewModel::clearErrors
+        )
+        ActivityPanel(events = uiState.events)
     }
 }
 
