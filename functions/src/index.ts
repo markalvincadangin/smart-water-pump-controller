@@ -231,7 +231,7 @@ export const onDeviceEventCreated = onValueCreated(
       }
       if (!sent) {
         await releaseThrottle(db(), uid, policy.throttleKey);
-        await releaseEventDelivery(db(), uid, event.params.eventId);
+        await releaseEventDelivery(db(), uid, deviceId, event.params.eventId);
       }
     }
   }

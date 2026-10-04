@@ -105,4 +105,39 @@ export async function claimEventDelivery(
   return result.committed && claimed;
 }
 
+/** Releases a failed throttle claim so an FCM retry is not suppressed. */
+export async function releaseThrottle(
+  db: Database,
+  uid: string,
+  type: NotificationType
+): Promise<void> {
+  await db.ref(`users/${uid}/notification_last_sent`).update({ [type]: 0 });
+}
 
+export async function releaseEventDelivery(
+  db: Database,
+  uid: string,
+  deviceId: string,
+  eventId: string
+): Promise<void> {
+  if (!deviceId || !eventId) return;
+  const safeDeviceId = deviceId.replace(/[.#$]/g, "_").replace(/[\/\[\]]/g, "_");
+  const safeEventId = eventId.replace(/[.#$]/g, "_").replace(/[\/\[\]]/g, "_");
+  await db.ref(`users/${uid}/notification_delivery/${safeDeviceId}/${safeEventId}`).remove();
+}
+
+export function isDndActive(config: NotificationDndConfig, now = new Date()): boolean {
+  if (!config.dndEnabled) return false;
+  const start = config.dndStartHour ?? 22;
+  const end = config.dndEndHour ?? 6;
+  if (start < 0 || start > 23 || end < 0 || end > 23) return false;
+  const timezone = config.timezone || "UTC";
+  let hour: number;
+  try {
+    hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "2-digit", hourCycle: "h23" }).format(now));
+  } catch {
+    hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "UTC", hour: "2-digit", hourCycle: "h23" }).format(now));
+  }
+  if (start === end) return true;
+  return start < end ? hour >= start && hour < end : hour >= start || hour < end;
+}

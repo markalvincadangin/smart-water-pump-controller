@@ -126,9 +126,9 @@ describe("atomic delivery claims", () => {
 
   it("allows a failed event delivery to be retried after releasing its claim", async () => {
     const db = transactionalDb();
-    expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(true);
+    expect(await claimEventDelivery(db, "user1", "device1", "-Oevent123")).toBe(true);
     await releaseEventDelivery(db, "user1", "device1", "-Oevent123");
-    expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(true);
+    expect(await claimEventDelivery(db, "user1", "device1", "-Oevent123")).toBe(true);
   });
 
   it("releases a failed throttle claim", async () => {
