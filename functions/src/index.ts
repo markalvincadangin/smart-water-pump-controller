@@ -11,6 +11,7 @@ import { onValueCreated, onValueWritten } from "firebase-functions/v2/database";
 import { logger } from "firebase-functions";
 import { claimEventDelivery, claimThrottle, isDndActive, releaseEventDelivery, releaseThrottle } from "./notifications";
 import { NOTIFICATION_POLICIES } from "./notificationPolicy";
+import { resolveDeviceDisplayName } from "./notificationIdentity";
 
 export {
   bootstrapDevice,
@@ -143,6 +144,8 @@ export const onDeviceUpdated = onValueWritten(
     if (!after) return;
 
     // Extract data from V2 schema
+    const deviceId = event.params.deviceId;
+    const deviceDisplayName = resolveDeviceDisplayName(after.metadata, deviceId);
     const waterLevel = after.telemetry?.water_level_percent ?? 0;
     const flowRate = after.telemetry?.flow_rate_lpm ?? 0;
     const isRunning = after.shadow?.reported?.is_running ?? false;
@@ -155,7 +158,7 @@ export const onDeviceUpdated = onValueWritten(
 
     for (const { uid, config } of configs) {
       // Check if user owns this device
-      const userDevicesSnap = await db().ref(`users/${uid}/devices/${event.params.deviceId}`).get();
+      const userDevicesSnap = await db().ref(`users/${uid}/devices/${deviceId}`).get();
       if (!userDevicesSnap.exists()) continue;
 
       const threshold = config.lowLevelThreshold ?? 20;
@@ -167,10 +170,10 @@ export const onDeviceUpdated = onValueWritten(
         if (await claimThrottle(db(), uid, "lowLevel")) {
           const sent = await sendPush(
             tokens,
-            `⚠ Low Tank (${waterLevel}%)`,
+            `⚠ Low Tank — ${deviceDisplayName}`,
             `Water at ${waterLevel}% (threshold: ${threshold}%). Pump: ${isRunning ? "Running" : "Stopped"}.`,
             "lowLevel",
-            { deviceId: event.params.deviceId }
+            { deviceId }
           );
           if (!sent) await releaseThrottle(db(), uid, "lowLevel");
         }
@@ -181,7 +184,7 @@ export const onDeviceUpdated = onValueWritten(
         if (await claimThrottle(db(), uid, "pumpStarted")) {
           const sent = await sendPush(
             tokens,
-            "▶ Pump Started",
+            `▶ Pump Started — ${deviceDisplayName}`,
             `Tank: ${waterLevel}%, Flow: ${flowRate.toFixed(1)} LPM`,
             "pumpStarted",
             { deviceId: event.params.deviceId }
@@ -203,6 +206,7 @@ export const onDeviceEventCreated = onValueCreated(
     if (!eventData) return;
 
     const deviceId = event.params.deviceId;
+    const deviceDisplayName = resolveDeviceDisplayName((await db().ref(`devices/${deviceId}/metadata`).get()).val(), deviceId);
     const code = eventData.code;
 
     const policy = NOTIFICATION_POLICIES[code];
@@ -230,7 +234,7 @@ export const onDeviceEventCreated = onValueCreated(
       if (code === "EVT_DRY_RUN_LOCKOUT") {
         sent = await sendPush(
           tokens,
-          "⚠ Dry-Run Lockout",
+          `⚠ Dry-Run Lockout — ${deviceDisplayName}`,
           "No flow detected. Check pump and water source.",
           policy.throttleKey,
           {
@@ -242,7 +246,7 @@ export const onDeviceEventCreated = onValueCreated(
       } else if (code === "EVT_MAX_RUNTIME_EXCEEDED") {
         sent = await sendPush(
           tokens,
-          "⚠ Maximum Runtime Protection",
+          `⚠ Maximum Runtime Protection — ${deviceDisplayName}`,
           "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.",
           policy.throttleKey,
           {
