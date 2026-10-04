@@ -107,6 +107,15 @@ export async function claimEventDelivery(
  * Releases a delivery claim after a failed FCM attempt so a later retry can
  * deliver the notification. Successful deliveries remain idempotently claimed.
  */
+/** Releases a failed throttle claim so an FCM retry is not suppressed. */
+export async function releaseThrottle(
+  db: Database,
+  uid: string,
+  type: NotificationType
+): Promise<void> {
+  await db.ref(`users/${uid}/notification_last_sent`).update({ [type]: 0 });
+}
+
 export async function releaseEventDelivery(
   db: Database,
   uid: string,
