@@ -344,16 +344,19 @@ Events should contain at least:
 - code
 - message
 
-Examples already represented by the firmware event system include:
+The canonical event namespace is the firmware/Android `EVT_*` registry. Cloud Functions must consume the same identifiers.
 
-- pump ON/OFF
-- dry-run warning
-- dry-run lockout
-- dry-run cleared
-- RS-485 timeout
-- countdown finished
+Examples currently represented by the firmware event system include:
 
-The event code is the stable identifier. Android notification titles/messages may change without changing the code.
+- `EVT_DRY_RUN_WARN`
+- `EVT_DRY_RUN_LOCKOUT`
+- `EVT_DRY_RUN_CLEARED`
+- `EVT_MAX_RUNTIME_EXCEEDED`
+- `EVT_FAIL_SAFE_STOP`
+- `EVT_RS485_TIMEOUT`
+- `EVT_RS485_INVALID`
+
+The event code is the stable identifier. Android notification titles/messages may change without changing the code. A separate `COUNTDOWN_FINISHED` event is **not part of the MVP contract**; countdown completion is represented by the reported state transition and desired-state cleanup.
 
 ---
 
