@@ -131,6 +131,6 @@ class FirebaseModelsTest {
         val method = dtoClass.getDeclaredMethod(methodName, *parameterTypes)
         val annotation = method.getAnnotation(PropertyName::class.java)
         assertTrue("Missing @PropertyName on $methodName", annotation != null)
-        assertEquals(expected, annotation.value)
+        assertEquals(expected, annotation?.value)
     }
 }

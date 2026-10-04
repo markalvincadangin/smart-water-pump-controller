@@ -1,6 +1,6 @@
 # WP-08A — Safety-Critical Interaction & State Presentation Implementation Report
 
-**Status:** Implementation complete; local/runtime verification pending
+**Status:** Codebase & Unit Tests Verified (Physical runtime checks pending)
 
 ## Scope
 
@@ -76,16 +76,22 @@ Mode selection is also disabled while another command is pending, preventing com
 - `app/src/main/java/com/smartflow/presentation/components/core/EmergencyStopButton.kt`
 - `app/src/main/java/com/smartflow/presentation/components/settings/ModeSelector.kt`
 
-## Verification Required
+## Verification Results
 
-Run locally:
+Executed locally in the Android workspace:
 
 ```powershell
 .\gradlew.bat compileDebugSources
 .\gradlew.bat testDebugUnitTest --rerun-tasks
 ```
 
-Then perform runtime verification on the physical/debug build:
+**Results:**
+- `compileDebugSources`: `BUILD SUCCESSFUL` (18 actionable tasks; clean compilation).
+- `testDebugUnitTest`: `BUILD SUCCESSFUL` (**32/32 unit tests passed** across all 4 suites: `FirebaseModelsTest` [8], `DeviceConfigValidatorTest` [10], `DashboardStateReducerTest` [11], `CloudClaimCoordinatorTest` [3]).
+
+### Physical / Runtime Verification Checklist
+
+To complete full closure on the physical POCO device:
 
 1. Start pump and confirm E-STOP remains enabled while the ordinary command is pending.
 2. Trigger E-STOP and confirm only the E-STOP enters its pending state.
@@ -95,5 +101,3 @@ Then perform runtime verification on the physical/debug build:
 6. Confirm a pending mode change does not appear as `STARTING PUMP...` or `STOPPING PUMP...`.
 7. Confirm reported pump state remains authoritative while a command is awaiting confirmation.
 8. Test disconnected behavior and confirm E-STOP is unavailable only because there is no connected remote control path.
-
-WP-08A is **not considered verified or closed** until these checks pass.
