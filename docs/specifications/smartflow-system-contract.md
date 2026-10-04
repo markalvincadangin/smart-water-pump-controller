@@ -672,3 +672,8 @@ The following still require independent verification:
 - OTA and provisioning end-to-end behavior
 
 The contract is now the working cross-system authority for WP-06 implementation. Its remaining physical/infrastructure verification items do not block documenting the software contract, but they do block claims of complete system validation.
+
+
+### FCM Token Deprecation
+
+`devices/{deviceId}/fcmTokens` is a legacy path. New Android/backend code must not write or read it. The canonical authority is `users/{uid}/notification_prefs/fcmTokens/{tokenId}`. Existing Android writers are retained only until the Android notification cleanup package migrates them.
