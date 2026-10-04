@@ -1,6 +1,14 @@
 package com.smartflow.presentation
 
 import androidx.compose.foundation.layout.*
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -67,6 +75,44 @@ fun NotificationSettingsScreen(
                 }
             }
             
+            val context = LocalContext.current
+            val notificationsGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(spacing.medium),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Android Notification Permission", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (notificationsGranted) {
+                                "Allowed by Android. SmartFlow can show push notifications."
+                            } else {
+                                "Blocked by Android. Enable notifications in system settings to receive alerts."
+                            },
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    if (!notificationsGranted) {
+                        TextButton(
+                            onClick = {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_APP_NOTIFICATION_SETTINGS,
+                                        Uri.parse("package:" + context.packageName)
+                                    )
+                                )
+                            }
+                        ) { Text("Open Settings") }
+                    }
+                }
+            }
+
             Text("Do Not Disturb", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = spacing.small, top = spacing.small))
 
             Card(
