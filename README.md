@@ -1,207 +1,268 @@
-# SmartFlow
+<div align="center">
 
-**A field-deployed IoT controller for a residential deep-well pump and water tank.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/smartflow-lockup-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/smartflow-lockup-light.png">
+  <img alt="SmartFlow Official Brand Lockup" src="assets/smartflow-lockup-dark.png" width="380">
+</picture>
 
-[![License](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
-[![Android](https://img.shields.io/badge/client-native%20Android-3DDC84)](app/)
-[![Firmware](https://img.shields.io/badge/firmware-ESP32%20%2B%20ESP8266-00979D)](firmware/README.md)
+### Residential IoT Deep-Well Pump & Water-Tank Automation System
 
-SmartFlow is a personal project I designed, built, and installed to automate the water-pump system at my home in Iloilo, Philippines. It combines a two-node embedded system, a long-distance RS-485 sensor link, layered pump protection, Firebase services, and a native Android application.
+**Hardware Controller · C++ Firmware (PlatformIO) · Native Android App (Kotlin & Jetpack Compose)**  
+*Field-deployed operating prototype installed in Leon, Iloilo, Philippines*
 
-The system is an operating **field-deployed prototype**, not a commercially certified controller. I developed the hardware integration, firmware, Android app, cloud backend, safety logic, documentation, testing, and installation as a single end-to-end project.
+[![Firmware](https://img.shields.io/badge/Firmware-PlatformIO%20%7C%20C%2B%2B-00599C?style=flat-square&logo=cplusplus&logoColor=white)](firmware/)
+[![Platform](https://img.shields.io/badge/Platform-ESP32%20%7C%20ESP8266-E7352C?style=flat-square&logo=espressif&logoColor=white)](firmware/)
+[![App](https://img.shields.io/badge/App-Kotlin%20%7C%20Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](app/)
+[![Bus](https://img.shields.io/badge/Bus-Wired%20RS--485%20(CRC16)-4B5563?style=flat-square)](hardware/wiring_notes.md)
+[![Database](https://img.shields.io/badge/Database-Firebase%20RTDB-FFCA28?style=flat-square&logo=firebase&logoColor=black)](database.rules.json)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
+[![Case Study](https://img.shields.io/badge/Case_Study-markcadangin.me-0f172a?style=flat-square&logo=googlechrome&logoColor=white)](https://markcadangin.me/projects/smartflow)
 
-## The problem
+<br/>
 
-Our 1.5 HP deep-well pump fills a 660 L storage tank. Operating it manually meant checking the water level, switching the pump at the right time, and noticing failures such as an empty water source, a bad sensor reading, or an unexpectedly long run.
+<a href="#about-the-project">Overview</a> •
+<a href="#how-it-works">Architecture</a> •
+<a href="#three-layer-safety-architecture">Safety Engineering</a> •
+<a href="#system-specifications--engineering-documentation">Specifications</a> •
+<a href="#features">Features</a> •
+<a href="#technical-specifications">Hardware Specs</a> •
+<a href="#getting-started">Getting Started</a> •
+<a href="#why-i-built-it-this-way">Design Rationale</a> •
+<a href="https://markcadangin.me/projects/smartflow">Live Case Study</a>
 
-I built SmartFlow to make that process observable and controllable while keeping shutdown decisions local. Cloud connectivity adds remote access, but the pump does not depend on the cloud to stop safely.
+</div>
 
-## Prototype in use
+---
 
-<table>
-  <tr>
-    <td width="46%" align="center">
-      <img src="docs/assets/portfolio/prototype-enclosure.jpg" alt="Open SmartFlow prototype enclosure containing the pump contactor, overload relay, circuit protection, ESP32 controller, power supplies, and interface wiring">
-      <br><sub>Field-installed prototype enclosure, shown open for component visibility.</sub>
-    </td>
-    <td width="27%" align="center">
-      <img src="docs/assets/portfolio/android-countdown-control.jpg" alt="SmartFlow Android app showing an active countdown pump run and emergency-stop control">
-      <br><sub>Countdown control with live state and an always-available emergency stop.</sub>
-    </td>
-    <td width="27%" align="center">
-      <img src="docs/assets/portfolio/android-device-provisioning.jpg" alt="SmartFlow Android app screen for scanning and provisioning a nearby device over Bluetooth Low Energy">
-      <br><sub>Native Android provisioning flow for adding a nearby controller.</sub>
-    </td>
-  </tr>
-</table>
+## About the Project
 
-> The enclosure photo documents a personal prototype installation. It is not evidence of electrical certification or a reference panel design. Work on mains-voltage equipment must be performed de-energized and in accordance with local requirements.
+In rural and suburban areas like Leon, Iloilo, residential water systems frequently rely on deep-well submersible or surface pumps to fill elevated storage tanks. During hot or dry months, the local water table drops, leading to pump cavitation and dry-running that can burn out an expensive motor within minutes if left unattended.
 
-## What I built
+I built **SmartFlow** to solve this problem for my family's home setup: an automated two-node controller that manages a 1.5 HP deep-well pump filling a 660-liter overhead storage tank.
 
-- **ESP32 master controller** — runs the pump state machine, enforces local safety rules, drives the contactor relay, stores configuration, and synchronizes with Firebase.
-- **ESP8266 tank node** — samples the waterproof ultrasonic level sensor and flow meter near the tank.
-- **RS-485 field link** — carries framed telemetry over approximately 40 m of cable with sequence numbers, CRC16 validation, freshness checks, and stability gating.
-- **Native Android app** — provides authentication, BLE provisioning, device ownership, real-time telemetry, AUTO/MANUAL/COUNTDOWN control, settings, notifications, diagnostics, and activity history.
-- **Firebase backend** — uses Realtime Database, Authentication, Cloud Functions, Cloud Messaging, and Secret Manager-backed device bootstrap.
-- **Pump-control hardware** — switches the motor through a magnetic contactor and independent thermal overload relay rather than driving the motor directly from a microcontroller relay.
+The system uses an ultrasonic sensor at the tank and a hall-effect flow sensor at the pipe to track water levels and flow rates in real time. If the pump turns on but water fails to flow within 15 seconds, firmware automatically cuts power and enters a dry-run lockout before the pump can overheat.
 
-## System architecture
+**Deployment status:** Field-installed operating prototype at 1 residential site in Leon, Iloilo. Monitored and maintained personally as an operating prototype, not a commercial product.
 
-```text
-                    RESIDENTIAL INSTALLATION
+---
 
-  Tank                                                  Pump enclosure
-  ┌────────────────────────┐       RS-485 / ~40 m       ┌─────────────────────────┐
-  │ ESP8266 sensor node    │◄──────────────────────────►│ ESP32 master controller │
-  │ • JSN-SR04T level      │   framed data + CRC16      │ • control state machine │
-  │ • YF-G1 flow meter     │                            │ • local safety gates    │
-  └────────────────────────┘                            └────────────┬────────────┘
-                                                                    │ low-voltage relay
-                                                        ┌───────────▼─────────────┐
-                                                        │ Contactor + thermal     │
-                                                        │ overload relay + pump   │
-                                                        └─────────────────────────┘
-                                                                    ▲
-                                                                    │ telemetry/control
-                                                        ┌───────────┴─────────────┐
-                                                        │ Firebase RTDB + Auth +  │
-                                                        │ Cloud Functions + FCM   │
-                                                        └───────────┬─────────────┘
-                                                                    │
-                                                        ┌───────────▼─────────────┐
-                                                        │ Native Android app      │
-                                                        └─────────────────────────┘
+## How It Works
+
+```
+                     OVERHEAD TANK (660L)
+                     ┌───────────────────────────────┐
+                     │ JSN-SR04T Ultrasonic Sensor   │
+                     │ YF-G1 Hall-Effect Flow Meter  │
+                     └───────────────┬───────────────┘
+                                     │
+                     ESP8266 Tank Sensor Node
+                                     │
+                                     │  ~40m CAT6 UTP Cable
+                                     │  RS-485 (MAX485, CRC16)
+                                     │
+                                     ▼
+                     ESP32 Master Controller (IP65 Enclosure)
+                      ├── Relay Module (Active HIGH / Fail-Safe)
+                      ├── Firebase RTDB Sync (every 3s via Wi-Fi)
+                      └── Bluetooth LE (Provisioning Service)
+                                     │
+                                     ▼
+            HIGH-VOLTAGE POWER CHAIN (Independent Hardware Layer)
+            Grid (220V AC) ──► 20A MCB ──► CJX2 Contactor ──► LR2-D13 TOR ──► 1.5 HP Motor
+                                                │
+                                    Physical Manual Bypass Switch
 ```
 
-The controller accepts cloud commands as operator intent, then applies local safety gates before changing the physical output. Loss of Wi-Fi or Firebase does not remove firmware and hardware shutdown protection.
+---
 
-## Engineering challenges
+## Three-Layer Safety Architecture
 
-### Reliable sensing over distance
+A primary design requirement was that software should never be the single point of failure when switching inductive mains power:
 
-The water tank and pump controller are separated by a long cable run. I split the system into a tank-side sensor node and a master controller, then used half-duplex RS-485 instead of sending raw sensor signals across the property. The master rejects malformed, stale, out-of-range, or CRC-invalid frames and requires consecutive valid data before treating the link as stable.
+1. **Hardware Layer (Always Active)**:
+   - An **LR2-D13 thermal overload relay** sits directly between the contactor and the pump motor. If the motor pulls excessive current (> 8–9A FLA), the bimetallic strip trips mechanically, cutting circuit power regardless of microcontroller or cloud state.
+   - A **20A miniature circuit breaker (MCB)** provides short-circuit and branch protection.
+   - The relay module driving the contactor coil is wired **normally open** (fail-safe). If the ESP32 loses power or resets, the contactor coil de-energizes and the pump turns off.
 
-### Failing toward pump OFF
+2. **Firmware Safeguards (Local Autonomy)**:
+   - **Dry-run lockout**: When the pump energizes, firmware monitors the flow meter. If flow stays below 0.5 L/min for 15 consecutive seconds, the pump shuts down immediately with a dry-run fault.
+   - **Runtime ceiling**: Maximum continuous run timer (default 45 minutes) stops the pump to prevent overflow even if the level sensor fails.
+   - **RS-485 link watchdog**: If the master loses communication with the tank sensor node for more than 5 consecutive polling cycles, the pump is held off.
+   - **Local persistence**: Critical state and threshold parameters are persisted in non-volatile storage (NVS), so the system resumes safe operation immediately across power outages without waiting for Wi-Fi.
 
-Pump control is safety-sensitive: ambiguity should not turn or keep the motor on. The firmware blocks starts or stops a running pump when required sensor data becomes stale, and it maintains explicit lockouts for emergency stop, dry-run detection, and maximum runtime. A physical thermal overload relay remains independent of the software.
+3. **Manual Override**:
+   - A physical rotary bypass switch bypasses the relay module and powers the contactor coil directly. This allows emergency pumping or system testing even if both microcontrollers are offline.
 
-### Coordinating local hardware and cloud state
+---
 
-The Android app shows requested and reported state rather than assuming a button press succeeded. Controls wait for authoritative telemetry, and critical operations remain idempotent. Secure provisioning uses a nearby BLE exchange followed by a time-limited, backend-validated ownership claim instead of allowing clients to write ownership records directly.
+## System Specifications & Engineering Documentation
 
-### Operating without reflashing
+SmartFlow follows strict architectural specifications and lifecycle tracking:
 
-Pump thresholds and calibration settings are stored remotely and persisted locally. The controller can continue using its last known configuration when disconnected, while diagnostics expose signal strength, memory, restart reason, sensor health, and communication status for troubleshooting.
+- **[Specification Index](docs/specs/README.md)**: Master architectural and domain specifications.
+- **[Firmware Operational Rules](docs/specs/firmware_operational_rules.md)**: State machine transitions, failsafe logic, and sensor polling timeouts.
+- **[Android Application Behavior](docs/specs/app.md)**: Reactive state synchronization, BLE ownership workflows, and UI requirements.
+- **[RS-485 Framing Protocol](docs/specs/rs485_protocol.md)**: Half-duplex packet framing, CRC16 error detection, and register maps.
+- **[Pre-Energization Verification](DEPLOYMENT_SAFETY.md)**: Hardware grounding, contactor insulation, and thermal overload calibration checklist.
+- **[Security Policy](SECURITY.md)**: Vulnerability disclosure, threat model, and credentials rotation procedures.
+- **[Contributing & Development Guide](CONTRIBUTING.md)**: Branching strategy (`main` / `develop`), local build & test validation commands.
 
-## Safety model
+---
 
-SmartFlow uses several complementary protections:
+## Features
 
-| Layer | Responsibility |
-|-------|----------------|
-| Electrical protection | Circuit protection, magnetic contactor, protective earth, and an independent thermal overload relay |
-| Firmware safeguards | Emergency-stop latch, dry-run lockout, maximum-runtime cutoff, minimum off-time, sensor validation, and communication freshness gating |
-| Application controls | Explicit modes, confirmation feedback, disabled pending actions, warnings, and a continuously reachable emergency stop |
+- **Three Operating Modes**:
+  - **AUTO**: Starts filling when the tank falls below the configurable start threshold (default 20%) and stops when it reaches the target level (default 90%).
+  - **MANUAL**: Direct start and stop control from the Android application or physical enclosure pushbuttons.
+  - **COUNTDOWN**: Runs the pump for a specified user duration with live second-by-second countdown in the app and firmware-side timer enforcement.
+- **Native Android App (`app/`)**:
+  - Built with Kotlin and Jetpack Compose (Material 3).
+  - Bluetooth Low Energy (BLE) setup flow to provision home Wi-Fi credentials to the ESP32 without hardcoding passwords.
+  - Live tank telemetry: percentage level, estimated volume in liters, flow rate in L/min, Wi-Fi RSSI, and controller state.
+  - Runtime parameter tuning: adjust fill thresholds and safety timeouts directly from your phone.
+- **Wired RS-485 Sensor Link**:
+  - 40-meter outdoor CAT6 line connecting the master controller to the tank sensor node.
+  - MAX485 transceivers with CRC16 frame validation to prevent noise interference from nearby pump motor lines.
+- **Event Audit Log**:
+  - Pump start/stop events, fault lockouts, and mode changes sync to Firebase Realtime Database for operational history.
 
-Manual or maintenance bypasses reduce software protection and are intended only for controlled diagnostics. See the [deployment safety checklist](DEPLOYMENT_SAFETY.md) and [canonical firmware rules](docs/specs/firmware_operational_rules.md) for the detailed constraints.
+---
 
-## Operating modes
+## Technical Specifications
 
-- **AUTO** — starts and stops using configurable tank-level thresholds and hysteresis.
-- **MANUAL** — accepts an operator's persistent on/off intent while retaining safety lockouts.
-- **COUNTDOWN** — runs for an explicit duration and reports remaining time.
+| Subsystem | Component / Technology | Details |
+|---|---|---|
+| **Master Node** | ESP32 DevKit V1 (38-pin) | PlatformIO, C++, FreeRTOS non-blocking loop |
+| **Sensor Node** | NodeMCU V2 (ESP8266) | PlatformIO, C++, UART-to-RS485 sensor bridge |
+| **Inter-Node Bus** | RS-485 via MAX485 Transceivers | Half-duplex, 9600 baud, CRC16 checksums, ~40m CAT6 UTP |
+| **Mobile Client** | Android Application (`app/`) | Kotlin, Jetpack Compose, RxAndroidBle3, Coroutines |
+| **Cloud Functions** | Node.js 22, TypeScript | FCM push notifications, device bootstrapping, authorization |
+| **Cloud Backend** | Firebase Realtime Database | Real-time state sync, rules-based authorization |
+| **Motor Contactor** | CJX2-2510 (220V AC coil) | Switches 220V mains to pump motor |
+| **Thermal Protection**| LR2-D13 Thermal Overload Relay | Adjustable 7–10A range, set to 8–9A FLA |
+| **Level Sensor** | JSN-SR04T-2.0 | Waterproof ultrasonic transducer (20–600 cm range) |
+| **Flow Sensor** | YF-G1 | 1-inch hall-effect turbine meter (1–60 L/min) |
+| **Enclosure** | IP65 ABS Weatherproof Box | 30 × 40 × 20 cm with PG cable glands |
 
-All modes remain subject to the emergency stop, dry-run protection, overflow runtime limit, cooldown, and valid-sensor requirements defined by the firmware.
+---
 
-## Technology
+## Repository Structure
 
-| Area | Technology |
-|------|------------|
-| Master firmware | ESP32, C++, Arduino framework, PlatformIO |
-| Sensor firmware | ESP8266/NodeMCU, C++, Arduino framework, PlatformIO |
-| Field communication | Half-duplex RS-485, 115200 8N1, CRC16-Modbus |
-| Mobile application | Kotlin, Jetpack Compose, Material 3, Firebase Android SDK, BLE |
-| Cloud | Firebase Realtime Database, Authentication, Cloud Functions, Cloud Messaging, Secret Manager |
-| Backend runtime | Node.js 22, TypeScript, Firebase Functions v7 |
-| Sensors | JSN-SR04T waterproof ultrasonic sensor, YF-G1 hall-effect flow meter |
-| Motor control | Magnetic contactor and LR2-D13 thermal overload relay |
-
-## Repository map
-
-```text
-smartflow/
-├── app/                 # Native Android application
-├── firmware/
-│   ├── master_node/     # ESP32 controller
-│   └── sensor_node/     # ESP8266 tank sensor
-├── functions/           # Firebase Cloud Functions
-├── hardware/            # Bill of materials and wiring references
-├── docs/
-│   ├── specs/           # Canonical current behavior
-│   ├── operations/      # Deployment and troubleshooting runbooks
-│   ├── adr/             # Architecture decisions
-│   └── archive/         # Historical documentation
-└── specs/               # Spec Kit feature artifacts
+```
+smart-water-pump-controller/
+├── app/                             # Native Android application (Kotlin, Jetpack Compose, Material 3)
+│   ├── src/main/java/com/smartflow/ # UI screens, ViewModels, BLE client, Firebase repositories
+│   ├── build.gradle.kts             # Android build configuration (compileSdk 34)
+│   └── google-services.json.example # Firebase configuration template
+├── firmware/                        # Microcontroller firmware (PlatformIO, C++)
+│   ├── master_node/                 # ESP32 master controller (control loop, safety, RS-485, BLE, Firebase)
+│   │   ├── src/                     # C++ source code & modular logging sinks
+│   │   ├── smartflow_ota.csv        # Custom dual-partition table for OTA firmware flashing
+│   │   └── platformio.ini           # ESP32 environment configuration & pinned libraries
+│   ├── sensor_node/                 # ESP8266 tank sensor node project
+│   │   ├── src/                     # Sensor sampling (ultrasonic & flow pulse counting)
+│   │   └── platformio.ini           # ESP8266 environment configuration
+│   └── README.md                    # Detailed firmware pinouts and calibration notes
+├── functions/                       # Firebase Cloud Functions (Node.js 22, TypeScript)
+│   ├── src/                         # FCM push triggers, device bootstrapping, RTDB security tests
+│   └── package.json                 # Cloud backend dependencies & test runners
+├── hardware/                        # Physical build documentation
+│   ├── bom.md                       # Bill of materials and component ratings
+│   ├── wiring_notes.md              # Wiring schematics and terminal references
+│   └── enclosure_layout.md          # Internal DIN-rail and component arrangement
+├── docs/                            # Specifications and operational runbooks
+│   ├── specs/                       # Formal system specifications (app, firmware, RS-485 protocol)
+│   ├── setup/environment-setup.md   # Developer credential and toolchain guide
+│   └── operations/safety.md         # Commissioning and safety protocol
+├── assets/                          # Official brand lockups, diagrams, and hardware photos
+│   ├── smartflow-lockup-dark.png    # High-resolution dark theme brand lockup
+│   ├── smartflow-lockup-light.png   # High-resolution light theme brand lockup
+│   └── smartflow-brandmark.png      # Brand icon asset
+├── database.rules.json              # Firebase Realtime Database security rules
+└── DEPLOYMENT_SAFETY.md             # Pre-energization verification checklist
 ```
 
-An earlier web-dashboard experiment was retired during development. The native Android app is the supported client represented in this portfolio repository.
+---
 
-## Build and validation
+## Getting Started
 
-### Android app
+### 1. Prerequisites
 
-Requirements: JDK 21, Android SDK, and an `app/google-services.json` for your Firebase project.
+- [PlatformIO Core](https://platformio.org/) or PlatformIO IDE extension for VS Code.
+- [Android Studio Ladybug (or newer)](https://developer.android.com/studio) with Android SDK 34.
+- Java Development Kit (JDK 21 or 17).
+- Node.js 22 for Cloud Functions.
+- A Firebase project with **Realtime Database** and **Anonymous Authentication** enabled.
 
-```powershell
-./gradlew.bat test
-./gradlew.bat assembleDebug
-```
+### 2. Microcontroller Firmware
 
-### Cloud Functions
+1. Navigate to the master controller firmware:
+   ```bash
+   cd firmware/master_node
+   ```
+2. Copy the configuration template and configure your Firebase credentials:
+   ```bash
+   cp src/config/secrets.h.example src/config/secrets.h
+   # Edit secrets.h with your Firebase Database URL and Web API Key
+   ```
+3. Connect the ESP32 DevKit via USB and flash:
+   ```bash
+   pio run -t upload
+   ```
+4. Flash the ESP8266 sensor node:
+   ```bash
+   cd ../sensor_node
+   pio run -t upload
+   ```
+   > *Note:* On the NodeMCU V2, disconnect the MAX485 RX/TX pins while uploading via USB, then reconnect them for operation.
 
-```bash
-cd functions
-npm ci
-npm run build
-npm test
-```
+### 3. Android Application
 
-### Firmware
+1. Download your `google-services.json` from the Firebase Console (Android package: `com.smartflow`).
+2. Place the file at `app/google-services.json`.
+3. Open the project root in Android Studio or compile via command line:
+   ```bash
+   ./gradlew :app:assembleDebug
+   ```
+4. Install the debug APK on an Android device running Android 8.0 (API 26) or higher.
 
-```bash
-pio run -d firmware/master_node
-pio run -d firmware/sensor_node
-```
+---
 
-Firmware can be compiled without the installed pump, but flashing and end-to-end safety validation require the physical controllers and test setup. Never energize mains wiring solely to validate software setup.
+## Safety & Commissioning Checklist
 
-## Documentation
+Before energizing the 220V mains supply, complete the steps outlined in [DEPLOYMENT_SAFETY.md](DEPLOYMENT_SAFETY.md):
 
-- [Current system specifications](docs/specs/README.md)
-- [Android application behavior](docs/specs/app.md)
-- [Firmware architecture](docs/specs/firmware.md)
-- [Firmware operational rules](docs/specs/firmware_operational_rules.md)
-- [RS-485 protocol](docs/specs/rs485_protocol.md)
-- [Bill of materials](hardware/bom.md)
-- [Wiring notes](hardware/wiring_notes.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
+- [ ] Confirm no continuity between 220V Live and Neutral or chassis ground with a multimeter.
+- [ ] Verify Thermal Overload Relay dial is set to match motor nameplate Full Load Amps (8–9A).
+- [ ] Verify earth grounding from enclosure DIN rail to pump casing measures < 1Ω.
+- [ ] Verify voltage divider outputs on sensor pins do not exceed 3.3V logic levels.
+- [ ] Test relay module de-energization: verify contactor drops out when microcontroller power is cut.
 
-## Project status and limitations
+---
 
-SmartFlow is installed and operating at one residential site. Its field behavior is owner-observed, not independently certified or statistically validated across multiple installations. Current limitations include dependence on household Wi-Fi for remote access, hardware-specific calibration, and the need for physical equipment to validate the complete control chain.
+## Why I Built It This Way
 
-Future work may include a cleaner revision of the prototype enclosure, expanded automated integration tests, and longer-term operational metrics.
+- **Why a separate tank node instead of running sensor wires to the pump?**  
+  The elevated water tank is roughly 40 meters away from the pump house and electrical panel. Running raw analog or pulse signals over that distance introduces massive electromagnetic interference from power lines. Using an ESP8266 at the tank as a dedicated digitizer and sending framed, CRC16-validated RS-485 packets ensures rock-solid data integrity over long CAT6 runs.
 
-## Author
+- **Why hardware contactor + thermal overload relay instead of a simple relay module?**  
+  A 1.5 HP motor has an inductive inrush current that will easily weld the contacts of cheap 5V hobby relay boards. SmartFlow uses an industrial CJX2-2510 contactor rated for motor duty, paired with an LR2-D13 thermal overload relay that mechanically trips if the motor draws excessive current.
 
-Designed and developed by **Mark Alvin Cadangin** as a personal end-to-end IoT project.
+- **Why an Android app instead of a web dashboard?**  
+  While the project initially had a Next.js prototype dashboard, an Android app made far more sense for the actual user in the household: it connects via Bluetooth Low Energy to configure Wi-Fi credentials directly, receives push notifications, and is immediately accessible on mobile devices without relying on browser caching or web hosting.
 
-## Copyright and permitted use
+---
 
-Copyright © 2026 Mark Alvin Cadangin. All rights reserved.
+## Author & Attribution
 
-This repository is published for portfolio review and reference only. It is **not open source**, and no permission is granted to use, copy, modify, distribute, deploy, manufacture from, or create derivative works from the original SmartFlow materials without prior written permission. Public GitHub visibility still permits platform-level viewing and forking under GitHub's Terms of Service.
+Developed by **[Mark Alvin Cadangin](https://markcadangin.me)**  
+3rd-Year BSIT Student majoring in Software Development Technologies at West Visayas State University  
+DOST-SEI Scholar (Batch 2024) · Leon, Iloilo, Philippines  
+Portfolio: [markcadangin.me](https://markcadangin.me) · Email: [markcadangin@gmail.com](mailto:markcadangin@gmail.com)
 
-See the [proprietary notice](LICENSE) for details. Third-party libraries and materials remain subject to their respective licenses.
+---
+
+## License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
