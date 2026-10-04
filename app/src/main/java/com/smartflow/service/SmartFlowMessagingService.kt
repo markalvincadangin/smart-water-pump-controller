@@ -38,6 +38,11 @@ class SmartFlowMessagingService : FirebaseMessagingService() {
 
         val launchIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("smartflow_notification", true)
+            payload.deviceId?.let { putExtra("deviceId", it) }
+            payload.eventId?.let { putExtra("eventId", it) }
+            payload.eventCode?.let { putExtra("eventCode", it) }
+            payload.tag?.let { putExtra("tag", it) }
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
