@@ -64,8 +64,6 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 
-private const val NOTIFICATION_CHANNEL_ID = "pump_alerts"
-
 private fun hasEligibleAccount(): Boolean {
     return AccountSession.state(FirebaseAuth.getInstance().currentUser) == DurableAccountState.ELIGIBLE
 }
@@ -103,7 +101,7 @@ class MainActivity : ComponentActivity() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
+                NotificationChannels.PUMP_ALERTS_ID,
                 getString(R.string.notification_channel_pump_alerts_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
@@ -112,8 +110,7 @@ class MainActivity : ComponentActivity() {
                 setShowBadge(true)
             }
 
-            getSystemService(NotificationManager::class.java)
-                .createNotificationChannel(channel)
+            NotificationChannels.create(this)
         }
     }
 
