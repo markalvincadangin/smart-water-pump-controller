@@ -21,6 +21,7 @@ namespace {
   bool prevEmergencyStopLatched = false;
   int prevRemainSec = -1;
   String prevLastFaultMessage = "";
+  String prevLastFaultCode = "";
   String cachedReportedJson = "{}";
 }
 
@@ -147,7 +148,8 @@ String DeviceShadow::getReportedJson() {
       isOverflowError == prevIsOverflowError &&
       emergencyStopLatched == prevEmergencyStopLatched &&
       remainSec == prevRemainSec &&
-      lastFaultMessage == prevLastFaultMessage) {
+      lastFaultMessage == prevLastFaultMessage &&
+      lastFaultCode == prevLastFaultCode) {
     return cachedReportedJson;
   }
 
@@ -158,6 +160,7 @@ String DeviceShadow::getReportedJson() {
   prevEmergencyStopLatched = emergencyStopLatched;
   prevRemainSec = remainSec;
   prevLastFaultMessage = lastFaultMessage;
+  prevLastFaultCode = lastFaultCode;
 
   /*
    * Construct the JSON structure for the reported state.
@@ -170,6 +173,7 @@ String DeviceShadow::getReportedJson() {
    *   "emergency_stop_latched": boolean,  // True if E-STOP is engaged
    *   "countdown_remaining_sec": int,     // Remaining seconds if countdown active, else 0
    *   "last_fault_message": string        // Human-readable fault description
+ *   "last_fault_code": string           // Machine-readable fault code
    * }
    */
   StaticJsonDocument<256> doc;
@@ -180,6 +184,7 @@ String DeviceShadow::getReportedJson() {
   doc["emergency_stop_latched"] = emergencyStopLatched;
   doc["countdown_remaining_sec"] = remainSec;
   doc["last_fault_message"] = lastFaultMessage;
+  doc["last_fault_code"] = lastFaultCode;
     
   String output;
   output.reserve(256);
