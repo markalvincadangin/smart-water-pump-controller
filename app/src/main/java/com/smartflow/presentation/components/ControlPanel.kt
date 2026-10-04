@@ -23,6 +23,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import com.smartflow.domain.CommandState
 import com.smartflow.domain.ConnectionState
+import com.smartflow.domain.DeviceConfigValidator
 import com.smartflow.domain.OperatingMode
 import com.smartflow.domain.PumpState
 import com.smartflow.viewmodel.faultTitle
@@ -46,7 +47,6 @@ fun ControlPanel(
     onCountdownStart: (Int) -> Unit,
     onCountdownStop: () -> Unit,
     onClearError: () -> Unit,
-    maxRuntimeLimitMins: Int = 120,
     countdownRemainingSec: Int = 0,
     countdownDurationMin: Int = 0,
     modifier: Modifier = Modifier
@@ -155,10 +155,13 @@ fun ControlPanel(
                         Text("${countdownDuration.toInt()} min", style = MaterialTheme.typography.labelLarge)
                     }
                     Slider(
-                        value = countdownDuration.coerceAtMost(maxRuntimeLimitMins.toFloat()),
+                        value = countdownDuration.coerceIn(
+                            DeviceConfigValidator.COUNTDOWN_MIN_MINUTES.toFloat(),
+                            DeviceConfigValidator.COUNTDOWN_MAX_MINUTES.toFloat()
+                        ),
                         onValueChange = { countdownDuration = it },
-                        valueRange = 1f..maxRuntimeLimitMins.toFloat(),
-                        steps = (maxRuntimeLimitMins - 1).coerceAtLeast(0),
+                        valueRange = DeviceConfigValidator.COUNTDOWN_MIN_MINUTES.toFloat()..DeviceConfigValidator.COUNTDOWN_MAX_MINUTES.toFloat(),
+                        steps = 118,
                         colors = SliderDefaults.colors(
                             thumbColor = MaterialTheme.colorScheme.primary,
                             activeTrackColor = MaterialTheme.colorScheme.primary
@@ -169,14 +172,17 @@ fun ControlPanel(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Minimum 1 min", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Maximum $maxRuntimeLimitMins min", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Maximum ${DeviceConfigValidator.COUNTDOWN_MAX_MINUTES} min", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     CommandButton(
                         text = "START TIMER",
                         commandState = if (isCountdownStartDesired && !isPumpRunning) CommandState.Pending else commandState,
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onCountdownStart(countdownDuration.toInt())
+                            val durationMin = countdownDuration.toInt()
+                            if (DeviceConfigValidator.validateCountdownDuration(durationMin) == null) {
+                                onCountdownStart(durationMin)
+                            }
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     )
