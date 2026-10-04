@@ -185,7 +185,8 @@ Current firmware-emitted fields:
 | `is_overflow_error` | boolean | Current max-runtime/overflow-named fault |
 | `emergency_stop_latched` | boolean | Canonical E-stop state |
 | `countdown_remaining_sec` | integer | Remaining local countdown time |
-| `last_fault_message` | string | Human-readable current fault |\n| `last_fault_code` | string | Machine-readable current fault code; empty when no fault |
+| `last_fault_message` | string | Human-readable current fault |
+| `last_fault_code` | string | Machine-readable current fault code; empty when no fault |
 
 The wider firmware specification also defines additional reported fields such as sensor health, bypass state, runtime diagnostics, and heartbeat metrics. Those fields should be treated as contract fields only after their actual serialization and Android DTO mapping are verified.
 
@@ -409,7 +410,15 @@ Notification semantics must distinguish:
 - informational event
 - cleared/recovery event
 
-The canonical FCM token authority is:\n\n```text\nusers/{uid}/notification_prefs/fcmTokens/{tokenId}\n```\n\nThe device-level `devices/{deviceId}/fcmTokens` path is deprecated and must not be used by new code. Existing readers/writers must be migrated or removed during backend/Android implementation work.\n\nAn FCM token identifies an app installation/device instance for a user; it is not the ownership authority for a SmartFlow pump.
+The canonical FCM token authority is:
+
+```text
+users/{uid}/notification_prefs/fcmTokens/{tokenId}
+```
+
+The device-level `devices/{deviceId}/fcmTokens` path is deprecated and must not be used by new code. Existing readers/writers must be migrated or removed during backend/Android implementation work.
+
+An FCM token identifies an app installation/device instance for a user; it is not the ownership authority for a SmartFlow pump.
 
 ---
 
@@ -520,7 +529,15 @@ Required behavior:
 7. A higher-priority safety event may terminate the countdown early.
 8. Android learns the final state from reported state/events.
 
-The countdown duration boundary is **1–120 minutes** unless a future validated configuration changes this contract.\n\n### Countdown expiry semantics\n\nCountdown completion is a **state-transition-only MVP behavior**. The ESP32 must stop the pump, clear the countdown desired state, and transition the desired operating state toward `MANUAL`/OFF. The MVP does not require a dedicated `COUNTDOWN_FINISHED` event or push notification.\n\n### Concurrent countdown requests\n\nIf a new countdown start request arrives while a countdown is already active, the controller must not silently restart or extend the active timer. The MVP behavior is to require the active countdown to finish/stop before accepting a new countdown start. Changing `countdown_duration_min` alone does not restart an active countdown.
+The countdown duration boundary is **1–120 minutes** unless a future validated configuration changes this contract.
+
+### Countdown expiry semantics
+
+Countdown completion is a **state-transition-only MVP behavior**. The ESP32 must stop the pump, clear the countdown desired state, and transition the desired operating state toward `MANUAL`/OFF. The MVP does not require a dedicated `COUNTDOWN_FINISHED` event or push notification.
+
+### Concurrent countdown requests
+
+If a new countdown start request arrives while a countdown is already active, the controller must not silently restart or extend the active timer. The MVP behavior is to require the active countdown to finish/stop before accepting a new countdown start. Changing `countdown_duration_min` alone does not restart an active countdown.
 
 ---
 
@@ -579,7 +596,23 @@ The system must not silently clear a safety fault merely because connectivity re
 
 ---
 
-## 19. Firebase Validation and Backend Contract\n\nFirebase RTDB rules provide defense in depth and must validate safety-sensitive client inputs in addition to authorization. Firmware remains the final safety authority.\n\nAt minimum, rules/backend validation must enforce:\n\n- `pump_start_level_pct` is 0–100\n- `pump_stop_level_pct` is 0–100 and greater than `pump_start_level_pct`\n- dry-run threshold is within the firmware-supported range\n- maximum runtime is within the firmware-supported range\n- `countdown_duration_min` is 1–120 when supplied for a countdown request\n- desired `mode` uses an allowed value\n- expected primitive types are respected\n\nInvalid values must be rejected rather than silently clamped or accepted.\n\n## 20. Known Repository Mismatches Requiring Follow-up
+## 19. Firebase Validation and Backend Contract
+
+Firebase RTDB rules provide defense in depth and must validate safety-sensitive client inputs in addition to authorization. Firmware remains the final safety authority.
+
+At minimum, rules/backend validation must enforce:
+
+- `pump_start_level_pct` is 0–100
+- `pump_stop_level_pct` is 0–100 and greater than `pump_start_level_pct`
+- dry-run threshold is within the firmware-supported range
+- maximum runtime is within the firmware-supported range
+- `countdown_duration_min` is 1–120 when supplied for a countdown request
+- desired `mode` uses an allowed value
+- expected primitive types are respected
+
+Invalid values must be rejected rather than silently clamped or accepted.
+
+## 20. Known Repository Mismatches Requiring Follow-up
 
 This contract intentionally records mismatches instead of hiding them.
 
