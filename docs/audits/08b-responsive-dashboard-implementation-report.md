@@ -1,6 +1,6 @@
 # WP-08B — Responsive Dashboard Layout Implementation Report
 
-**Status:** Implementation complete; local/runtime verification pending  
+**Status:** Codebase & Unit Tests Verified (Physical runtime checks pending)  
 **Work package:** WP-08B — Responsive Dashboard Layout  
 **Branch:** `docs/smartflow-system-contract`
 
@@ -69,16 +69,24 @@ This keeps the actual dashboard components identical across compact and wide lay
 - `app/src/main/java/com/smartflow/MainActivity.kt`
 - `app/src/main/java/com/smartflow/presentation/DashboardScreen.kt`
 
-## 4. Verification required
+## 4. Verification Results
 
-Run:
+### 4.1 Local Build & Unit Tests
+
+Executed locally in the Android workspace:
 
 ```powershell
 .\gradlew.bat compileDebugSources
 .\gradlew.bat testDebugUnitTest --rerun-tasks
 ```
 
-Then deploy the debug build and verify at minimum:
+**Results:**
+- `compileDebugSources`: `BUILD SUCCESSFUL` (18 actionable tasks; clean compilation).
+- `testDebugUnitTest`: `BUILD SUCCESSFUL` (**32/32 unit tests passed** across all 4 suites: `FirebaseModelsTest` [8], `DeviceConfigValidatorTest` [10], `DashboardStateReducerTest` [11], `CloudClaimCoordinatorTest` [3]).
+
+### 4.2 Runtime Deployment & Device Verification Checklist
+
+Debug APK was deployed to the connected POCO device (`192.168.1.6:44611`). To complete physical closure:
 
 1. **Compact portrait phone**
    - dashboard remains single-column
