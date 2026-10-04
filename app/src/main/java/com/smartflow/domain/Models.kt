@@ -110,8 +110,8 @@ data class DeviceConfig(
 
 data class DashboardUiState(
     val pumpState: PumpState = PumpState.Offline,
-    val operatingMode: OperatingMode = OperatingMode.AUTO,
-    val desiredMode: OperatingMode = OperatingMode.AUTO,
+    val operatingMode: OperatingMode = OperatingMode.MANUAL,
+    val desiredMode: OperatingMode = OperatingMode.MANUAL,
     val waterLevel: TelemetryValue<Int> = TelemetryValue.Unavailable,
     val flowRate: TelemetryValue<Float> = TelemetryValue.Unavailable,
     val connectionStatus: ConnectionState = ConnectionState.CONNECTING,
