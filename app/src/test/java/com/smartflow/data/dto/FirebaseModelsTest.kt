@@ -24,14 +24,14 @@ class FirebaseModelsTest {
 
     @Test
     fun deviceConfigDtoUsesCanonicalFirebaseFieldNames() {
-        assertPropertyName("getPumpStartLevelPct", "pump_start_level_pct")
-        assertPropertyName("setPumpStartLevelPct", "pump_start_level_pct", Int::class.java)
-        assertPropertyName("getPumpStopLevelPct", "pump_stop_level_pct")
-        assertPropertyName("setPumpStopLevelPct", "pump_stop_level_pct", Int::class.java)
-        assertPropertyName("getDryRunThresholdLpm", "dry_run_threshold_lpm")
-        assertPropertyName("setDryRunThresholdLpm", "dry_run_threshold_lpm", Float::class.java)
-        assertPropertyName("getMaxPumpRuntimeMin", "max_pump_runtime_min")
-        assertPropertyName("setMaxPumpRuntimeMin", "max_pump_runtime_min", Int::class.java)
+        assertPropertyName(DeviceConfigDto::class.java, "getPumpStartLevelPct", "pump_start_level_pct")
+        assertPropertyName(DeviceConfigDto::class.java, "setPumpStartLevelPct", "pump_start_level_pct", Int::class.java)
+        assertPropertyName(DeviceConfigDto::class.java, "getPumpStopLevelPct", "pump_stop_level_pct")
+        assertPropertyName(DeviceConfigDto::class.java, "setPumpStopLevelPct", "pump_stop_level_pct", Int::class.java)
+        assertPropertyName(DeviceConfigDto::class.java, "getDryRunThresholdLpm", "dry_run_threshold_lpm")
+        assertPropertyName(DeviceConfigDto::class.java, "setDryRunThresholdLpm", "dry_run_threshold_lpm", Float::class.java)
+        assertPropertyName(DeviceConfigDto::class.java, "getMaxPumpRuntimeMin", "max_pump_runtime_min")
+        assertPropertyName(DeviceConfigDto::class.java, "setMaxPumpRuntimeMin", "max_pump_runtime_min", Int::class.java)
     }
 
     @Test
@@ -53,8 +53,8 @@ class FirebaseModelsTest {
 
     @Test
     fun shadowReportedUsesCanonicalLastFaultCodeFieldName() {
-        assertPropertyName("getLastFaultCode", "last_fault_code")
-        assertPropertyName("setLastFaultCode", "last_fault_code", String::class.java)
+        assertPropertyName(ShadowReportedDto::class.java, "getLastFaultCode", "last_fault_code")
+        assertPropertyName(ShadowReportedDto::class.java, "setLastFaultCode", "last_fault_code", String::class.java)
     }
 
     @Test
@@ -122,8 +122,13 @@ class FirebaseModelsTest {
         assertEquals("", dto.reported.lastFaultCode)
     }
 
-    private fun assertPropertyName(methodName: String, expected: String, vararg parameterTypes: Class<*>) {
-        val method = DeviceConfigDto::class.java.getDeclaredMethod(methodName, *parameterTypes)
+    private fun assertPropertyName(
+        dtoClass: Class<*>,
+        methodName: String,
+        expected: String,
+        vararg parameterTypes: Class<*>
+    ) {
+        val method = dtoClass.getDeclaredMethod(methodName, *parameterTypes)
         val annotation = method.getAnnotation(PropertyName::class.java)
         assertTrue("Missing @PropertyName on $methodName", annotation != null)
         assertEquals(expected, annotation.value)
