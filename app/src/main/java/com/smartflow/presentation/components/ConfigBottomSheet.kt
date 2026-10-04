@@ -25,9 +25,9 @@ fun ConfigBottomSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
-    var lowLevel by remember { mutableFloatStateOf(currentConfig.lowLevelThreshold.toFloat()) }
-    var dryRun by remember { mutableFloatStateOf(currentConfig.dryRunThresholdLmin) }
-    var maxOverflow by remember { mutableFloatStateOf(currentConfig.maxOverflowTimeoutMins.toFloat()) }
+    var lowLevel by remember { mutableFloatStateOf(currentConfig.pumpStartLevelPct.toFloat()) }
+    var dryRun by remember { mutableFloatStateOf(currentConfig.dryRunThresholdLpm) }
+    var maxOverflow by remember { mutableFloatStateOf(currentConfig.maxPumpRuntimeMin.toFloat()) }
     var localBypassLevel by remember { mutableStateOf(bypassLevel) }
     var localBypassFlow by remember { mutableStateOf(bypassFlow) }
 
@@ -220,9 +220,10 @@ fun ConfigBottomSheet(
                     onClick = {
                         onConfigChanged(
                             DeviceConfig(
-                                lowLevelThreshold = lowLevel.toInt(),
-                                dryRunThresholdLmin = dryRun,
-                                maxOverflowTimeoutMins = maxOverflow.toInt()
+                                pumpStartLevelPct = lowLevel.toInt(),
+                                dryRunThresholdLpm = dryRun,
+                                pumpStopLevelPct = currentConfig.pumpStopLevelPct,
+                                maxPumpRuntimeMin = maxOverflow.toInt()
                             )
                         )
                         onBypassChanged(localBypassLevel, localBypassFlow)
