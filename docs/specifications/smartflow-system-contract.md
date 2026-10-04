@@ -61,6 +61,11 @@ devices/{deviceId}/
 │   ├── ownerUid
 │   └── state
 ├── metadata/
+│   ├── displayName          # optional user-facing name; backend-authoritative
+│   ├── firmwareVersion
+│   ├── hardwareVersion
+│   ├── protocolVersion
+│   └── serialNumber
 ├── pairing/
 │   └── current/
 ├── shadow/
@@ -73,6 +78,14 @@ devices/{deviceId}/
 ├── events/
 └── fcmTokens/        # deprecated; user-level FCM tokens are authoritative
 ```
+
+
+### Device display identity
+
+- metadata.displayName is the optional canonical user-facing device name used by notification delivery.
+- Cloud Functions may read this field when composing notifications, but must fall back to SmartFlow Pump when it is missing, blank, invalid, or equal to the internal device ID.
+- Internal device IDs remain routing data only and must not appear in normal user-facing notification title/body text.
+- The current firmware does not author displayName; device-name management is a trusted backend/app concern.
 
 User navigation data is separate:
 
