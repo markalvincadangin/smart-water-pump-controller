@@ -9,7 +9,8 @@
 import * as admin from "firebase-admin";
 import { onValueCreated, onValueWritten } from "firebase-functions/v2/database";
 import { logger } from "firebase-functions";
-import { canSend, recordSent } from "./notifications";
+import { canSend, isDndActive, recordSent } from "./notifications";
+import { DERIVED_NOTIFICATION_POLICIES, NOTIFICATION_POLICIES } from "./notificationPolicy";
 
 export {
   bootstrapDevice,
@@ -73,7 +74,12 @@ interface NotificationConfig {
   lowLevelThreshold?: number;
   pumpStartedAlert?: boolean;
   maxRuntimeAlert?: boolean; // canonical
-  overflowAlert?: boolean; // legacy alias retained for existing user preferences
+  maxRuntimeAlert?: boolean;
+  overflowAlert?: boolean; // legacy read-only fallback during migration
+  dndEnabled?: boolean;
+  dndStartHour?: number;
+  dndEndHour?: number;
+  timezone?: string;
 }
 
 async function sendPush(
@@ -154,7 +160,7 @@ export const onDeviceUpdated = onValueWritten(
       if (tokens.length === 0) continue;
 
       // 3. Low tank level
-      if (waterLevel <= threshold && (config.lowLevelAlert ?? true)) {
+      if (waterLevel <= threshold && (config.lowLevelAlert ?? true) && !isDndActive(config)) {
         if (await canSend(db(), uid, "lowLevel")) {
           await sendPush(
             tokens,
@@ -167,7 +173,7 @@ export const onDeviceUpdated = onValueWritten(
       }
 
       // 4. Pump just started
-      if ((config.pumpStartedAlert ?? true) && isRunning && !wasRunning) {
+      if ((config.pumpStartedAlert ?? true) && isRunning && !wasRunning && !isDndActive(config)) {
         if (await canSend(db(), uid, "pumpStarted")) {
           await sendPush(
             tokens,
@@ -194,9 +200,8 @@ export const onDeviceEventCreated = onValueCreated(
     const deviceId = event.params.deviceId;
     const code = eventData.code;
 
-    if (code !== "EVT_DRY_RUN_LOCKOUT" && code !== "EVT_MAX_RUNTIME_EXCEEDED") {
-      return;
-    }
+    const policy = NOTIFICATION_POLICIES[code];
+    if (!policy) return;
 
     const configs = await getActiveNotificationConfigs();
     if (!configs.length) return;
@@ -208,11 +213,16 @@ export const onDeviceEventCreated = onValueCreated(
       const tokens = getFcmTokens(config);
       if (tokens.length === 0) continue;
 
-      if (code === "EVT_DRY_RUN_LOCKOUT" && (config.dryRunAlert ?? true)) {
-        await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", "dryRun");
-      } else if (code === "EVT_MAX_RUNTIME_EXCEEDED" && (config.maxRuntimeAlert ?? config.overflowAlert ?? true)) {
-        await sendPush(tokens, "⚠ Maximum Runtime Protection", "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.", "maxRuntime");
+      if (!(config[policy.preferenceKey] ?? true)) continue;
+      if (!policy.dndCritical && isDndActive(config)) continue;
+      if (!(await canSend(db(), uid, policy.throttleKey))) continue;
+
+      if (code === "EVT_DRY_RUN_LOCKOUT") {
+        await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", policy.throttleKey);
+      } else if (code === "EVT_MAX_RUNTIME_EXCEEDED") {
+        await sendPush(tokens, "⚠ Maximum Runtime Protection", "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.", policy.throttleKey);
       }
+      await recordSent(db(), uid, policy.throttleKey);
     }
   }
 );
