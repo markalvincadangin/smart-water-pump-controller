@@ -25,6 +25,7 @@ import com.smartflow.domain.CommandState
 import com.smartflow.domain.ConnectionState
 import com.smartflow.domain.OperatingMode
 import com.smartflow.domain.PumpState
+import com.smartflow.viewmodel.faultTitle
 import com.smartflow.presentation.components.core.CommandButton
 import com.smartflow.presentation.components.core.EmergencyStopButton
 import com.smartflow.presentation.components.settings.ModeSelector
@@ -38,6 +39,7 @@ fun ControlPanel(
     connectionState: ConnectionState,
     commandState: CommandState,
     lastFaultMessage: String,
+    lastFaultCode: String = "",
     onModeChanged: (OperatingMode) -> Unit,
     onEmergencyStop: () -> Unit,
     onPowerToggle: (Boolean) -> Unit,
@@ -184,7 +186,7 @@ fun ControlPanel(
 
         if (lockoutActive && lastFaultMessage.isNotEmpty()) {
             Text(
-                text = "System Fault: $lastFaultMessage",
+                text = "${faultTitle(lastFaultCode)}: $lastFaultMessage",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
