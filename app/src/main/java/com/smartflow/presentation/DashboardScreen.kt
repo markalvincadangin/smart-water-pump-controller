@@ -12,8 +12,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.input.pointer.awaitPointerEvent
+import androidx.compose.ui.input.pointer.awaitPointerEventScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.collectAsState
 import com.smartflow.domain.ConnectionState
 import com.smartflow.domain.OperatingMode
@@ -133,7 +139,11 @@ fun DashboardScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.error)
-                            .padding(spacing.small),
+                            .padding(spacing.small)
+                            .semantics {
+                                liveRegion = LiveRegionMode.Polite
+                                contentDescription = "Device is offline. Data may be stale."
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -295,12 +305,21 @@ fun ConnectingOverlay(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            // Block touches from passing through to underlying UI
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {}
-            ),
+            // Block touches from passing through while exposing the overlay as
+            // status rather than as a meaningless clickable control.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { it.consume() }
+                    }
+                }
+            }
+            .semantics {
+                paneTitle = "Connecting to SmartFlow"
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = "Connecting to SmartFlow. Please wait."
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(
