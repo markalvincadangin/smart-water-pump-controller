@@ -63,15 +63,15 @@ data class DeviceShadow(
 )
 
 data class ShadowDesired(
-    val mode: String = OperatingMode.AUTO.name,
+    val mode: String = OperatingMode.MANUAL.name,
     val manualDesired: Boolean = false,
     val countdownStart: Boolean = false,
     val countdownDurationMin: Int = 0,
     val emergencyStop: Boolean = false,
     val resetStop: Boolean = false,
     val clearError: Boolean = false,
-    val bypassLevelSensor: Boolean = true,
-    val bypassFlowSensor: Boolean = true,
+    val bypassLevelSensor: Boolean = false,
+    val bypassFlowSensor: Boolean = false,
     val rebootDevice: Boolean = false
 )
 
@@ -82,7 +82,8 @@ data class ShadowReported(
     val isError: Boolean = false,
     val isOverflowError: Boolean = false,
     val emergencyStopLatched: Boolean = false,
-    val lastFaultMessage: String = ""
+    val lastFaultMessage: String = "",
+    val lastFaultCode: String = ""
 )
 
 data class Telemetry(
@@ -92,9 +93,10 @@ data class Telemetry(
 )
 
 data class DeviceConfig(
-    val lowLevelThreshold: Int = 20,
-    val dryRunThresholdLmin: Float = 1.0f,
-    val maxOverflowTimeoutMins: Int = 30
+    val pumpStartLevelPct: Int = 30,
+    val pumpStopLevelPct: Int = 100,
+    val dryRunThresholdLpm: Float = 1.0f,
+    val maxPumpRuntimeMin: Int = 120
 )
 
 data class DashboardUiState(
