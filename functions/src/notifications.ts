@@ -11,7 +11,7 @@ export interface LastSent {
   dryRun?: number;
   lowLevel?: number;
   pumpStarted?: number;
-  overflow?: number;
+  maxRuntime?: number;
 }
 
 export type NotificationType = keyof LastSent;
