@@ -1,7 +1,7 @@
 /**
  * Gold Standard: canSend / recordSent notification throttling logic.
  */
-import { canSend, recordSent, THROTTLE_SEC, type LastSent } from "../notifications";
+import { canSend, isDndActive, recordSent, THROTTLE_SEC, type LastSent } from "../notifications";
 import type { Database } from "firebase-admin/database";
 
 function mockDb(initialLastSent: LastSent | null): Database {
@@ -72,5 +72,21 @@ describe("notifications", () => {
     it("is 15 minutes (900 seconds)", () => {
       expect(THROTTLE_SEC).toBe(15 * 60);
     });
+  });
+});
+
+
+describe("DND", () => {
+  it("handles a cross-midnight window in the configured timezone", () => {
+    const config = { dndEnabled: true, dndStartHour: 22, dndEndHour: 6, timezone: "UTC" };
+    expect(isDndActive(config, new Date("2026-10-04T23:00:00Z"))).toBe(true);
+    expect(isDndActive(config, new Date("2026-10-04T05:59:00Z"))).toBe(true);
+    expect(isDndActive(config, new Date("2026-10-04T12:00:00Z"))).toBe(false);
+  });
+  it("treats equal start/end as an all-day DND window", () => {
+    expect(isDndActive({ dndEnabled: true, dndStartHour: 0, dndEndHour: 0, timezone: "UTC" }, new Date("2026-10-04T12:00:00Z"))).toBe(true);
+  });
+  it("falls back to UTC for an invalid timezone", () => {
+    expect(isDndActive({ dndEnabled: true, dndStartHour: 22, dndEndHour: 6, timezone: "Not/AZone" }, new Date("2026-10-04T23:00:00Z"))).toBe(true);
   });
 });
