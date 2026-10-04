@@ -90,7 +90,7 @@ export async function claimEventDelivery(
 ): Promise<boolean> {
   if (!eventId) return false;
 
-  const safeEventId = eventId.replace(/[.#$\[\]/]/g, "_");
+  const safeEventId = eventId.replace(/[.#$]/g, "_").replace(/[\/\[\]]/g, "_");
   const ref = db.ref(`users/${uid}/notification_delivery/${safeEventId}`);
   let claimed = false;
 
@@ -103,10 +103,6 @@ export async function claimEventDelivery(
   return claimed;
 }
 
-/**
- * Releases a delivery claim after a failed FCM attempt so a later retry can
- * deliver the notification. Successful deliveries remain idempotently claimed.
- */
 /** Releases a failed throttle claim so an FCM retry is not suppressed. */
 export async function releaseThrottle(
   db: Database,
