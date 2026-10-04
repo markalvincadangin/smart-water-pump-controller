@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
     private val firebaseAuth = FirebaseAuth.getInstance()
     private val authStateListener = FirebaseAuth.AuthStateListener { user ->
         if (user != null) {
+            prepareNotificationPermissionPrompt()
             FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                 if (!task.isSuccessful) {
                     android.util.Log.w("FCM", "Fetching FCM registration token failed", task.exception)
@@ -177,7 +178,9 @@ class MainActivity : ComponentActivity() {
         deviceRepository = DeviceRepository(cloudStore)
 
         createNotificationChannel()
-        prepareNotificationPermissionPrompt()
+        if (firebaseAuth.currentUser != null) {
+            prepareNotificationPermissionPrompt()
+        }
         notificationRouteState.value = notificationRouteTarget(intent)
         firebaseAuth.addAuthStateListener(authStateListener)
 
