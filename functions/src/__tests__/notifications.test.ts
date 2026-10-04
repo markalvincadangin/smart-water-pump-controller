@@ -1,7 +1,7 @@
 /**
  * Gold Standard: canSend / recordSent notification throttling logic.
  */
-import { canSend, isDndActive, recordSent, THROTTLE_SEC, type LastSent } from "../notifications";
+import { canSend, claimEventDelivery, claimThrottle, isDndActive, recordSent, releaseEventDelivery, releaseThrottle, THROTTLE_SEC, type LastSent } from "../notifications";
 import type { Database } from "firebase-admin/database";
 
 function mockDb(initialLastSent: LastSent | null): Database {
@@ -88,5 +88,53 @@ describe("DND", () => {
   });
   it("falls back to UTC for an invalid timezone", () => {
     expect(isDndActive({ dndEnabled: true, dndStartHour: 22, dndEndHour: 6, timezone: "Not/AZone" }, new Date("2026-10-04T23:00:00Z"))).toBe(true);
+  });
+});
+
+
+describe("atomic delivery claims", () => {
+  function transactionalDb() {
+    const values = new Map<string, unknown>();
+    return {
+      ref: (path: string) => ({
+        transaction: async (update: (current: unknown) => unknown) => {
+          const current = values.get(path);
+          const next = update(current);
+          values.set(path, next);
+          return { committed: true, snapshot: { val: () => next } };
+        },
+        update: async (data: Record<string, unknown>) => {
+          for (const [key, value] of Object.entries(data)) values.set(`${path}/${key}`, value);
+        },
+        remove: async () => values.delete(path),
+        get: async () => ({ val: () => values.get(path) ?? null }),
+      }),
+    } as unknown as Database;
+  }
+
+  it("atomically claims an available throttle slot", async () => {
+    const db = transactionalDb();
+    expect(await claimThrottle(db, "user1", "dryRun")).toBe(true);
+    expect(await claimThrottle(db, "user1", "dryRun")).toBe(false);
+  });
+
+  it("deduplicates the same authoritative event", async () => {
+    const db = transactionalDb();
+    expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(true);
+    expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(false);
+  });
+
+  it("allows a failed event delivery to be retried after releasing its claim", async () => {
+    const db = transactionalDb();
+    expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(true);
+    await releaseEventDelivery(db, "user1", "-Oevent123");
+    expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(true);
+  });
+
+  it("releases a failed throttle claim", async () => {
+    const db = transactionalDb();
+    expect(await claimThrottle(db, "user1", "dryRun")).toBe(true);
+    await releaseThrottle(db, "user1", "dryRun");
+    expect(await claimThrottle(db, "user1", "dryRun")).toBe(true);
   });
 });
