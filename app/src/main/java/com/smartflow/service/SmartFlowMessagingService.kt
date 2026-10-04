@@ -10,28 +10,9 @@ class SmartFlowMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d("FCM", "New token received: $token")
-        
-        // Save the token to RTDB under the user's notification_prefs/fcmTokens
-        val currentUser = FirebaseAuth.getInstance().currentUser
-        if (currentUser != null) {
-            val uid = currentUser.uid
-            val db = FirebaseDatabase.getInstance()
-            val tokensRef = db.getReference("users/$uid/notification_prefs/fcmTokens")
-            // Use hashCode as a simple safe key
-            tokensRef.child(token.hashCode().toString()).setValue(token)
+        Log.d("FCM", "New token received")
 
-            db.getReference("users/$uid/devices").get().addOnSuccessListener { snapshot ->
-                for (child in snapshot.children) {
-                    if (child.getValue(Boolean::class.java) == true) {
-                        val deviceId = child.key
-                        if (deviceId != null) {
-                            db.getReference("devices/$deviceId/fcmTokens/${token.hashCode()}").setValue(token)
-                        }
-                    }
-                }
-            }
-        }
+        FcmTokenRegistrar.registerToken(token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
