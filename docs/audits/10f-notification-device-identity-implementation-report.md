@@ -107,3 +107,5 @@ Implementation commits on `docs/smartflow-system-contract`:
 - `a809d6d` — identity tests
 - `4b46b7e` — RTDB protection
 - `7ad8148` — system-contract update
+- `b84e369` — reject embedded device IDs in resolver
+- `20d83ee` — test embedded device-ID rejection
