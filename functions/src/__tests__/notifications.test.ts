@@ -90,3 +90,18 @@ describe("DND", () => {
     expect(isDndActive({ dndEnabled: true, dndStartHour: 22, dndEndHour: 6, timezone: "Not/AZone" }, new Date("2026-10-04T23:00:00Z"))).toBe(true);
   });
 });
+
+
+describe("DND", () => {
+  it("handles a cross-midnight window", () => {
+    const config = { dndEnabled: true, dndStartHour: 22, dndEndHour: 6, timezone: "UTC" };
+    expect(isDndActive(config, new Date("2026-10-04T23:00:00Z"))).toBe(true);
+    expect(isDndActive(config, new Date("2026-10-04T12:00:00Z"))).toBe(false);
+  });
+  it("supports an all-day window when start equals end", () => {
+    expect(isDndActive({ dndEnabled: true, dndStartHour: 0, dndEndHour: 0, timezone: "UTC" }, new Date("2026-10-04T12:00:00Z"))).toBe(true);
+  });
+  it("falls back to UTC for an invalid timezone", () => {
+    expect(isDndActive({ dndEnabled: true, dndStartHour: 22, dndEndHour: 6, timezone: "Not/AZone" }, new Date("2026-10-04T23:00:00Z"))).toBe(true);
+  });
+});
