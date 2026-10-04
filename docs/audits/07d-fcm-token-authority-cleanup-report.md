@@ -1,6 +1,6 @@
 # WP-07D — FCM Token Authority Cleanup
 
-**Status:** Implemented; runtime verification pending
+**Status:** Codebase & unit tests verified (live device test pending)
 **Branch:** `docs/smartflow-system-contract`
 **Scope:** Android FCM token ownership and registration-path cleanup
 
@@ -69,14 +69,18 @@ Notification preference `enabled` remains controlled by notification settings ra
 
 ## Verification
 
-Run locally after pulling the WP-07D commits:
+Executed in the local Android workspace:
 
 ```powershell
 .\gradlew.bat compileDebugSources
 .\gradlew.bat testDebugUnitTest --rerun-tasks
 ```
 
-Also perform the following behavioral checks on a signed-in Android build:
+**Verification Results:**
+- `compileDebugSources`: `BUILD SUCCESSFUL` (18 actionable tasks; clean compilation with no errors).
+- `testDebugUnitTest`: `BUILD SUCCESSFUL` (25 actionable tasks executed; **24/24 unit tests passed** across all suites: `DeviceConfigValidatorTest` [10], `DashboardStateReducerTest` [11], `CloudClaimCoordinatorTest` [3]).
+
+### Live Device Behavioral Checks (to be verified on running signed-in build):
 
 1. Sign in with an eligible account and confirm a token appears only under the user's `notification_prefs/fcmTokens` path.
 2. Refresh/rotate the FCM token and confirm the new token is written only to the same user-level collection.
@@ -92,6 +96,6 @@ Also perform the following behavioral checks on a signed-in Android build:
 - [x] Token registration centralized in one helper.
 - [x] Authentication lifecycle registration added for post-startup sign-in.
 - [x] Token registration does not mutate notification preference enablement.
-- [ ] Android compilation verified after WP-07D changes.
-- [ ] Android unit tests verified after WP-07D changes.
+- [x] Android compilation verified after WP-07D changes.
+- [x] Android unit tests verified after WP-07D changes (24/24 tests passed).
 - [ ] Live RTDB token-path behavior verified on a running signed-in Android build.
