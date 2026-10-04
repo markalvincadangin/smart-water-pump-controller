@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SmartFlow</string>
+    <string name="notification_channel_pump_alerts_name">Pump Alerts</string>
+    <string name="notification_channel_pump_alerts_description">Safety alerts and important pump activity notifications.</string>
 </resources>
