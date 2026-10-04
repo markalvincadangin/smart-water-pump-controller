@@ -22,6 +22,13 @@ internal sealed interface DashboardCommand {
     data object ClearErrors : DashboardCommand
 }
 
+internal fun mapDesiredMode(mode: String): OperatingMode =
+    when (mode) {
+        "MANUAL" -> OperatingMode.MANUAL
+        "COUNTDOWN" -> OperatingMode.COUNTDOWN
+        else -> OperatingMode.AUTO
+    }
+
 internal fun mapReportedMode(runMode: String, fallback: OperatingMode): OperatingMode =
     when (runMode) {
         "MANUAL", "MANUAL_ON", "MANUAL_OFF", "MANUAL_COOLDOWN" -> OperatingMode.MANUAL
