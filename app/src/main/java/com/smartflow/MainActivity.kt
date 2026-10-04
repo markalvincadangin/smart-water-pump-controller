@@ -10,6 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.messaging.FirebaseMessaging
 import com.polidea.rxandroidble3.RxBleClient
 import com.smartflow.data.BleProvisioningClient
 import com.smartflow.data.DeviceRepository
@@ -29,6 +30,7 @@ import com.smartflow.viewmodel.ProvisioningViewModel
 import com.smartflow.viewmodel.DeviceListViewModel
 import com.smartflow.viewmodel.NotificationsViewModel
 import com.smartflow.viewmodel.NotificationSettingsViewModel
+import com.smartflow.service.FcmTokenRegistrar
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -102,29 +104,15 @@ class MainActivity : ComponentActivity() {
         deviceRepository = DeviceRepository(cloudStore)
 
         askNotificationPermission()
-        
-        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                android.util.Log.w("FCM", "Fetching FCM registration token failed", task.exception)
-                return@addOnCompleteListener
-            }
-            val token = task.result
-            android.util.Log.d("FCM", "FCM token: $token")
-            val user = FirebaseAuth.getInstance().currentUser
-            if (user != null) {
-                val db = com.google.firebase.database.FirebaseDatabase.getInstance()
-                db.getReference("users/${user.uid}/notification_prefs/fcmTokens/${token.hashCode()}").setValue(token)
-                db.getReference("users/${user.uid}/notification_prefs/enabled").setValue(true)
 
-                db.getReference("users/${user.uid}/devices").get().addOnSuccessListener { snapshot ->
-                    for (child in snapshot.children) {
-                        if (child.getValue(Boolean::class.java) == true) {
-                            val deviceId = child.key
-                            if (deviceId != null) {
-                                db.getReference("devices/$deviceId/fcmTokens/${token.hashCode()}").setValue(token)
-                            }
-                        }
+        FirebaseAuth.getInstance().addAuthStateListener { user ->
+            if (user != null) {
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                    if (!task.isSuccessful) {
+                        android.util.Log.w("FCM", "Fetching FCM registration token failed", task.exception)
+                        return@addOnCompleteListener
                     }
+                    FcmTokenRegistrar.registerToken(task.result)
                 }
             }
         }
