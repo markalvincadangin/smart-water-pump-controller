@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.smartflow.domain.CommandState
 import com.smartflow.domain.OperatingMode
+import com.smartflow.domain.PendingCommandType
 import com.smartflow.ui.theme.LocalSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -22,11 +23,12 @@ fun ModeSelector(
     operatingMode: OperatingMode,
     desiredMode: OperatingMode,
     commandState: CommandState,
+    pendingCommandType: PendingCommandType?,
     onModeSelected: (OperatingMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalSpacing.current
-    val isPendingModeSwitch = operatingMode != desiredMode
+    val isPendingModeSwitch = pendingCommandType == PendingCommandType.MODE_CHANGE && operatingMode != desiredMode
 
     Column(modifier = modifier.fillMaxWidth()) {
         SingleChoiceSegmentedButtonRow(
@@ -34,13 +36,13 @@ fun ModeSelector(
                 .fillMaxWidth()
                 .padding(vertical = spacing.small)
         ) {
-            OperatingMode.entries.forEachIndexed { index, mode ->
+            listOf(OperatingMode.MANUAL, OperatingMode.COUNTDOWN).forEachIndexed { index, mode ->
                 SegmentedButton(
                     selected = operatingMode == mode,
                     onClick = { onModeSelected(mode) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = OperatingMode.entries.size)
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = 2)
                 ) {
-                    Text(mode.name.lowercase().replaceFirstChar { it.uppercase() })
+                    Text(if (mode == OperatingMode.COUNTDOWN) "Countdown" else "Manual")
                 }
             }
         }
