@@ -8,22 +8,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.smartflow.domain.CommandState
 import com.smartflow.ui.theme.LocalSpacing
 
 @Composable
 fun EmergencyStopButton(
     text: String,
-    commandState: CommandState,
+    isConnected: Boolean,
+    isPending: Boolean,
+    isLatched: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalSpacing.current
-
-    val isPending = commandState is CommandState.Pending || commandState is CommandState.Accepted
-    val isEnabled = commandState !is CommandState.Pending && 
-                    commandState !is CommandState.Accepted && 
-                    commandState !is CommandState.OfflineBlocked
+    val isEnabled = isConnected && !isPending && !isLatched
 
     Button(
         onClick = onClick,
@@ -47,7 +44,11 @@ fun EmergencyStopButton(
                 )
             }
             Text(
-                text = if (isPending) "Stopping..." else text,
+                text = when {
+                    isPending -> "Stopping..."
+                    isLatched -> "E-STOP ACTIVE"
+                    else -> text
+                },
                 style = MaterialTheme.typography.labelLarge
             )
         }
