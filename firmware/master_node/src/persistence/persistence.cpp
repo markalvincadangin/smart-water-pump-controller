@@ -50,7 +50,7 @@ void loadDeviceConfigFromNVS() {
   }
   if (tankEmptyCm < 5 || tankEmptyCm > 200 || tankFullCm < 1 || tankFullCm >= tankEmptyCm || pumpStartLevel < 0 || pumpStartLevel > 100 || pumpStopLevel < 0 || pumpStopLevel > 100 || pumpStopLevel <= pumpStartLevel
       || dryRunLpm < 0.1f || dryRunLpm > 10.0f || dryRunSec < 10 || dryRunSec > 300
-      || flowCal < 0.1f || flowCal > 20.0f || maxRuntime < 30 || maxRuntime > 480) {
+      || flowCal < 0.1f || flowCal > 20.0f || maxRuntime < 30 || maxRuntime > MAX_PUMP_RUNTIME_MIN) {
     LOG(APP_LOG_LEVEL_INFO, "NVS", "Stored config invalid. Using firmware defaults.");
     return;
   }
