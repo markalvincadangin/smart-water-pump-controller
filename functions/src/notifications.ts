@@ -64,14 +64,19 @@ export async function claimThrottle(
 ): Promise<boolean> {
   const ref = db.ref(`users/${uid}/notification_last_sent/${type}`);
   const now = Math.floor(Date.now() / 1000);
+  let claimed = false;
 
   const result = await ref.transaction((current: unknown) => {
     const lastTime = typeof current === "number" ? current : 0;
-    if (now - lastTime < THROTTLE_SEC) return current;
+    if (now - lastTime < THROTTLE_SEC) {
+      claimed = false;
+      return current;
+    }
+    claimed = true;
     return now;
   });
 
-  return result.committed && result.snapshot.val() === now;
+  return result.committed && claimed;
 }
 
 export async function claimEventDelivery(
@@ -86,14 +91,18 @@ export async function claimEventDelivery(
   const safeEventId = eventId.replace(/[.#$]/g, "_").replace(/[\/\[\]]/g, "_");
   const ref = db.ref(`users/${uid}/notification_delivery/${safeDeviceId}/${safeEventId}`);
   const claimValue = Date.now();
+  let claimed = false;
 
   const result = await ref.transaction((current: unknown) => {
-    if (current != null) return current;
+    if (current != null) {
+      claimed = false;
+      return current;
+    }
+    claimed = true;
     return { claimedAt: claimValue };
   });
 
-  const snapshot = result.snapshot.val();
-  return result.committed && snapshot?.claimedAt === claimValue;
+  return result.committed && claimed;
 }
 
 
