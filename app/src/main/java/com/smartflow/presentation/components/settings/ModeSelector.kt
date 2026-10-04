@@ -29,6 +29,7 @@ fun ModeSelector(
 ) {
     val spacing = LocalSpacing.current
     val isPendingModeSwitch = pendingCommandType == PendingCommandType.MODE_CHANGE && operatingMode != desiredMode
+    val isCommandPending = pendingCommandType != null
 
     Column(modifier = modifier.fillMaxWidth()) {
         SingleChoiceSegmentedButtonRow(
@@ -39,6 +40,7 @@ fun ModeSelector(
             listOf(OperatingMode.MANUAL, OperatingMode.COUNTDOWN).forEachIndexed { index, mode ->
                 SegmentedButton(
                     selected = operatingMode == mode,
+                    enabled = !isCommandPending,
                     onClick = { onModeSelected(mode) },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = 2)
                 ) {
@@ -47,7 +49,14 @@ fun ModeSelector(
             }
         }
 
-        if (isPendingModeSwitch) {
+        if (operatingMode == OperatingMode.AUTO || desiredMode == OperatingMode.AUTO) {
+            Text(
+                text = "Auto mode is not available in the current MVP.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = spacing.small, vertical = spacing.extraSmall)
+            )
+        } else if (isPendingModeSwitch) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = spacing.small, vertical = spacing.extraSmall)
