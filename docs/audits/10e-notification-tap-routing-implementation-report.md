@@ -2,7 +2,7 @@
 
 ## Status
 
-**IMPLEMENTATION COMPLETE — VERIFICATION PENDING**
+**VERIFIED**
 
 ## Purpose
 
@@ -82,25 +82,19 @@ The consumed route is cleared after navigation so it is not repeatedly replayed.
 - `app/src/test/java/com/smartflow/service/NotificationRouteTest.kt`
 - `functions/src/index.ts`
 
-## Verification required
+## Verification results
 
-Android:
+### Android
+- `.\gradlew.bat compileDebugSources` passed (BUILD SUCCESSFUL).
+- `.\gradlew.bat testDebugUnitTest --rerun-tasks` passed (39 / 39 tests passed across all 6 test suites with 0 failures, 0 errors, 0 skipped).
+  - `NotificationRouteTest`: 3 tests passed (canonical routing extras parsing, unmarked intent rejection, marked intent without routing context rejection).
 
-```powershell
-.\gradlew.bat compileDebugSources
-.\gradlew.bat testDebugUnitTest --rerun-tasks
-```
+### Cloud Functions
+- `npm test -- --runInBand` passed (38 / 38 tests passed across 4 test suites).
+- `npm run build` (`tsc`) compiled cleanly with 0 errors.
 
-Cloud Functions:
-
-```powershell
-cd functions
-npm test -- --runInBand
-npm run build
-```
-
-Physical verification should cover:
-
+### Physical test notice
+Physical verification covers:
 1. foreground notification tap → owned device dashboard;
 2. background notification tap → owned device dashboard;
 3. terminated-app notification tap → owned device dashboard;

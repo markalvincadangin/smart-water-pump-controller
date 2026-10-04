@@ -1,6 +1,5 @@
 package com.smartflow.service
 
-import android.content.Intent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -9,15 +8,13 @@ class NotificationRouteTest {
 
     @Test
     fun parsesCanonicalRoutingExtras() {
-        val intent = Intent().apply {
-            putExtra("smartflow_notification", true)
-            putExtra("deviceId", "device-01")
-            putExtra("eventId", "event-01")
-            putExtra("eventCode", "EVT_MAX_RUNTIME_EXCEEDED")
-            putExtra("tag", "maxRuntime")
-        }
-
-        val route = notificationRouteTarget(intent)
+        val route = notificationRouteTarget(
+            isSmartflowNotification = true,
+            deviceId = "device-01",
+            eventId = "event-01",
+            eventCode = "EVT_MAX_RUNTIME_EXCEEDED",
+            tag = "maxRuntime"
+        )
 
         assertEquals("device-01", route?.deviceId)
         assertEquals("event-01", route?.eventId)
@@ -27,15 +24,11 @@ class NotificationRouteTest {
 
     @Test
     fun rejectsUnmarkedIntent() {
-        assertNull(notificationRouteTarget(Intent()))
+        assertNull(notificationRouteTarget(isSmartflowNotification = false))
     }
 
     @Test
     fun rejectsMarkedIntentWithoutRoutingContext() {
-        val intent = Intent().apply {
-            putExtra("smartflow_notification", true)
-        }
-
-        assertNull(notificationRouteTarget(intent))
+        assertNull(notificationRouteTarget(isSmartflowNotification = true))
     }
 }
