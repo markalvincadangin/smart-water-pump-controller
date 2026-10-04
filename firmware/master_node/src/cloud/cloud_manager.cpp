@@ -710,19 +710,21 @@ void CloudManager::readSettings() {
     FirebaseJsonData jd;
 
     json.get(jd, "pump_start_level_pct");
-    if (jd.success)
+    if (jd.success && jd.intValue >= 0 && jd.intValue <= 100)
       cfgPumpStartLevel = jd.intValue;
 
     json.get(jd, "pump_stop_level_pct");
-    if (jd.success)
+    if (jd.success &&
+        jd.intValue >= 0 && jd.intValue <= 100 &&
+        jd.intValue > cfgPumpStartLevel)
       cfgPumpStopLevel = jd.intValue;
 
     json.get(jd, "dry_run_threshold_lpm");
-    if (jd.success)
+    if (jd.success && jd.floatValue >= 0.1f && jd.floatValue <= 10.0f)
       cfgDryRunThresholdLpm = jd.floatValue;
 
     json.get(jd, "max_pump_runtime_min");
-    if (jd.success)
+    if (jd.success && jd.intValue >= 30 && jd.intValue <= MAX_PUMP_RUNTIME_MIN)
       cfgMaxPumpRuntimeMin = jd.intValue;
   }
 }
