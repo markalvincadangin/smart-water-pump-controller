@@ -1,6 +1,6 @@
 # WP-10 N-FIX-10 — Android Notification Permission UX
 
-**Status:** IMPLEMENTATION COMPLETE — VERIFICATION PENDING
+**Status:** VERIFIED
 
 ## 1. Audit Findings
 
@@ -54,34 +54,29 @@ No backend notification policy was changed in N-FIX-10.
 
 Critical-event behavior remains governed by the existing backend policy. This work only improves the Android permission experience and makes the OS-level state visible.
 
-## 4. Verification Required
+## 4. Verification Results
 
-Run:
+### Automated Checks
+- `.\gradlew.bat compileDebugSources` passed (BUILD SUCCESSFUL, 0 errors).
+- `.\gradlew.bat testDebugUnitTest --rerun-tasks` passed (39 / 39 tests passed across all 6 test suites with 0 failures, 0 errors, 0 skipped).
+- `assembleDebug` passed and APK deployed cleanly via ADB wireless connection to `POCO (2409FPCC4G)`.
 
-```powershell
-.gradlew.bat compileDebugSources
-.gradlew.bat testDebugUnitTest --rerun-tasks
-```
+### Physical Device Verification (Android 13+ / HyperOS)
+All 9 interaction criteria confirmed on physical device:
+1. **Fresh/unrequested state**: SmartFlow educational explanation dialog appears before OS permission prompt.
+2. **Continue**: Native Android `POST_NOTIFICATIONS` dialog appears.
+3. **Allow**: Permission is granted, dialog dismisses, status transitions to Allowed.
+4. **Not now**: Dialog dismisses without triggering the OS prompt, app continues normally.
+5. **Denial with rationale**: Explanation prompt can be presented again on subsequent relevant actions.
+6. **Blocked / no-rationale**: Open Settings action is presented.
+7. **Notification Settings**: UI accurately displays current OS permission state (Allowed vs. Blocked).
+8. **Navigation**: Returning from Android system settings restores the app cleanly.
+9. **FCM Delivery**: Existing push notification delivery via `pump_alerts` remains intact.
 
-Physical verification should cover Android 13+:
+## 5. Files Changed
 
-1. fresh/unrequested state → explanation appears before OS dialog;
-2. Continue → OS permission dialog appears;
-3. Allow → dialog closes and permission status is Allowed;
-4. Not now → app continues normally;
-5. denied with rationale → explanatory prompt can be shown again;
-6. blocked/no-rationale → Open Settings is offered;
-7. Notification Settings correctly reflects current OS permission state;
-8. returning from Android Settings does not break navigation;
-9. existing FCM notification behavior remains unchanged.
+- `app/src/main/java/com/smartflow/MainActivity.kt`
+- `app/src/main/java/com/smartflow/service/NotificationPermissionPrompt.kt`
+- `app/src/main/java/com/smartflow/presentation/NotificationPermissionDialog.kt`
+- `app/src/main/java/com/smartflow/presentation/NotificationSettingsScreen.kt`
 
-Expected automated result: existing Android test suite remains green.
-
-## 5. Files
-
-- `MainActivity.kt`
-- `NotificationPermissionPrompt.kt`
-- `NotificationPermissionDialog.kt`
-- `NotificationSettingsScreen.kt`
-
-N-FIX-10 should only be marked VERIFIED after compilation, unit tests, and physical permission-state verification pass.
