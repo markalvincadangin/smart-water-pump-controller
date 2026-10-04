@@ -1,6 +1,6 @@
 # WP-07C — Android Client Validation Implementation Report
 
-**Status:** Implemented; runtime verification pending
+**Status:** Verified
 **Branch:** `docs/smartflow-system-contract`
 **Scope:** Android client validation and canonical configuration UI alignment
 
@@ -63,7 +63,7 @@ These checks improve user feedback but do not replace Firebase Rules or firmware
 
 Updated `app/src/main/java/com/smartflow/presentation/DashboardScreen.kt`.
 
-Removed the obsolete `maxRuntimeLimitMins` parameter from `ControlPanel` now that countdown duration is contract-independent.
+Removed the obsolete `maxRuntimeLimitMins` parameter from `ControlPanel` in both portrait and landscape layouts now that countdown duration is contract-independent.
 
 ### 6. Unit tests
 
@@ -73,14 +73,19 @@ Tests cover default configuration, boundary values, invalid pump levels, stop-le
 
 ## Verification
 
-Run locally after pulling the WP-07C commits:
+Executed in the local Android workspace:
 
 ```powershell
 .\gradlew.bat compileDebugSources
 .\gradlew.bat testDebugUnitTest --rerun-tasks
 ```
 
-The previous WP-07B verification was independently completed with 14/14 unit tests passing. WP-07C itself has not yet been runtime-verified after these changes.
+**Verification Results:**
+- `compileDebugSources`: `BUILD SUCCESSFUL` (Both portrait and landscape `ControlPanel` invocations compiled cleanly).
+- `testDebugUnitTest`: `BUILD SUCCESSFUL` (24/24 unit tests passed across all 3 test suites):
+  - `DeviceConfigValidatorTest`: 10/10 passed
+  - `DashboardStateReducerTest`: 11/11 passed
+  - `CloudClaimCoordinatorTest`: 3/3 passed
 
 ## Scope Boundary
 
@@ -96,5 +101,5 @@ The package is limited to client-side validation and UI/schema alignment. Physic
 - [x] Countdown ViewModel blocks invalid client requests before writing.
 - [x] Configuration ViewModel blocks invalid client configuration before writing.
 - [x] Validation logic is pure and unit-testable.
-- [ ] Android compile verified after WP-07C changes.
-- [ ] Android unit tests verified after WP-07C changes.
+- [x] Android compile verified after WP-07C changes.
+- [x] Android unit tests verified after WP-07C changes (24/24 tests passed).
