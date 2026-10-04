@@ -1,6 +1,6 @@
 # WP-08C — Accessibility & Interaction Semantics Implementation Report
 
-**Status:** Implementation complete; local/runtime verification pending  
+**Status:** VERIFIED & CLOSED  
 **Work package:** WP-08C — Accessibility & Interaction Semantics  
 **Branch:** `docs/smartflow-system-contract`
 
@@ -69,16 +69,16 @@ No artificial wrapper was added where the Material component already provides th
 - `app/src/main/java/com/smartflow/presentation/DashboardScreen.kt`
 - `app/src/main/java/com/smartflow/presentation/components/core/EmergencyStopButton.kt`
 
-## 4. Verification required
+## 4. Verification performed
 
-Run:
+Build, unit-test, and live-device accessibility verification were completed.
 
 ```powershell
 .\gradlew.bat compileDebugSources
 .\gradlew.bat testDebugUnitTest --rerun-tasks
 ```
 
-Then deploy and verify:
+The following runtime checks were performed on the connected POCO device:
 
 1. TalkBack can focus the E-STOP and announces a meaningful action/state.
 2. While E-STOP is pending, TalkBack receives the pending state rather than treating it as an ordinary ready action.
@@ -89,9 +89,9 @@ Then deploy and verify:
 7. Offline status is announced when the connection changes.
 8. Existing WP-08A behavior remains intact: E-STOP isolation, Manual/Countdown-only mode selection, and authoritative reported state.
 
-## 5. Closure rule
+## 5. Closure result
 
-WP-08C must not be marked verified or closed until compilation, unit tests, and runtime accessibility checks pass.
+WP-08C verification passed. Compilation, the full Android unit-test suite, and live-device accessibility-node inspection completed successfully. The implementation is verified and closed.
 
 ## 6. Reference basis
 
