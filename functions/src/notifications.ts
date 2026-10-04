@@ -119,11 +119,13 @@ export async function releaseThrottle(
 export async function releaseEventDelivery(
   db: Database,
   uid: string,
+  deviceId: string,
   eventId: string
 ): Promise<void> {
-  if (!eventId) return;
+  if (!deviceId || !eventId) return;
+  const safeDeviceId = deviceId.replace(/[.#$\[\]/g, "_");
   const safeEventId = eventId.replace(/[.#$\[\]/g, "_");
-  await db.ref(`users/${uid}/notification_delivery/${safeEventId}`).remove();
+  await db.ref(`users/${uid}/notification_delivery/${safeDeviceId}/${safeEventId}`).remove();
 }
 
 
