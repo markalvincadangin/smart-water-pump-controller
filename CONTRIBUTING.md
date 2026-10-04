@@ -1,41 +1,69 @@
-# SmartFlow Development Guide
+# SmartFlow Contributing & Development Guide
 
-SmartFlow is a safety-sensitive personal IoT project maintained by its owner. This guide documents the project's development and validation practices. External code contributions are not currently accepted, and public visibility does not grant permission to modify or redistribute the project.
+Thank you for your interest in SmartFlow! SmartFlow is an automated deep-well pump controller and overhead water tank monitoring system designed for real-world residential reliability and safety.
 
-## Start with the current specifications
+The project is licensed under the [Apache License 2.0](LICENSE). Because SmartFlow directly switches high-voltage inductive mains electricity (220V AC, 1.5 HP motor), all contributions must prioritize electrical and mechanical safety above all else.
 
-- [Specification index](docs/specs/README.md)
-- [Safety constitution](.specify/memory/constitution.md)
-- [Firmware operational rules](docs/specs/firmware_operational_rules.md)
-- [Android app behavior](docs/specs/app.md)
-- [RS-485 protocol](docs/specs/rs485_protocol.md)
+---
 
-Non-trivial changes must follow the Spec Kit lifecycle and use an active feature directory under `specs/`.
+## 1. Specifications & Architecture Documentation
 
-## Components
+Before proposing architectural changes or adding features, familiarize yourself with the formal specifications:
 
-| Component | Path | Stack |
-|-----------|------|-------|
-| Android app | `app/` | Kotlin, Jetpack Compose, Firebase SDK |
-| Master firmware | `firmware/master_node/` | ESP32, C++, Arduino, PlatformIO |
-| Sensor firmware | `firmware/sensor_node/` | ESP8266, C++, Arduino, PlatformIO |
-| Cloud Functions | `functions/` | Node.js 22, TypeScript, Firebase Functions |
+- **[Specification Index](docs/specs/README.md)**: Master architectural map.
+- **[Safety Constitution](.specify/memory/constitution.md)**: Core non-negotiable safety principles.
+- **[Firmware Operational Rules](docs/specs/firmware_operational_rules.md)**: State machine logic, dry-run cutoffs, and fail-safe transitions.
+- **[Android Application Behavior](docs/specs/app.md)**: Reactive state synchronization, BLE ownership claim, and UI rules.
+- **[RS-485 Framing Protocol](docs/specs/rs485_protocol.md)**: Half-duplex packet framing, CRC16 error detection, and register maps.
+- **[Pre-Energization Verification](DEPLOYMENT_SAFETY.md)**: Physical safety checklist and emergency procedures.
+- **[Security Policy](SECURITY.md)**: Vulnerability disclosure and responsible research boundaries.
 
-The earlier web-dashboard experiment is retired and is not an active development target.
+---
 
-## Local validation
+## 2. Components & Tech Stack
 
-### Android
+| Component | Path | Technology Stack |
+|-----------|------|------------------|
+| **Android App** | `app/` | Kotlin, Jetpack Compose (Material 3), RxAndroidBle3, Firebase SDK |
+| **Master Controller** | `firmware/master_node/` | ESP32 DevKit V1, C++, PlatformIO, FreeRTOS, NimBLE |
+| **Tank Sensor Node** | `firmware/sensor_node/` | NodeMCU V2 (ESP8266), C++, PlatformIO, UART/RS-485 |
+| **Cloud Functions** | `functions/` | Node.js 22, TypeScript, Firebase Admin & Functions SDK |
 
-Use JDK 21 and configure the Android SDK and `app/google-services.json` locally.
+---
 
+## 3. Branching Strategy & Git Workflow
+
+We follow a standardized Git workflow:
+
+```text
+feature/xyz  ──┐
+fix/abc      ──┼──► develop (Active Integration) ──► PR / Release ──► main (Stable Production)
+docs/update  ──┘
+```
+
+- **`main`**: Protected, production-ready branch. Receives pull requests exclusively from `develop` when an integration milestone has been validated.
+- **`develop`**: Active integration branch. All feature branches, bug fixes, and maintenance branches branch off and target `develop`.
+- **Branch Naming**:
+  - `feature/<short-description>`: New capabilities or enhancements.
+  - `fix/<issue-description>`: Bug fixes or error resolution.
+  - `docs/<topic>`: Documentation updates and specifications.
+  - `refactor/<subsystem>`: Code cleanups with no behavior change.
+
+---
+
+## 4. Local Build & Test Validation
+
+All automated tests must pass before submitting a pull request.
+
+### Android Application
+Requires JDK 17 or 21 and Android SDK 34:
 ```powershell
 ./gradlew.bat test
 ./gradlew.bat assembleDebug
 ```
 
 ### Cloud Functions
-
+Requires Node.js 22:
 ```bash
 cd functions
 npm ci
@@ -43,42 +71,63 @@ npm run build
 npm test
 ```
 
-### Firmware
-
+### Microcontroller Firmware
+Requires PlatformIO Core:
 ```bash
-pio run -d firmware/master_node
+# Sensor Node (ESP8266)
 pio run -d firmware/sensor_node
+
+# Master Node (ESP32)
+pio run -d firmware/master_node
 ```
 
-Hardware flashing and end-to-end control validation require the physical test setup. Do not energize mains equipment simply to satisfy a software test.
+> **SAFETY WARNING:** Firmware can be compiled and unit-tested without physical hardware. **Never energize 220V mains wiring solely to validate software changes.**
 
-## Safety requirements
+---
 
-- Every fault or ambiguous state must bias the pump OFF.
-- Relay changes must continue through the authorized pump-control boundary.
-- Dry-run and overflow lockouts must persist until explicitly cleared.
-- Sensor freshness and RS-485 validity must gate pump starts.
-- The emergency-stop and recovery paths must remain reachable.
-- Protocol and database changes must be additive and backward compatible.
-- Software protection must never replace the independent thermal overload relay.
+## 5. Non-Negotiable Safety Rules
 
-## Owner change reviews
+Every contribution touching firmware, Android control intent, or database rules must strictly uphold these safety invariants:
 
-Changes should remain focused and include:
+1. **Bias Towards OFF**: Any hardware fault, watchdog timeout, invalid sensor packet, or ambiguous state must immediately de-energize the pump relay.
+2. **Independent Hardware Protection**: Software logic must never be treated as a replacement for the mechanical miniature circuit breaker (MCB) and thermal overload relay (TOR).
+3. **Persistent Lockouts**: Dry-run and overflow fault states must be written to non-volatile storage (NVS) and require explicit user intervention to reset.
+4. **Sensor Freshness Gating**: The pump cannot start or remain running without fresh, CRC16-validated telemetry from the tank sensor node within the timeout window.
+5. **Emergency Stop Reachability**: Physical emergency-stop inputs and digital application e-stops must be processed with highest priority across all operating modes (AUTO, MANUAL, COUNTDOWN).
+6. **No Committed Credentials**: Never commit `secrets.h`, `google-services.json`, Firebase service account keys, or local environment files (`.env`).
 
-- the problem and chosen approach;
-- the related feature specification or issue;
-- validation commands and results;
-- hardware validation limitations;
-- screenshots for visible Android changes;
-- updates to the owning file under `docs/specs/` when behavior changes.
+---
 
-Use clear Conventional Commit messages, for example:
+## 6. Commit Message Guidelines
+
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
 
 ```text
-fix(firmware): preserve e-stop polling during lockout
-feat(app): show authoritative pending control state
-docs(readme): update field deployment case study
+<type>(<scope>): <short description>
 ```
 
-Never commit credentials, `app/google-services.json`, firmware secret headers, service-account files, local database exports, or environment files. See the repository [proprietary notice](LICENSE) for permitted use.
+- **`feat`**: A new feature (e.g., `feat(app): add countdown timer presets`).
+- **`fix`**: A bug fix (e.g., `fix(firmware): preserve e-stop polling during dry-run lockout`).
+- **`docs`**: Documentation only (e.g., `docs(readme): add RS-485 wiring notes`).
+- **`test`**: Adding or updating tests (e.g., `test(functions): add RTDB authorization test`).
+- **`refactor`**: Code change that neither fixes a bug nor adds a feature.
+
+---
+
+## 7. Submitting a Pull Request
+
+1. Fork the repository and create your branch from `develop`:
+   ```bash
+   git checkout -b feature/my-new-feature origin/develop
+   ```
+2. Implement your changes following existing code formatting and documentation standards.
+3. Verify that all test suites pass (`./gradlew.bat test`, `npm test`, `pio run`).
+4. If modifying control logic, complete the verification checklist in [DEPLOYMENT_SAFETY.md](DEPLOYMENT_SAFETY.md).
+5. Push to your fork and submit a Pull Request targeting the **`develop`** branch.
+6. Provide a concise summary of the problem, proposed solution, and validation commands executed.
+
+---
+
+## 8. Code of Conduct
+
+We are committed to providing a welcoming, inclusive, and professional environment. Treat all contributors and reviewers with respect, critique code rather than individuals, and maintain constructive, empathetic discussions.

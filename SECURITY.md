@@ -1,15 +1,15 @@
 # Security Policy
 
-SmartFlow is a personal, field-deployed prototype maintained by one developer. This policy explains how to report a vulnerability safely; it does not represent a commercial support agreement or guaranteed response schedule.
+SmartFlow is an automated deep-well pump controller and IoT telemetry system. This policy explains how to report a security vulnerability safely; it does not represent a commercial support agreement or guaranteed response schedule.
 
-## Supported version
+## Supported Version
 
-Only the latest commit on the default branch is currently considered for security fixes. SmartFlow has no supported public release or long-term-support version.
+Only the latest commit on the `main` branch is actively supported for security updates.
 
 | Version | Supported |
 |---------|-----------|
-| Latest default-branch revision | Yes, on a best-effort basis |
-| Private development history and retired experiments | No |
+| Latest `main` revision | :white_check_mark: Supported |
+| Older revisions & retired branches | :x: Unsupported |
 
 ## Reporting a vulnerability
 
