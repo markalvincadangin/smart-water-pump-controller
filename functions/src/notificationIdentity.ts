@@ -14,7 +14,7 @@ export function resolveDeviceDisplayName(metadata: unknown, deviceId?: string): 
     .trim()
     .slice(0, MAX_DEVICE_DISPLAY_NAME_LENGTH);
 
-  if (!normalized || (deviceId && normalized === deviceId)) {
+  if (!normalized || (deviceId && normalized.toLowerCase().includes(deviceId.toLowerCase()))) {
     return DEFAULT_DEVICE_DISPLAY_NAME;
   }
 
