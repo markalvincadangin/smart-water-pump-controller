@@ -1,7 +1,7 @@
 ---
 status: current
-version: 1.1
-last-reviewed: 2026-07-25
+version: 1.2
+last-reviewed: 2026-10-04
 source: hand-authored
 ---
 
@@ -12,10 +12,10 @@ source: hand-authored
 | Product | SmartFlow |
 | Scope | ESP32 master + NodeMCU V2 (ESP8266) sensor node |
 | Status | Current (non-versioned) |
-| Last reviewed | 2026-07-25 |
+| Last reviewed | 2026-10-04 |
 
 This document is the **current** (non-versioned) firmware specification for the SmartFlow system.
-It supersedes the older archived specs and release notes. Historical documents remain under `docs/archive/`.
+It supersedes older archived specs and release notes. Cross-system contractual authority between Firmware, RTDB, and Android is defined in [`docs/specifications/smartflow-system-contract.md`](../specifications/smartflow-system-contract.md) (v1.1).
 For the full RS-485 protocol contract see [`docs/specs/rs485_protocol.md`](./rs485_protocol.md).
 For implemented operational behavior (modes, safety rules, WiFi, restart/safe-mode) see [`docs/specs/firmware_operational_rules.md`](./firmware_operational_rules.md).
 
@@ -27,7 +27,7 @@ For implemented operational behavior (modes, safety rules, WiFi, restart/safe-mo
     - `drivers/`: Device control (Sensors, Pump).
     - `services/`: Domain logic (Water Level, Flow).
     - `core/`: State machine, Lifecycle, and Bootloader.
-    - `safety/`: Independent E-Stop, Dry-run, and Overflow evaluation logic.
+    - `safety/`: Independent E-Stop, Dry-run, and Maximum Runtime evaluation logic.
   - Controls pump relay (contactor coil via relay module).
   - Runs the full safety state machine.
   - Syncs status to Firebase RTDB and reads control/config.
@@ -119,17 +119,18 @@ ETX (0x03)
 
 ### Control modes (current)
 
-Policy mode is stored in `pumpMode` (RTDB: `/pump_system/control/mode`):
+Policy mode is stored in `pumpMode` (RTDB: `/devices/{device_id}/shadow/desired/mode`):
 
-- **AUTO**: level-based hysteresis control.
+- **AUTO**: level-based hysteresis control (reserved for future autonomous operation).
 - **MANUAL**: operator policy mode with persistent intent `manual_desired`.
   - `manual_desired=true` requests pump ON (all safety still enforced).
   - `manual_desired=false` keeps pump OFF (mode stays MANUAL).
 - **COUNTDOWN**: timed run.
-  - Start is explicit via one-shot `/pump_system/control/countdown_start=true`.
-  - Duration via `/pump_system/control/countdown_duration_min`.
+  - Start is explicit via one-shot `/devices/{device_id}/shadow/desired/countdown_start=true`.
+  - Duration via `/devices/{device_id}/shadow/desired/countdown_duration_min` (valid 1–120 minutes; invalid durations are rejected fail-safe).
+  - A running countdown cannot be silently extended or restarted; the active countdown must finish or be explicitly stopped first.
 
-**Run mode values** (`runMode` → RTDB: `run_mode` in `/pump_system/status`):
+**Run mode values** (`runMode` → RTDB: `run_mode` in `/devices/{device_id}/shadow/reported/run_mode`):
 
 | Value | Condition | Dashboard label |
 |-------|-----------|----------------|
@@ -145,17 +146,17 @@ Policy mode is stored in `pumpMode` (RTDB: `/pump_system/control/mode`):
 
 **Emergency stop**
 
-- One-shot `/pump_system/control/emergency_stop=true` latches `emergencyStopLatched`.
-- Reset via one-shot `/pump_system/control/reset_stop=true`.
+- One-shot `/devices/{device_id}/shadow/desired/emergency_stop=true` latches `emergencyStopLatched`.
+- Reset via one-shot `/devices/{device_id}/shadow/desired/reset_stop=true`.
 
 ### Safety model (hard invariants)
 
 The firmware must always satisfy:
 
 - **Emergency stop latch** forces pump OFF until reset.
-- **Dry-run lockout**: sustained low flow while running → pump OFF + lockout until cleared.
-- **Overflow protection**: max runtime exceeded → pump OFF + lockout until cleared.
-- **Sensor/comm failsafe**: stale or unstable remote data blocks starts; stale data stops a running pump.
+- **Dry-run lockout**: sustained low flow while running → pump OFF + lockout until cleared (`last_fault_code = "DRY_RUN"`).
+- **Maximum runtime protection**: max continuous runtime exceeded (`MAX_RUNTIME` fault code, `EVT_MAX_RUNTIME_EXCEEDED` event) → pump OFF + lockout until cleared.
+- **Sensor/comm failsafe**: stale or unstable remote data blocks starts; stale data stops a running pump (unless bypass is enabled). Fail-safe sensor bypass defaults are always `false`.
 - **Minimum off-time**: prevents rapid cycling of the pump motor.
 
 ### Cloud contract (Firebase RTDB)
@@ -182,7 +183,7 @@ The master node features a single consolidated hardware button.
 #### Production diagnostics
 
 Production firmware publishes the `/devices/{device_id}/diagnostics` snapshot with `freeHeap`, `wifiRSSI`, and `restartReason`.
-The firmware uses a strictly structured event registry mapping to `EventCode` and `LogCategory` enums (e.g. `EVT_PUMP_ON`, `EVT_DRY_RUN_LOCKOUT`). The legacy unstructured `LOG()` string macro is now strictly isolated to local debugging (Serial/Syslog) and does not push to Firebase. This ensures the Android app's Activity Log remains completely standardized and localizable. The trusted `retainDeviceEvents` backend trigger atomically retains the newest 50 push-ID-ordered records. Firmware application code logs through the transport-independent `AppLogger`/`LogSink` boundary; development-only sinks may expose bounded local history and live diagnostics on a trusted LAN, but the TCP implementation is compile-time gated and is not a production support interface.
+The firmware uses a strictly structured event registry mapping to `EventCode` and `LogCategory` enums (e.g. `EVT_PUMP_ON`, `EVT_DRY_RUN_LOCKOUT`, `EVT_MAX_RUNTIME_EXCEEDED`). The legacy unstructured `LOG()` string macro is now strictly isolated to local debugging (Serial/Syslog) and does not push to Firebase. This ensures the Android app's Activity Log remains completely standardized and localizable. The trusted `retainDeviceEvents` backend trigger atomically retains the newest 50 push-ID-ordered records. Firmware application code logs through the transport-independent `AppLogger`/`LogSink` boundary; development-only sinks may expose bounded local history and live diagnostics on a trusted LAN, but the TCP implementation is compile-time gated and is not a production support interface.
 
 **Status (ESP32 → cloud)**: `/devices/{device_id}/telemetry` and `/devices/{device_id}/shadow/reported`
 
@@ -193,12 +194,12 @@ Core fields:
 - `is_running` (bool)
 - `run_mode` (see Run Mode table above)
 - `pump_cooldown_remaining_sec` (int, 0 when not in cooldown)
-- `is_error` / `is_level_sensor_error` / `is_flow_sensor_error` / `is_overflow_error` (bools)
-- `last_fault_code` / `last_fault_message` (strings, when faulted)
+- `is_error` / `is_level_sensor_error` / `is_flow_sensor_error` / `is_overflow_error` (bools; `is_overflow_error` retained as backward-compatibility alias for `MAX_RUNTIME`)
+- `last_fault_code` / `last_fault_message` (strings, when faulted; `last_fault_code` is the canonical machine-readable code e.g. `MAX_RUNTIME`, `DRY_RUN`)
 - `manual_desired` / `emergency_stop_latched` (bools)
 - `remote_sensor_stable` / `level_fresh` (safety gate indicators)
-- `bypass_level_sensor` / `bypass_flow_sensor` / `auto_bypass_active` (bool)
-- `manual_runtime_warning` (bool — MANUAL run reached ~90% of max runtime; pump may still be on until hard overflow cutoff at 100%)
+- `bypass_level_sensor` / `bypass_flow_sensor` / `auto_bypass_active` (bool; fail-safe defaults `false`)
+- `manual_runtime_warning` (bool — MANUAL run reached ~90% of max runtime; pump may still be on until hard cutoff at 100%)
 - `is_idle_mode` (bool — slow-poll mode active; added Phase 3)
 - `is_sleeping` (bool — scheduled light sleep active)
 - `remote_level_discard_count` (int — from RS-485 LDSC field; added Phase 3)
@@ -219,19 +220,19 @@ Core fields:
 - `manual_desired`: bool (persistent intent)
 - `emergency_stop`: bool (one-shot)
 - `reset_stop`: bool (one-shot)
-- `clear_error`: bool (one-shot — clears DRY_RUN and OVERFLOW lockouts)
+- `clear_error`: bool (one-shot — clears DRY_RUN and MAX_RUNTIME lockouts)
 - `countdown_start`: bool (one-shot)
-- `countdown_duration_min`: int (1–120)
-- `bypass_level_sensor`: bool (persistent)
-- `bypass_flow_sensor`: bool (persistent — added Phase 1)
+- `countdown_duration_min`: int (1–120 min; rejected if outside bounds)
+- `bypass_level_sensor`: bool (persistent; defaults to false)
+- `bypass_flow_sensor`: bool (persistent; defaults to false)
 - `reboot_request_id`: int (monotonic token)
 
 **Configuration (cloud → ESP32)**: `/devices/{device_id}/settings`
 
-- `pump_start_level_pct`: int (threshold to turn ON)
-- `pump_stop_level_pct`: int (threshold to turn OFF)
-- `dry_run_threshold_lpm`: float
-- `max_pump_runtime_min`: int
+- `pump_start_level_pct`: int (0–100%, threshold to turn ON)
+- `pump_stop_level_pct`: int (0–100% and strictly `pump_stop_level_pct > pump_start_level_pct`, threshold to turn OFF)
+- `dry_run_threshold_lpm`: float (0.1–10.0 L/min)
+- `max_pump_runtime_min`: int (30–120 min; NVS hard ceiling enforced at 120 min)
 
 ### Hardware assumptions (deployment-critical)
 

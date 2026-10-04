@@ -1,7 +1,7 @@
 ---
 status: current
-version: 1.0
-last-reviewed: 2026-07-25
+version: 1.1
+last-reviewed: 2026-10-04
 source: hand-authored
 ---
 
@@ -12,9 +12,10 @@ source: hand-authored
 | Product | SmartFlow |
 | Scope | `firmware/master_node/` (ESP32 master) |
 | Status | Normative operational behavior |
-| Last reviewed | 2026-07-25 |
+| Last reviewed | 2026-10-04 |
 
 For hardware architecture, build targets, RS-485 protocol, and RTDB schema see [`docs/specs/firmware.md`](./firmware.md).
+The overarching cross-system contract is defined in [`docs/specifications/smartflow-system-contract.md`](../specifications/smartflow-system-contract.md) (v1.1).
 
 This is the single source document for implemented firmware behavior: modes, safety, cloud connectivity, WiFi recovery, BLE provisioning, restart/safe-mode behavior, and command semantics.
 
@@ -36,7 +37,7 @@ The ESP32 master uses a dual-slot OTA partition table (`smartflow_ota.csv`) so a
 ## 1. Mode Model
 
 - `pumpMode` is exclusive: exactly one policy mode at a time:
-  - `AUTO`
+  - `AUTO` (reserved for future autonomous operation)
   - `MANUAL`
   - `COUNTDOWN`
 - MANUAL and COUNTDOWN cannot run concurrently.
@@ -48,7 +49,7 @@ The ESP32 master uses a dual-slot OTA partition table (`smartflow_ota.csv`) so a
 Each loop effectively evaluates in this order:
 
 1. Emergency stop latch
-2. Hard safety lockouts (`DRY_RUN`, `OVERFLOW`)
+2. Hard safety lockouts (`DRY_RUN`, `MAX_RUNTIME`)
 3. Sensor freshness/stability gates
 4. Mode policy logic (`MANUAL`, `COUNTDOWN`, `AUTO`)
 5. Cloud and telemetry updates
@@ -67,14 +68,15 @@ Higher-priority OFF conditions always override lower-priority run intent.
   - control processing continues for recovery commands (`reset_stop`, `clear_error`, bypass fields)
 - `reset_stop: true`:
   - clears latch and restores saved mode
-  - is blocked if hard lockout (`DRY_RUN` or `OVERFLOW`) is still active
+  - is blocked if hard lockout (`DRY_RUN` or `MAX_RUNTIME`) is still active
 
 ## 4. Safety Rules (Mode-Independent)
 
 - Safety always fails toward pump OFF.
-- `is_error` (`DRY_RUN`) or `is_overflow_error` (`OVERFLOW`) forces pump OFF in all modes.
+- `is_error` (`DRY_RUN`) or `last_fault_code == "MAX_RUNTIME"` forces pump OFF in all modes (`is_overflow_error` is retained as a compatibility alias).
 - Stale/unstable remote level data blocks starts and can stop running pump (unless bypass is enabled).
 - Safety lockouts must be explicitly cleared (`clear_error`) before normal mode intent can drive ON again.
+- Sensor bypass defaults are strictly fail-safe (`bypass_level_sensor = false`, `bypass_flow_sensor = false`).
 
 ## 5. Mode-Specific Rules
 
@@ -82,7 +84,7 @@ Higher-priority OFF conditions always override lower-priority run intent.
 
 Both MANUAL and COUNTDOWN modes share a unified pre-evaluation block for safety:
 - **Sensor Freshness**: Fresh/stable level data is required when level bypass is OFF. If freshness fails, the pump stops (failsafe) and active COUNTDOWN timers are aborted.
-- **Tank Full**: Reaching the tank-full threshold (`pump_stop_level`) unconditionally stops the pump (and aborts active COUNTDOWN timers).
+- **Tank Full**: Reaching the tank-full threshold (`pump_stop_level_pct`) unconditionally stops the pump (and aborts active COUNTDOWN timers).
 - **Min Off-Time**: Cooldown (`MIN_PUMP_OFF_TIME_MS`) is strictly enforced before any restart.
 
 ### 5.2 MANUAL
@@ -90,27 +92,31 @@ Both MANUAL and COUNTDOWN modes share a unified pre-evaluation block for safety:
 - Intent-based control:
   - `manual_desired = true` requests ON
   - `manual_desired = false` requests OFF
-- Overflow policy is Option B:
+- Maximum runtime policy:
   - `manual_runtime_warning` at ~90% runtime
-  - hard overflow stop at configured max runtime
+  - hard cutoff (`MAX_RUNTIME`) at configured `max_pump_runtime_min` (30–120 min, NVS ceiling 120 min)
 
 ### 5.3 COUNTDOWN
 
 - Runs only when:
   - `pumpMode == "COUNTDOWN"`
   - timer is active
+- Duration validation:
+  - Duration must be between 1 and 120 minutes. Values outside this range are rejected fail-safe; firmware does not clamp or silently fall back.
+- Concurrency & extension:
+  - A running countdown cannot be silently extended or restarted. A new countdown requires the active timer to finish or be explicitly stopped first.
 - `countdown_start` is one-shot start.
-- `countdown_add_time` is validated and capped extension.
 - `countdown_stop` clears timer but keeps mode COUNTDOWN (idle).
 - On expiry (or if interrupted by a shared safety gate):
-  - `countdown_start` is force-cleared from Firebase `desired` state *before* turning the pump off. This acts as a software defense-in-depth against stale-state EMI crash loops (now primarily prevented via hardware RC snubber).
+  - `countdown_start` is force-cleared from Firebase `desired` state *before* turning the pump off. This acts as a software defense-in-depth against stale-state EMI crash loops.
   - pump OFF
-  - mode automatically reverts to `MANUAL` with `manual_desired = false` (MANUAL OFF). This is a strict safety fallback because AUTO mode relies on ultrasonic sensors which may not be fully stabilized yet in the physical deployment.
+  - mode automatically reverts to `MANUAL` with `manual_desired = false` (MANUAL OFF).
+  - Countdown expiry is purely a state transition; no push notification or event is emitted.
 
 ### 5.4 AUTO
 
-- Start at/below `pump_start_level`.
-- Stop at/above `pump_stop_level`.
+- Start at/below `pump_start_level_pct`.
+- Stop at/above `pump_stop_level_pct`.
 - Min off-time enforced before restart.
 - If level data is stale/unstable (and bypass OFF), AUTO start is blocked and running pump is stopped fail-safe.
 
@@ -127,18 +133,17 @@ One-shot behavior (practical semantics):
 
 - `emergency_stop`
 - `reset_stop`
-- `clear_error`
+- `clear_error` (clears DRY_RUN and MAX_RUNTIME lockouts)
 - `countdown_start`
 - `countdown_stop`
-- `countdown_add_time` (edge-detected extension command; firmware clears it when consumed)
 
 These command paths are designed to avoid sticky replay during reconnect/retry windows.
 
 ## 8. Firebase Cloud Cycle Rules
 
 - Cloud sync loop performs:
-  1. control read (`/pump_system/control`)
-  2. if control succeeds, status push (`/pump_system/status`)
+  1. control read (`/devices/{device_id}/shadow/desired` and `/devices/{device_id}/settings`)
+  2. if control succeeds, status push (`/devices/{device_id}/shadow/reported` and `/devices/{device_id}/telemetry`)
 - When cloud sync is due, RS-485 polling applies a short time budget so transport stalls do not starve Firebase updates.
 - If control read fails, status push is skipped in that cycle to avoid compounding failures.
 - Auth/timeouts increment dedicated counters and may trigger cooldown windows.
