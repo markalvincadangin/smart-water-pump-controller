@@ -419,7 +419,7 @@ The canonical FCM token authority is:
 users/{uid}/notification_prefs/fcmTokens/{tokenId}
 ```
 
-The device-level `devices/{deviceId}/fcmTokens` path is deprecated and must not be used by new code. Existing readers/writers must be migrated or removed during backend/Android implementation work.
+The device-level `devices/{deviceId}/fcmTokens` path is deprecated and must not be used by new code. Android token registration has been migrated to the user-level authority; no Android token writer should target the deprecated device path.
 
 An FCM token identifies an app installation/device instance for a user; it is not the ownership authority for a SmartFlow pump.
 
@@ -676,4 +676,4 @@ The contract is now the working cross-system authority for WP-06 implementation.
 
 ### FCM Token Deprecation
 
-`devices/{deviceId}/fcmTokens` is a legacy path. New Android/backend code must not write or read it. The canonical authority is `users/{uid}/notification_prefs/fcmTokens/{tokenId}`. Existing Android writers are retained only until the Android notification cleanup package migrates them.
+`devices/{deviceId}/fcmTokens` is a legacy path. New Android/backend code must not write or read it. The canonical authority is `users/{uid}/notification_prefs/fcmTokens/{tokenId}`. WP-07D removes the Android device-level writers and centralizes registration on the canonical user-level path.
