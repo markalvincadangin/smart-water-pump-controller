@@ -72,7 +72,8 @@ interface NotificationConfig {
   lowLevelAlert?: boolean;
   lowLevelThreshold?: number;
   pumpStartedAlert?: boolean;
-  maxRuntimeAlert?: boolean;
+  maxRuntimeAlert?: boolean; // canonical
+  overflowAlert?: boolean; // legacy alias retained for existing user preferences
 }
 
 async function sendPush(
@@ -209,7 +210,7 @@ export const onDeviceEventCreated = onValueCreated(
 
       if (code === "EVT_DRY_RUN_LOCKOUT" && (config.dryRunAlert ?? true)) {
         await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", "dryRun");
-      } else if (code === "EVT_MAX_RUNTIME_EXCEEDED" && (config.maxRuntimeAlert ?? true)) {
+      } else if (code === "EVT_MAX_RUNTIME_EXCEEDED" && (config.maxRuntimeAlert ?? config.overflowAlert ?? true)) {
         await sendPush(tokens, "⚠ Maximum Runtime Protection", "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.", "maxRuntime");
       }
     }
