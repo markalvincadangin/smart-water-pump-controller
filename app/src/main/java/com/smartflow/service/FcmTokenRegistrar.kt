@@ -30,10 +30,5 @@ object FcmTokenRegistrar {
                 Log.w("FCM", "Failed to register FCM token", error)
             }
 
-        db.getReference("users/${user.uid}/notification_prefs/enabled")
-            .setValue(true)
-            .addOnFailureListener { error ->
-                Log.w("FCM", "Failed to enable FCM notifications", error)
-            }
     }
 }
