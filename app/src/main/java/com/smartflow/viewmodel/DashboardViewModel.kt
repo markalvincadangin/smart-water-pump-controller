@@ -7,6 +7,7 @@ import com.smartflow.domain.ConnectionState
 import com.smartflow.domain.OperatingMode
 import com.smartflow.domain.DashboardUiState
 import com.smartflow.domain.DeviceConfig
+import com.smartflow.domain.DeviceConfigValidator
 import com.smartflow.domain.CommandState
 import com.smartflow.domain.SensorAvailability
 import com.smartflow.domain.ControlAuthority
@@ -217,6 +218,14 @@ class DashboardViewModel(
     }
 
     fun startCountdown(durationMin: Int) {
+        val validationError = DeviceConfigValidator.validateCountdownDuration(durationMin)
+        if (validationError != null) {
+            commandTimeoutJob?.cancel()
+            pendingCommand.value = null
+            showCommandOutcome(CommandState.Rejected(validationError))
+            return
+        }
+
         val currentDesired = repository.shadowFlow.value.desired
         val desired = currentDesired.copy(
             mode = OperatingMode.COUNTDOWN.name,
@@ -251,6 +260,19 @@ class DashboardViewModel(
     }
 
     fun updateConfig(config: DeviceConfig) {
+        val validation = DeviceConfigValidator.validate(config)
+        if (!validation.isValid) {
+            val reason = validation.pumpStartLevelError
+                ?: validation.pumpStopLevelError
+                ?: validation.dryRunThresholdError
+                ?: validation.maxPumpRuntimeError
+                ?: "Invalid device configuration."
+            commandTimeoutJob?.cancel()
+            pendingCommand.value = null
+            showCommandOutcome(CommandState.Rejected(reason))
+            return
+        }
+
         repository.updateConfig(config)
     }
 
