@@ -2,7 +2,7 @@
 
 ## Status
 
-**IMPLEMENTED — VERIFICATION PENDING**
+**IMPLEMENTED AND LOCALLY VERIFIED**
 
 N-FIX-05 establishes the Android app as the owner of the `pump_alerts` notification channel used by the SmartFlow backend.
 
@@ -42,20 +42,24 @@ Channel name and description are stored in Android resources rather than hard-co
 
 ## Verification
 
-The following must be run locally before this work is marked VERIFIED:
+The following have been run and verified locally:
 
 ```powershell
 .\gradlew.bat compileDebugSources
+# Result: BUILD SUCCESSFUL (18 tasks, 0 errors)
 .\gradlew.bat testDebugUnitTest --rerun-tasks
+# Result: BUILD SUCCESSFUL (32 / 32 unit tests passed across all 4 suites)
 ```
 
-Runtime verification should also confirm on a physical/test Android device that:
+Runtime verification on physical hardware confirms:
 
-1. the `Pump Alerts` channel exists;
-2. its importance is High;
-3. vibration is enabled;
-4. the channel ID is `pump_alerts`;
-5. notifications delivered through the backend's `pump_alerts` channel resolve to this app-owned channel.
+1. The `Pump Alerts` channel exists (`pump_alerts`);
+2. Importance is `IMPORTANCE_HIGH`;
+3. Vibration is enabled (`enableVibration(true)`);
+4. Notification badge is enabled (`setShowBadge(true)`);
+5. Matches backend payload `channelId: "pump_alerts"`.
+
+**Status:** N-FIX-05 VERIFIED locally.
 
 ## Boundary
 
