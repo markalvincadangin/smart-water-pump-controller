@@ -222,7 +222,6 @@ fun DashboardScreen(
                         commandState = uiState.commandState,
                         lastFaultMessage = uiState.lastFaultMessage,
                         lastFaultCode = uiState.lastFaultCode,
-                        maxRuntimeLimitMins = uiState.config.maxPumpRuntimeMin,
                         countdownRemainingSec = uiState.countdownRemainingSec,
                         countdownDurationMin = uiState.countdownDurationMin,
                         onModeChanged = { viewModel.setControlMode(it) },
