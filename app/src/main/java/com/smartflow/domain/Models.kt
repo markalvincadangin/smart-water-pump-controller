@@ -114,6 +114,7 @@ data class DashboardUiState(
     val controlAuthority: ControlAuthority = ControlAuthority.Remote,
     val dataFreshness: DataFreshness = DataFreshness.Unavailable,
     val lastFaultMessage: String = "",
+    val lastFaultCode: String = "",
     val events: List<DeviceEvent> = emptyList(),
     val commandState: CommandState = CommandState.Ready
 )
