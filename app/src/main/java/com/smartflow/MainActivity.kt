@@ -56,6 +56,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.smartflow.data.repository.SettingsRepository
 import com.smartflow.presentation.SettingsScreen
 import com.smartflow.viewmodel.SettingsViewModel
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 
 private fun hasEligibleAccount(): Boolean {
     return AccountSession.state(FirebaseAuth.getInstance().currentUser) == DurableAccountState.ELIGIBLE
@@ -108,6 +111,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -127,6 +131,7 @@ class MainActivity : ComponentActivity() {
                 initial = com.smartflow.ui.theme.ThemePreference.SYSTEM_DEFAULT
             )
             val snackbarHostState = remember { SnackbarHostState() }
+            val windowWidthSizeClass = calculateWindowSizeClass(this).widthSizeClass
             
             com.smartflow.ui.theme.SmartFlowTheme(themePreference = themePreference) {
                 androidx.compose.runtime.CompositionLocalProvider(
@@ -136,7 +141,14 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        AppNavigation(bleProvisioningClient, deviceRepository, cloudStore, settingsRepository, snackbarHostState)
+                        AppNavigation(
+                            bleProvisioningClient = bleProvisioningClient,
+                            deviceRepository = deviceRepository,
+                            cloudStore = cloudStore,
+                            settingsRepository = settingsRepository,
+                            snackbarHostState = snackbarHostState,
+                            windowWidthSizeClass = windowWidthSizeClass
+                        )
                     }
                 }
             }
@@ -159,7 +171,8 @@ fun AppNavigation(
     deviceRepository: DeviceRepository,
     cloudStore: FirebaseCloudStore,
     settingsRepository: SettingsRepository,
-    snackbarHostState: SnackbarHostState
+    snackbarHostState: SnackbarHostState,
+    windowWidthSizeClass: WindowWidthSizeClass
 ) {
     val navController = rememberNavController()
     val auth = FirebaseAuth.getInstance()
@@ -323,7 +336,8 @@ fun AppNavigation(
             val viewModel = DashboardViewModel(firebaseRepo)
             DashboardScreen(
                 viewModel = viewModel,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                windowWidthSizeClass = windowWidthSizeClass
             )
         }
 
