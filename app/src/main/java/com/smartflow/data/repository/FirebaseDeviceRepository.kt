@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import com.smartflow.data.dto.DeviceStatusDto
@@ -36,6 +37,7 @@ interface DeviceRepository {
     suspend fun initializeAuth()
     fun updateDesiredState(desired: com.smartflow.domain.ShadowDesired)
     fun updateConfig(config: DeviceConfig)
+    fun cleanup() {}
 }
 
 class FirebaseDeviceRepository(
@@ -50,6 +52,15 @@ class FirebaseDeviceRepository(
     private var lastHeartbeatTimeMs: Long = 0L
     private var isAppConnectedToFirebase: Boolean = false
     private var lastLifecycle: String = "OFFLINE"
+
+    private var connectedListener: ValueEventListener? = null
+    private var telemetryListener: ValueEventListener? = null
+    private var shadowListener: ValueEventListener? = null
+    private var settingsListener: ValueEventListener? = null
+    private var eventsListener: ValueEventListener? = null
+    private var statusListener: ValueEventListener? = null
+    @Volatile
+    private var isObserving = false
 
     private val _telemetryFlow = MutableStateFlow(Telemetry())
     override val telemetryFlow = _telemetryFlow.asStateFlow()
@@ -69,6 +80,20 @@ class FirebaseDeviceRepository(
     override val eventsFlow = _eventsFlow.asStateFlow()
 
     init {
+        // Automatically check durable account eligibility and start observing
+        repositoryScope.launch {
+            try {
+                if (AccountSession.refreshDurableState(auth) == DurableAccountState.ELIGIBLE) {
+                    startObserving()
+                } else {
+                    _connectionFlow.value = ConnectionState.DISCONNECTED
+                }
+            } catch (e: Exception) {
+                Log.e("FirebaseDeviceRepository", "Auth check failed in init", e)
+                _connectionFlow.value = ConnectionState.DISCONNECTED
+            }
+        }
+
         // Timeout for initial connection grace period (5 seconds)
         repositoryScope.launch {
             delay(5000)
@@ -81,7 +106,7 @@ class FirebaseDeviceRepository(
         }
 
         // Track Firebase connected state (.info/connected)
-        database.getReference(".info/connected").addValueEventListener(object : ValueEventListener {
+        val connListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 isAppConnectedToFirebase = snapshot.getValue(Boolean::class.java) ?: false
                 if (!isAppConnectedToFirebase) {
@@ -94,13 +119,15 @@ class FirebaseDeviceRepository(
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        connectedListener = connListener
+        database.getReference(".info/connected").addValueEventListener(connListener)
 
         repositoryScope.launch {
             while (true) {
                 delay(2000)
                 if (isAppConnectedToFirebase) {
-                    // Firmware pushes status every 15s. Allow 35s to miss 2 heartbeats before considering it offline.
+                    // Firmware pushes status every 15s. Allow 60s before considering it offline.
                     if (System.currentTimeMillis() - lastHeartbeatTimeMs > 60000L) {
                         if (hasCompletedInitialCheck) {
                             _connectionFlow.value = ConnectionState.DISCONNECTED
@@ -130,7 +157,10 @@ class FirebaseDeviceRepository(
     }
 
     private fun startObserving() {
-        deviceRef.child("telemetry").addValueEventListener(object : ValueEventListener {
+        if (isObserving) return
+        isObserving = true
+
+        val tListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val t = snapshot.getValue(TelemetryDto::class.java)
                 if (t != null) {
@@ -138,9 +168,11 @@ class FirebaseDeviceRepository(
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        telemetryListener = tListener
+        deviceRef.child("telemetry").addValueEventListener(tListener)
 
-        deviceRef.child("shadow").addValueEventListener(object : ValueEventListener {
+        val sListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val s = snapshot.getValue(DeviceShadowDto::class.java)
                 if (s != null) {
@@ -148,9 +180,11 @@ class FirebaseDeviceRepository(
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        shadowListener = sListener
+        deviceRef.child("shadow").addValueEventListener(sListener)
 
-        deviceRef.child("settings").addValueEventListener(object : ValueEventListener {
+        val cListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val c = snapshot.getValue(DeviceConfigDto::class.java)
                 if (c != null) {
@@ -158,9 +192,11 @@ class FirebaseDeviceRepository(
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        settingsListener = cListener
+        deviceRef.child("settings").addValueEventListener(cListener)
 
-        deviceRef.child("events").orderByKey().limitToLast(20).addValueEventListener(object : ValueEventListener {
+        val eListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val eventsList = mutableListOf<com.smartflow.domain.DeviceEvent>()
                 for (child in snapshot.children) {
@@ -173,9 +209,11 @@ class FirebaseDeviceRepository(
                 _eventsFlow.value = eventsList.reversed()
             }
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        eventsListener = eListener
+        deviceRef.child("events").orderByKey().limitToLast(20).addValueEventListener(eListener)
 
-        deviceRef.child("status").addValueEventListener(object : ValueEventListener {
+        val stListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val s = snapshot.getValue(DeviceStatusDto::class.java)
                 hasCompletedInitialCheck = true
@@ -197,7 +235,26 @@ class FirebaseDeviceRepository(
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+        statusListener = stListener
+        deviceRef.child("status").addValueEventListener(stListener)
+    }
+
+    override fun cleanup() {
+        isObserving = false
+        connectedListener?.let { database.getReference(".info/connected").removeEventListener(it) }
+        telemetryListener?.let { deviceRef.child("telemetry").removeEventListener(it) }
+        shadowListener?.let { deviceRef.child("shadow").removeEventListener(it) }
+        settingsListener?.let { deviceRef.child("settings").removeEventListener(it) }
+        eventsListener?.let { deviceRef.child("events").removeEventListener(it) }
+        statusListener?.let { deviceRef.child("status").removeEventListener(it) }
+        connectedListener = null
+        telemetryListener = null
+        shadowListener = null
+        settingsListener = null
+        eventsListener = null
+        statusListener = null
+        repositoryScope.cancel()
     }
 
     override fun updateDesiredState(desired: com.smartflow.domain.ShadowDesired) {

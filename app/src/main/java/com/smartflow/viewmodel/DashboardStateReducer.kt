@@ -26,7 +26,8 @@ internal fun mapDesiredMode(mode: String): OperatingMode =
     when (mode) {
         "MANUAL" -> OperatingMode.MANUAL
         "COUNTDOWN" -> OperatingMode.COUNTDOWN
-        else -> OperatingMode.AUTO
+        "AUTO" -> OperatingMode.AUTO
+        else -> OperatingMode.MANUAL
     }
 
 internal fun mapReportedMode(runMode: String, fallback: OperatingMode): OperatingMode =

@@ -194,6 +194,7 @@ class DashboardViewModel(
 
     override fun onCleared() {
         commandTimeoutJob?.cancel()
+        repository.cleanup()
         super.onCleared()
     }
 

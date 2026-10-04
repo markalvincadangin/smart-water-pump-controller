@@ -36,6 +36,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -332,8 +333,13 @@ fun AppNavigation(
         
         composable("dashboard/{deviceId}") { backStackEntry ->
             val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
-            val firebaseRepo = com.smartflow.data.repository.FirebaseDeviceRepository(deviceId)
-            val viewModel = DashboardViewModel(firebaseRepo)
+            val firebaseRepo = remember(deviceId) { com.smartflow.data.repository.FirebaseDeviceRepository(deviceId) }
+            val viewModel = remember(deviceId) { DashboardViewModel(firebaseRepo) }
+            DisposableEffect(firebaseRepo) {
+                onDispose {
+                    firebaseRepo.cleanup()
+                }
+            }
             DashboardScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },

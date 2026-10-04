@@ -22,6 +22,9 @@ import com.smartflow.domain.Telemetry
 import com.smartflow.domain.TelemetryValue
 import com.smartflow.presentation.components.SmartFlowTopAppBar
 import com.smartflow.ui.theme.LocalSpacing
+import com.smartflow.viewmodel.derivePumpState
+import com.smartflow.viewmodel.mapDesiredMode
+import com.smartflow.viewmodel.mapReportedMode
 import java.time.Duration
 import java.time.Instant
 
@@ -86,32 +89,24 @@ fun DeviceCard(
     onManageOwnership: () -> Unit
 ) {
     val repository = remember(deviceId) { FirebaseDeviceRepository(deviceId) }
-    
-    val connection by repository.connectionFlow.collectAsState(initial = ConnectionState.DISCONNECTED)
-    val shadow by repository.shadowFlow.collectAsState(initial = DeviceShadow())
-    val telemetry by repository.telemetryFlow.collectAsState(initial = Telemetry())
 
-    val desiredMode = when (shadow.desired.mode) {
-        "MANUAL" -> OperatingMode.MANUAL
-        "COUNTDOWN" -> OperatingMode.COUNTDOWN
-        else -> OperatingMode.AUTO
+    LaunchedEffect(repository) {
+        repository.initializeAuth()
     }
-    
-    val currentMode = when (shadow.reported.runMode) {
-        "MANUAL", "MANUAL_ON", "MANUAL_OFF", "MANUAL_COOLDOWN" -> OperatingMode.MANUAL
-        "COUNTDOWN" -> OperatingMode.COUNTDOWN
-        "AUTO", "SMART", "ECO" -> OperatingMode.AUTO
-        "IDLE", "ERROR" -> desiredMode
-        else -> desiredMode
+
+    DisposableEffect(repository) {
+        onDispose {
+            repository.cleanup()
+        }
     }
-    
-    val pumpState = when {
-        connection == ConnectionState.DISCONNECTED -> PumpState.Offline
-        shadow.reported.isError || shadow.reported.isOverflowError -> PumpState.Error
-        shadow.reported.emergencyStopLatched -> PumpState.Interlocked
-        shadow.reported.isRunning -> PumpState.Running
-        else -> PumpState.Idle
-    }
+
+    val connection by repository.connectionFlow.collectAsState()
+    val shadow by repository.shadowFlow.collectAsState()
+    val telemetry by repository.telemetryFlow.collectAsState()
+
+    val desiredMode = mapDesiredMode(shadow.desired.mode)
+    val currentMode = mapReportedMode(shadow.reported.runMode, desiredMode)
+    val pumpState = derivePumpState(connection, shadow.reported)
 
     val spacing = LocalSpacing.current
 
@@ -141,18 +136,17 @@ fun DeviceCard(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    val statusColor = if (connection == ConnectionState.CONNECTED) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    val (statusColor, statusText) = when (connection) {
+                        ConnectionState.CONNECTED -> MaterialTheme.colorScheme.primary to "Online"
+                        ConnectionState.CONNECTING -> MaterialTheme.colorScheme.tertiary to "Connecting..."
+                        ConnectionState.DISCONNECTED -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) to "Offline"
                     }
-                    val statusText = if (connection == ConnectionState.CONNECTED) "Online" else "Offline"
-                    
+
                     Box(
                         modifier = Modifier
                             .size(8.dp)
