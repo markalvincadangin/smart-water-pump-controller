@@ -164,26 +164,26 @@ export const onDeviceUpdated = onValueWritten(
       // 3. Low tank level
       if (waterLevel <= threshold && (config.lowLevelAlert ?? true) && !isDndActive(config)) {
         if (await claimThrottle(db(), uid, "lowLevel")) {
-          await sendPush(
+          const sent = await sendPush(
             tokens,
             `⚠ Low Tank (${waterLevel}%)`,
             `Water at ${waterLevel}% (threshold: ${threshold}%). Pump: ${isRunning ? "Running" : "Stopped"}.`,
             "lowLevel"
           );
-          await recordSent(db(), uid, "lowLevel");
+          if (!sent) await releaseThrottle(db(), uid, "lowLevel");
         }
       }
 
       // 4. Pump just started
       if ((config.pumpStartedAlert ?? true) && isRunning && !wasRunning && !isDndActive(config)) {
         if (await claimThrottle(db(), uid, "pumpStarted")) {
-          await sendPush(
+          const sent = await sendPush(
             tokens,
             "▶ Pump Started",
             `Tank: ${waterLevel}%, Flow: ${flowRate.toFixed(1)} LPM`,
             "pumpStarted"
           );
-          await recordSent(db(), uid, "pumpStarted");
+          if (!sent) await releaseThrottle(db(), uid, "pumpStarted");
         }
       }
     }
