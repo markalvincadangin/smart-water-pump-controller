@@ -31,15 +31,35 @@ class DashboardViewModel(
     private val commandOutcome = MutableStateFlow<CommandState?>(null)
     private var commandTimeoutJob: Job? = null
 
-    val uiState: StateFlow<DashboardUiState> = combine(
+    private data class RepositoryState(
+        val telemetry: com.smartflow.domain.Telemetry,
+        val shadow: com.smartflow.domain.DeviceShadow,
+        val config: DeviceConfig,
+        val connection: ConnectionState,
+        val events: List<com.smartflow.domain.DeviceEvent>
+    )
+
+    private val repositoryStateFlow = combine(
         repository.telemetryFlow,
         repository.shadowFlow,
         repository.configFlow,
         repository.connectionFlow,
-        repository.eventsFlow,
+        repository.eventsFlow
+    ) { telemetry, shadow, config, connection, events ->
+        RepositoryState(telemetry, shadow, config, connection, events)
+    }
+
+    val uiState: StateFlow<DashboardUiState> = combine(
+        repositoryStateFlow,
         pendingCommand,
         commandOutcome
-    ) { telemetry, shadow, config, connection, events, pending, outcome ->
+    ) { repoState, pending, outcome ->
+        val telemetry = repoState.telemetry
+        val shadow = repoState.shadow
+        val config = repoState.config
+        val connection = repoState.connection
+        val events = repoState.events
+
         val desiredMode = mapDesiredMode(shadow.desired.mode)
         val currentMode = mapReportedMode(shadow.reported.runMode, desiredMode)
         val reported = shadow.reported
