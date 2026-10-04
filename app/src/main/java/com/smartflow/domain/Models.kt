@@ -14,6 +14,15 @@ enum class ConnectionState {
     CONNECTING
 }
 
+enum class PendingCommandType {
+    MANUAL_POWER,
+    MODE_CHANGE,
+    COUNTDOWN_START,
+    COUNTDOWN_STOP,
+    EMERGENCY_STOP,
+    CLEAR_ERRORS
+}
+
 sealed interface CommandState {
     data object Ready : CommandState
     data object Pending : CommandState
@@ -116,7 +125,8 @@ data class DashboardUiState(
     val lastFaultMessage: String = "",
     val lastFaultCode: String = "",
     val events: List<DeviceEvent> = emptyList(),
-    val commandState: CommandState = CommandState.Ready
+    val commandState: CommandState = CommandState.Ready,
+    val pendingCommandType: PendingCommandType? = null
 )
 
 data class DeviceEvent(
