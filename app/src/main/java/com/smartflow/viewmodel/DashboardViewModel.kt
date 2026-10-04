@@ -99,28 +99,18 @@ class DashboardViewModel(
                 val currentMode = mapReportedMode(shadow.reported.runMode, desiredMode)
                 val reported = shadow.reported
 
-                when {
-                    isCommandSatisfied(command, currentMode, reported) -> {
-                        finishCommand(CommandState.Completed)
-                    }
-                    connection != ConnectionState.DISCONNECTED &&
-                        reported.emergencyStopLatched &&
-                        command !is DashboardCommand.EmergencyStop &&
-                        command !is DashboardCommand.ClearErrors -> {
-                        finishCommand(CommandState.InterlockBlocked)
-                    }
-                    connection != ConnectionState.DISCONNECTED &&
-                        isFaultActive(reported) &&
-                        command !is DashboardCommand.EmergencyStop &&
-                        command !is DashboardCommand.ClearErrors -> {
-                        finishCommand(
-                            CommandState.Rejected(
-                                reported.lastFaultMessage.ifEmpty {
-                                    faultTitle(reported.lastFaultCode)
-                                }
-                            )
-                        )
-                    }
+                when (
+                    deriveCommandState(
+                        command = command,
+                        connection = connection,
+                        currentMode = currentMode,
+                        reported = reported
+                    )
+                ) {
+                    CommandState.Completed -> finishCommand(CommandState.Completed)
+                    is CommandState.Rejected -> finishCommand(commandState)
+                    CommandState.InterlockBlocked -> finishCommand(CommandState.InterlockBlocked)
+                    else -> Unit
                 }
             }
         }
