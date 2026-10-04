@@ -25,6 +25,7 @@ import com.smartflow.domain.CommandState
 import com.smartflow.domain.ConnectionState
 import com.smartflow.domain.DeviceConfigValidator
 import com.smartflow.domain.OperatingMode
+import com.smartflow.domain.PendingCommandType
 import com.smartflow.domain.PumpState
 import com.smartflow.viewmodel.faultTitle
 import com.smartflow.presentation.components.core.CommandButton
@@ -39,6 +40,7 @@ fun ControlPanel(
     pumpState: PumpState,
     connectionState: ConnectionState,
     commandState: CommandState,
+    pendingCommandType: PendingCommandType?,
     lastFaultMessage: String,
     lastFaultCode: String = "",
     onModeChanged: (OperatingMode) -> Unit,
@@ -58,8 +60,8 @@ fun ControlPanel(
 
     val isPumpRunning = pumpState is PumpState.Running || pumpState is PumpState.Starting
     val lockoutActive = pumpState is PumpState.Interlocked || pumpState is PumpState.Error
-    val isPendingManual = operatingMode == OperatingMode.MANUAL && (commandState is CommandState.Pending || commandState is CommandState.Accepted)
-    val isCountdownStartDesired = desiredMode == OperatingMode.COUNTDOWN && (commandState is CommandState.Pending || commandState is CommandState.Accepted)
+    val isPendingManual = pendingCommandType == PendingCommandType.MANUAL_POWER
+    val isCountdownStartPending = pendingCommandType == PendingCommandType.COUNTDOWN_START
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -70,6 +72,7 @@ fun ControlPanel(
             operatingMode = operatingMode,
             desiredMode = desiredMode,
             commandState = commandState,
+            pendingCommandType = pendingCommandType,
             onModeSelected = { mode ->
                 if (isConnected) onModeChanged(mode)
             }
@@ -176,7 +179,7 @@ fun ControlPanel(
                     }
                     CommandButton(
                         text = "START TIMER",
-                        commandState = if (isCountdownStartDesired && !isPumpRunning) CommandState.Pending else commandState,
+                        commandState = if (isCountdownStartPending && !isPumpRunning) CommandState.Pending else CommandState.Ready,
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             val durationMin = countdownDuration.toInt()
@@ -235,7 +238,9 @@ fun ControlPanel(
             // E-STOP (High visibility Red pill button)
             EmergencyStopButton(
                 text = "E-STOP",
-                commandState = commandState,
+                isConnected = isConnected,
+                isPending = pendingCommandType == PendingCommandType.EMERGENCY_STOP,
+                isLatched = pumpState is PumpState.Interlocked,
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onEmergencyStop()
