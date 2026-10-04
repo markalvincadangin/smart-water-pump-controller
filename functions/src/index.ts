@@ -10,7 +10,7 @@ import * as admin from "firebase-admin";
 import { onValueCreated, onValueWritten } from "firebase-functions/v2/database";
 import { logger } from "firebase-functions";
 import { canSend, isDndActive, recordSent } from "./notifications";
-import { DERIVED_NOTIFICATION_POLICIES, NOTIFICATION_POLICIES } from "./notificationPolicy";
+import { NOTIFICATION_POLICIES } from "./notificationPolicy";
 
 export {
   bootstrapDevice,
