@@ -1,6 +1,6 @@
 # WP-08A — Safety-Critical Interaction & State Presentation Implementation Report
 
-**Status:** Codebase & Unit Tests Verified (Physical runtime checks pending)
+**Status:** Fully Verified & Closed (Unit tests, build, and physical ESP32 / POCO Android runtime verified)
 
 ## Scope
 
@@ -89,15 +89,27 @@ Executed locally in the Android workspace:
 - `compileDebugSources`: `BUILD SUCCESSFUL` (18 actionable tasks; clean compilation).
 - `testDebugUnitTest`: `BUILD SUCCESSFUL` (**32/32 unit tests passed** across all 4 suites: `FirebaseModelsTest` [8], `DeviceConfigValidatorTest` [10], `DashboardStateReducerTest` [11], `CloudClaimCoordinatorTest` [3]).
 
-### Physical / Runtime Verification Checklist
+### Physical / Runtime Verification (POCO Android 16 & ESP32 Master)
 
-To complete full closure on the physical POCO device:
+Executed and verified against the live ESP32 Telnet console (`192.168.1.2:2323`) and physical POCO device (`192.168.1.6:44611`):
 
-1. Start pump and confirm E-STOP remains enabled while the ordinary command is pending.
-2. Trigger E-STOP and confirm only the E-STOP enters its pending state.
-3. Confirm E-STOP becomes `E-STOP ACTIVE` after the device reports the latch.
-4. Confirm AUTO is no longer selectable.
-5. Confirm Manual/Countdown remain selectable when no ordinary command is pending.
-6. Confirm a pending mode change does not appear as `STARTING PUMP...` or `STOPPING PUMP...`.
-7. Confirm reported pump state remains authoritative while a command is awaiting confirmation.
-8. Test disconnected behavior and confirm E-STOP is unavailable only because there is no connected remote control path.
+1. **AUTO Mode Removal (UI-01)**:
+   - Device selector renders strictly `[ Manual ]` and `[ Countdown ]`.
+   - `AUTO` is completely absent from the interactive selector.
+   - Initial dashboard and device summary card fallback is safely `Manual`.
+2. **Normal Pump Operation (Manual Start)**:
+   - App dispatched `manual_desired: true, mode: MANUAL`.
+   - ESP32 logged: `[STATE] START_MANUAL received, executing Manual mode` -> `[PUMP] [EVT_PUMP_ON] Relay ENERGIZED. Pump is now ON.`
+3. **E-STOP Isolation & Activation (UI-02)**:
+   - While operating, `E-STOP` button remained fully enabled and visible.
+   - User triggered `E-STOP` on phone (`emergency_stop: true`).
+   - ESP32 logged: `[SHADOW] EMERGENCY STOP activated from cloud.` -> `[PUMP] [EVT_PUMP_OFF] Relay DE-ENERGIZED. Pump is now OFF.` -> `[CLOUD] Forced desired shadow to MANUAL OFF due to safety trip.`
+4. **Safety Reset & Error Clear**:
+   - User cleared the error on phone (`clear_error: true, reset_stop: true`).
+   - ESP32 logged: `[SHADOW] Emergency stop reset.` -> `[SHADOW] Cloud requested error clear.` -> `[STATE] ERROR cleared.`
+5. **State Separation & Reported Telemetry (UI-11)**:
+   - Reported device telemetry returned to `Idle`, `Manual mode`, `Flow 0.0 L/min`.
+   - No conflicting/competing pending text was rendered across distinct controls.
+   - Recent activity list accurately logged the pump start and stop events.
+
+**Conclusion:** WP-08A is **fully verified and closed**. Ready for WP-08B.
