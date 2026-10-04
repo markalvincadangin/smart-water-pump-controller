@@ -113,25 +113,29 @@ internal fun deriveCommandState(
         return CommandState.OfflineBlocked
     }
 
-    if (isCommandSatisfied(command, currentMode, reported)) {
+    if (command is DashboardCommand.EmergencyStop && reported.emergencyStopLatched) {
         return CommandState.Completed
     }
 
-    if (reported.emergencyStopLatched &&
-        command !is DashboardCommand.EmergencyStop &&
-        command !is DashboardCommand.ClearErrors
+    if (command !is DashboardCommand.EmergencyStop &&
+        command !is DashboardCommand.ClearErrors &&
+        reported.emergencyStopLatched
     ) {
         return CommandState.InterlockBlocked
     }
 
-    if (isFaultActive(reported) &&
-        command !is DashboardCommand.EmergencyStop &&
-        command !is DashboardCommand.ClearErrors
+    if (command !is DashboardCommand.EmergencyStop &&
+        command !is DashboardCommand.ClearErrors &&
+        isFaultActive(reported)
     ) {
         val reason = reported.lastFaultMessage.ifEmpty {
             faultTitle(reported.lastFaultCode)
         }
         return CommandState.Rejected(reason)
+    }
+
+    if (isCommandSatisfied(command, currentMode, reported)) {
+        return CommandState.Completed
     }
 
     return CommandState.Pending
