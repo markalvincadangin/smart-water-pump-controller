@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import android.os.Bundle
+import android.content.Intent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -45,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -69,7 +71,32 @@ private fun hasEligibleAccount(): Boolean {
     return AccountSession.state(FirebaseAuth.getInstance().currentUser) == DurableAccountState.ELIGIBLE
 }
 
+data class NotificationRouteTarget(
+    val deviceId: String?,
+    val eventId: String?,
+    val eventCode: String?,
+    val tag: String?
+)
+
+private const val EXTRA_NOTIFICATION_DEVICE_ID = "deviceId"
+private const val EXTRA_NOTIFICATION_EVENT_ID = "eventId"
+private const val EXTRA_NOTIFICATION_EVENT_CODE = "eventCode"
+private const val EXTRA_NOTIFICATION_TAG = "tag"
+
+private fun notificationRouteTarget(intent: Intent?): NotificationRouteTarget? {
+    if (intent?.getBooleanExtra("smartflow_notification", false) != true) return null
+
+    val deviceId = intent.getStringExtra(EXTRA_NOTIFICATION_DEVICE_ID)?.takeIf { it.isNotBlank() }
+    val eventId = intent.getStringExtra(EXTRA_NOTIFICATION_EVENT_ID)?.takeIf { it.isNotBlank() }
+    val eventCode = intent.getStringExtra(EXTRA_NOTIFICATION_EVENT_CODE)?.takeIf { it.isNotBlank() }
+    val tag = intent.getStringExtra(EXTRA_NOTIFICATION_TAG)?.takeIf { it.isNotBlank() }
+
+    if (deviceId == null && eventId == null && eventCode == null && tag == null) return null
+    return NotificationRouteTarget(deviceId, eventId, eventCode, tag)
+}
+
 class MainActivity : ComponentActivity() {
+    private val notificationRouteState = mutableStateOf<NotificationRouteTarget?>(null)
 
     private val firebaseAuth = FirebaseAuth.getInstance()
     private val authStateListener = FirebaseAuth.AuthStateListener { user ->
@@ -132,6 +159,7 @@ class MainActivity : ComponentActivity() {
 
         createNotificationChannel()
         askNotificationPermission()
+        notificationRouteState.value = notificationRouteTarget(intent)
         firebaseAuth.addAuthStateListener(authStateListener)
 
         settingsRepository = SettingsRepository(applicationContext)
@@ -157,12 +185,20 @@ class MainActivity : ComponentActivity() {
                             cloudStore = cloudStore,
                             settingsRepository = settingsRepository,
                             snackbarHostState = snackbarHostState,
-                            windowWidthSizeClass = windowWidthSizeClass
+                            windowWidthSizeClass = windowWidthSizeClass,
+                            notificationRouteTarget = notificationRouteState.value,
+                            onNotificationRouteConsumed = { notificationRouteState.value = null }
                         )
                     }
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        notificationRouteState.value = notificationRouteTarget(intent)
     }
 
     override fun onDestroy() {
@@ -182,7 +218,9 @@ fun AppNavigation(
     cloudStore: FirebaseCloudStore,
     settingsRepository: SettingsRepository,
     snackbarHostState: SnackbarHostState,
-    windowWidthSizeClass: WindowWidthSizeClass
+    windowWidthSizeClass: WindowWidthSizeClass,
+    notificationRouteTarget: NotificationRouteTarget? = null,
+    onNotificationRouteConsumed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val auth = FirebaseAuth.getInstance()
@@ -193,6 +231,32 @@ fun AppNavigation(
 
     val bottomNavRoutes = listOf("device_list", "notifications", "settings")
     val showBottomNav = currentRoute in bottomNavRoutes
+
+    LaunchedEffect(notificationRouteTarget, currentRoute, auth.currentUser?.uid) {
+        val target = notificationRouteTarget ?: return@LaunchedEffect
+        val uid = auth.currentUser?.uid ?: return@LaunchedEffect
+
+        if (target.deviceId != null) {
+            deviceRepository.getUserDevicesStream(uid).first { deviceIds ->
+                if (target.deviceId in deviceIds) {
+                    navController.navigate("dashboard/" + target.deviceId) {
+                        launchSingleTop = true
+                    }
+                } else {
+                    navController.navigate("notifications") {
+                        launchSingleTop = true
+                    }
+                }
+                onNotificationRouteConsumed()
+                true
+            }
+        } else {
+            navController.navigate("notifications") {
+                launchSingleTop = true
+            }
+            onNotificationRouteConsumed()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
