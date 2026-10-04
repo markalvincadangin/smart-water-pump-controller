@@ -5,6 +5,7 @@ data class NotificationPrefs(
     val dndEnabled: Boolean = false,
     val dndStartHour: Int = 22,
     val dndEndHour: Int = 6,
+    val timezone: String = java.time.ZoneId.systemDefault().id,
     val lastReadTimestamp: Long = 0L,
     val fcmTokens: Map<String, String> = emptyMap(),
     val readEventIds: Map<String, Boolean> = emptyMap(),
@@ -12,5 +13,5 @@ data class NotificationPrefs(
     val dryRunAlert: Boolean = true,
     val lowLevelAlert: Boolean = true,
     val pumpStartedAlert: Boolean = true,
-    val overflowAlert: Boolean = true
+    val maxRuntimeAlert: Boolean = true
 )
