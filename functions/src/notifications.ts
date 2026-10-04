@@ -5,6 +5,13 @@
 
 import type { Database } from "firebase-admin/database";
 
+export interface NotificationDndConfig {
+  dndEnabled?: boolean;
+  dndStartHour?: number;
+  dndEndHour?: number;
+  timezone?: string;
+}
+
 export const THROTTLE_SEC = 15 * 60; // 15 minutes
 
 export interface LastSent {
@@ -44,4 +51,21 @@ export async function recordSent(
 ): Promise<void> {
   const lastRef = db.ref(`users/${uid}/notification_last_sent`);
   await lastRef.update({ [type]: Math.floor(Date.now() / 1000) });
+}
+
+
+export function isDndActive(config: NotificationDndConfig, now = new Date()): boolean {
+  if (!config.dndEnabled) return false;
+  const start = config.dndStartHour ?? 22;
+  const end = config.dndEndHour ?? 6;
+  if (start < 0 || start > 23 || end < 0 || end > 23) return false;
+  const timezone = config.timezone || "UTC";
+  let hour: number;
+  try {
+    hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "2-digit", hourCycle: "h23" }).format(now));
+  } catch {
+    hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "UTC", hour: "2-digit", hourCycle: "h23" }).format(now));
+  }
+  if (start === end) return true;
+  return start < end ? hour >= start && hour < end : hour >= start || hour < end;
 }
