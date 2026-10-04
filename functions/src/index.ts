@@ -9,7 +9,7 @@
 import * as admin from "firebase-admin";
 import { onValueCreated, onValueWritten } from "firebase-functions/v2/database";
 import { logger } from "firebase-functions";
-import { claimEventDelivery, claimThrottle, isDndActive, releaseEventDelivery } from "./notifications";
+import { claimEventDelivery, claimThrottle, isDndActive, releaseEventDelivery, releaseThrottle } from "./notifications";
 import { NOTIFICATION_POLICIES } from "./notificationPolicy";
 
 export {
@@ -228,6 +228,7 @@ export const onDeviceEventCreated = onValueCreated(
         sent = await sendPush(tokens, "⚠ Maximum Runtime Protection", "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.", policy.throttleKey);
       }
       if (!sent) {
+        await releaseThrottle(db(), uid, policy.throttleKey);
         await releaseEventDelivery(db(), uid, event.params.eventId);
       }
     }
