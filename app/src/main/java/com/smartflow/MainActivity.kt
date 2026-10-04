@@ -63,6 +63,20 @@ private fun hasEligibleAccount(): Boolean {
 
 class MainActivity : ComponentActivity() {
 
+    private val firebaseAuth = FirebaseAuth.getInstance()
+    private val authStateListener = FirebaseAuth.AuthStateListener { user ->
+        if (user != null) {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    android.util.Log.w("FCM", "Fetching FCM registration token failed", task.exception)
+                    return@addOnCompleteListener
+                }
+                FcmTokenRegistrar.registerToken(task.result)
+            }
+        }
+    }
+
+
     private lateinit var rxBleClient: RxBleClient
     private lateinit var bleProvisioningClient: BleProvisioningClient
     private lateinit var cloudStore: FirebaseCloudStore
@@ -104,18 +118,7 @@ class MainActivity : ComponentActivity() {
         deviceRepository = DeviceRepository(cloudStore)
 
         askNotificationPermission()
-
-        FirebaseAuth.getInstance().addAuthStateListener { user ->
-            if (user != null) {
-                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                    if (!task.isSuccessful) {
-                        android.util.Log.w("FCM", "Fetching FCM registration token failed", task.exception)
-                        return@addOnCompleteListener
-                    }
-                    FcmTokenRegistrar.registerToken(task.result)
-                }
-            }
-        }
+        firebaseAuth.addAuthStateListener(authStateListener)
 
         settingsRepository = SettingsRepository(applicationContext)
 
@@ -138,6 +141,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        firebaseAuth.removeAuthStateListener(authStateListener)
+        super.onDestroy()
     }
 }
 
