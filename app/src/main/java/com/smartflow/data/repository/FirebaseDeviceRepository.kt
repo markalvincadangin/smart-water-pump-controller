@@ -14,6 +14,7 @@ import com.smartflow.data.AccountSession
 import com.smartflow.data.DurableAccountState
 import com.smartflow.data.dto.DeviceEventDto
 import com.smartflow.data.dto.DeviceShadowDto
+import com.smartflow.data.dto.DeviceConfigDto
 import com.smartflow.data.dto.TelemetryDto
 import com.smartflow.data.dto.toDto
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -152,9 +153,9 @@ class FirebaseDeviceRepository(
 
         deviceRef.child("settings").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val c = snapshot.getValue(DeviceConfig::class.java)
+                val c = snapshot.getValue(DeviceConfigDto::class.java)
                 if (c != null) {
-                    _configFlow.value = c
+                    _configFlow.value = c.toDomain()
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
@@ -208,7 +209,7 @@ class FirebaseDeviceRepository(
 
     override fun updateConfig(config: DeviceConfig) {
         if (_connectionFlow.value == ConnectionState.CONNECTED) {
-            deviceRef.child("settings").setValue(config)
+            deviceRef.child("settings").setValue(config.toDto())
         }
     }
 
