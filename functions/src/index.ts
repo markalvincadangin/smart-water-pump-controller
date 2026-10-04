@@ -106,10 +106,12 @@ async function sendPush(
           if (!r.success) logger.warn("FCM send failed for token", i, r.error?.message);
         });
       }
+      return result.successCount > 0;
     }
   } catch (err) {
     logger.error("Push send failed:", err);
   }
+  return false;
 }
 
 async function getActiveNotificationConfigs(): Promise<Array<{ uid: string; config: NotificationConfig }>> {
