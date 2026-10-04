@@ -120,14 +120,14 @@ describe("atomic delivery claims", () => {
 
   it("deduplicates the same authoritative event", async () => {
     const db = transactionalDb();
-    expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(true);
+    expect(await claimEventDelivery(db, "user1", "device1", "-Oevent123")).toBe(true);
     expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(false);
   });
 
   it("allows a failed event delivery to be retried after releasing its claim", async () => {
     const db = transactionalDb();
     expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(true);
-    await releaseEventDelivery(db, "user1", "-Oevent123");
+    await releaseEventDelivery(db, "user1", "device1", "-Oevent123");
     expect(await claimEventDelivery(db, "user1", "-Oevent123")).toBe(true);
   });
 
