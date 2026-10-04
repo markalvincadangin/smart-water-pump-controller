@@ -89,6 +89,7 @@ class DashboardViewModel(
             controlAuthority = ControlAuthority.Remote,
             dataFreshness = if (connection == ConnectionState.CONNECTED) DataFreshness.Live else DataFreshness.Stale,
             lastFaultMessage = shadow.reported.lastFaultMessage,
+            lastFaultCode = shadow.reported.lastFaultCode,
             events = events,
             commandState = commandState
         )
