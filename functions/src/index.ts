@@ -9,7 +9,7 @@
 import * as admin from "firebase-admin";
 import { onValueCreated, onValueWritten } from "firebase-functions/v2/database";
 import { logger } from "firebase-functions";
-import { canSend, isDndActive, recordSent } from "./notifications";
+import { claimEventDelivery, claimThrottle, isDndActive, releaseEventDelivery } from "./notifications";
 import { NOTIFICATION_POLICIES } from "./notificationPolicy";
 
 export {
@@ -86,8 +86,8 @@ async function sendPush(
   title: string,
   body: string,
   tag: string
-): Promise<void> {
-  if (tokens.length === 0) return;
+): Promise<boolean> {
+  if (tokens.length === 0) return false;
   const messaging = admin.messaging();
   const base = {
     notification: { title, body },
@@ -98,6 +98,7 @@ async function sendPush(
   try {
     if (tokens.length === 1) {
       await messaging.send({ ...base, token: tokens[0] });
+      return true;
     } else {
       const result = await messaging.sendEachForMulticast({ ...base, tokens });
       if (result.failureCount > 0) {
@@ -160,7 +161,7 @@ export const onDeviceUpdated = onValueWritten(
 
       // 3. Low tank level
       if (waterLevel <= threshold && (config.lowLevelAlert ?? true) && !isDndActive(config)) {
-        if (await canSend(db(), uid, "lowLevel")) {
+        if (await claimThrottle(db(), uid, "lowLevel")) {
           await sendPush(
             tokens,
             `⚠ Low Tank (${waterLevel}%)`,
@@ -173,7 +174,7 @@ export const onDeviceUpdated = onValueWritten(
 
       // 4. Pump just started
       if ((config.pumpStartedAlert ?? true) && isRunning && !wasRunning && !isDndActive(config)) {
-        if (await canSend(db(), uid, "pumpStarted")) {
+        if (await claimThrottle(db(), uid, "pumpStarted")) {
           await sendPush(
             tokens,
             "▶ Pump Started",
@@ -214,14 +215,21 @@ export const onDeviceEventCreated = onValueCreated(
 
       if (!(config[policy.preferenceKey] ?? true)) continue;
       if (!policy.dndCritical && isDndActive(config)) continue;
-      if (!(await canSend(db(), uid, policy.throttleKey))) continue;
-
-      if (code === "EVT_DRY_RUN_LOCKOUT") {
-        await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", policy.throttleKey);
-      } else if (code === "EVT_MAX_RUNTIME_EXCEEDED") {
-        await sendPush(tokens, "⚠ Maximum Runtime Protection", "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.", policy.throttleKey);
+      if (!(await claimEventDelivery(db(), uid, event.params.eventId))) continue;
+      if (!(await claimThrottle(db(), uid, policy.throttleKey))) {
+        await releaseEventDelivery(db(), uid, event.params.eventId);
+        continue;
       }
-      await recordSent(db(), uid, policy.throttleKey);
+
+      let sent = false;
+      if (code === "EVT_DRY_RUN_LOCKOUT") {
+        sent = await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", policy.throttleKey);
+      } else if (code === "EVT_MAX_RUNTIME_EXCEEDED") {
+        sent = await sendPush(tokens, "⚠ Maximum Runtime Protection", "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.", policy.throttleKey);
+      }
+      if (!sent) {
+        await releaseEventDelivery(db(), uid, event.params.eventId);
+      }
     }
   }
 );
