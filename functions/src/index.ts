@@ -217,9 +217,9 @@ export const onDeviceEventCreated = onValueCreated(
 
       if (!(config[policy.preferenceKey] ?? true)) continue;
       if (!policy.dndCritical && isDndActive(config)) continue;
-      if (!(await claimEventDelivery(db(), uid, event.params.eventId))) continue;
+      if (!(await claimEventDelivery(db(), uid, deviceId, event.params.eventId))) continue;
       if (!(await claimThrottle(db(), uid, policy.throttleKey))) {
-        await releaseEventDelivery(db(), uid, event.params.eventId);
+        await releaseEventDelivery(db(), uid, deviceId, event.params.eventId);
         continue;
       }
 
