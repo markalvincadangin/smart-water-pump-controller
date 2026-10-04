@@ -85,13 +85,14 @@ async function sendPush(
   tokens: string[],
   title: string,
   body: string,
-  tag: string
+  tag: string,
+  data: Record<string, string> = {}
 ): Promise<boolean> {
   if (tokens.length === 0) return false;
   const messaging = admin.messaging();
   const base = {
     notification: { title, body },
-    data: { tag },
+    data: { tag, ...data },
     android: { priority: "high" as const, notification: { channelId: "pump_alerts" } },
     apns: { payload: { aps: { sound: "default", badge: 1 } } },
   };
@@ -225,9 +226,29 @@ export const onDeviceEventCreated = onValueCreated(
 
       let sent = false;
       if (code === "EVT_DRY_RUN_LOCKOUT") {
-        sent = await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", policy.throttleKey);
+        sent = await sendPush(
+          tokens,
+          "⚠ Dry-Run Lockout",
+          "No flow detected. Check pump and water source.",
+          policy.throttleKey,
+          {
+            eventCode: code,
+            eventId: event.params.eventId,
+            deviceId,
+          }
+        );
       } else if (code === "EVT_MAX_RUNTIME_EXCEEDED") {
-        sent = await sendPush(tokens, "⚠ Maximum Runtime Protection", "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.", policy.throttleKey);
+        sent = await sendPush(
+          tokens,
+          "⚠ Maximum Runtime Protection",
+          "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.",
+          policy.throttleKey,
+          {
+            eventCode: code,
+            eventId: event.params.eventId,
+            deviceId,
+          }
+        );
       }
       if (!sent) {
         await releaseThrottle(db(), uid, policy.throttleKey);
