@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import com.smartflow.domain.ConnectionState
 import com.smartflow.domain.OperatingMode
 import com.smartflow.domain.CommandState
+import com.smartflow.domain.PendingCommandType
 import com.smartflow.domain.SensorAvailability
 import com.smartflow.presentation.components.ActivityPanel
 import com.smartflow.presentation.components.ConfigBottomSheet
@@ -181,6 +182,7 @@ fun DashboardScreen(
                             pumpState = uiState.pumpState,
                             connectionState = uiState.connectionStatus,
                             commandState = uiState.commandState,
+                            pendingCommandType = uiState.pendingCommandType,
                             lastFaultMessage = uiState.lastFaultMessage,
                             lastFaultCode = uiState.lastFaultCode,
                             countdownRemainingSec = uiState.countdownRemainingSec,
@@ -220,6 +222,7 @@ fun DashboardScreen(
                         pumpState = uiState.pumpState,
                         connectionState = uiState.connectionStatus,
                         commandState = uiState.commandState,
+                        pendingCommandType = uiState.pendingCommandType,
                         lastFaultMessage = uiState.lastFaultMessage,
                         lastFaultCode = uiState.lastFaultCode,
                         countdownRemainingSec = uiState.countdownRemainingSec,
