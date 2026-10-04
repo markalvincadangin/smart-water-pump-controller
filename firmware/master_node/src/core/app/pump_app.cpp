@@ -71,8 +71,8 @@ void PumpApp::executeLogic() {
   }
   
   if (status.decision == SafetyDecision::STOP_OVERFLOW || isOverflowError) {
-    lastFaultCode    = "OVERFLOW";
-    lastFaultMessage = "Overflow protection: max runtime exceeded.";
+    lastFaultCode    = "MAX_RUNTIME";
+    lastFaultMessage = "Maximum runtime protection: configured runtime limit exceeded.";
     enterErrorFallback();
     return;
   }
