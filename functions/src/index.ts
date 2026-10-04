@@ -92,7 +92,7 @@ async function sendPush(
   const messaging = admin.messaging();
   const base = {
     notification: { title, body },
-    data: { tag, ...data },
+    data: { smartflow_notification: "true", tag, ...data },
     android: { priority: "high" as const, notification: { channelId: "pump_alerts" } },
     apns: { payload: { aps: { sound: "default", badge: 1 } } },
   };
@@ -169,7 +169,8 @@ export const onDeviceUpdated = onValueWritten(
             tokens,
             `⚠ Low Tank (${waterLevel}%)`,
             `Water at ${waterLevel}% (threshold: ${threshold}%). Pump: ${isRunning ? "Running" : "Stopped"}.`,
-            "lowLevel"
+            "lowLevel",
+            { deviceId: event.params.deviceId }
           );
           if (!sent) await releaseThrottle(db(), uid, "lowLevel");
         }
@@ -182,7 +183,8 @@ export const onDeviceUpdated = onValueWritten(
             tokens,
             "▶ Pump Started",
             `Tank: ${waterLevel}%, Flow: ${flowRate.toFixed(1)} LPM`,
-            "pumpStarted"
+            "pumpStarted",
+            { deviceId: event.params.deviceId }
           );
           if (!sent) await releaseThrottle(db(), uid, "pumpStarted");
         }
