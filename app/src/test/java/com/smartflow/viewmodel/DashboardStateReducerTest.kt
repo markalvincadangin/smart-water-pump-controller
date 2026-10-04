@@ -110,6 +110,26 @@ class DashboardStateReducerTest {
     }
 
     @Test
+    fun activeSafetyFaultDoesNotCountAsSuccessfulStop() {
+        val state = deriveCommandState(
+            command = DashboardCommand.ManualPower(on = false),
+            connection = ConnectionState.CONNECTED,
+            currentMode = OperatingMode.MANUAL,
+            reported = ShadowReported(
+                runMode = "MANUAL_OFF",
+                isRunning = false,
+                isError = true,
+                lastFaultCode = "DRY_RUN"
+            )
+        )
+
+        assertEquals(
+            CommandState.Rejected("Dry-run lockout"),
+            state
+        )
+    }
+
+    @Test
     fun faultRejectsPendingNormalCommandWhenNoInterlockIsLatched() {
         val state = deriveCommandState(
             command = DashboardCommand.ManualPower(on = true),
