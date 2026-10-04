@@ -5,15 +5,15 @@ import com.smartflow.domain.*
 import java.time.Instant
 
 data class ShadowDesiredDto(
-    @get:PropertyName("mode") @set:PropertyName("mode") var mode: String = OperatingMode.AUTO.name,
+    @get:PropertyName("mode") @set:PropertyName("mode") var mode: String = OperatingMode.MANUAL.name,
     @get:PropertyName("manual_desired") @set:PropertyName("manual_desired") var manualDesired: Boolean = false,
     @get:PropertyName("countdown_start") @set:PropertyName("countdown_start") var countdownStart: Boolean = false,
     @get:PropertyName("countdown_duration_min") @set:PropertyName("countdown_duration_min") var countdownDurationMin: Int = 0,
     @get:PropertyName("emergency_stop") @set:PropertyName("emergency_stop") var emergencyStop: Boolean = false,
     @get:PropertyName("reset_stop") @set:PropertyName("reset_stop") var resetStop: Boolean = false,
     @get:PropertyName("clear_error") @set:PropertyName("clear_error") var clearError: Boolean = false,
-    @get:PropertyName("bypass_level_sensor") @set:PropertyName("bypass_level_sensor") var bypassLevelSensor: Boolean = true,
-    @get:PropertyName("bypass_flow_sensor") @set:PropertyName("bypass_flow_sensor") var bypassFlowSensor: Boolean = true,
+    @get:PropertyName("bypass_level_sensor") @set:PropertyName("bypass_level_sensor") var bypassLevelSensor: Boolean = false,
+    @get:PropertyName("bypass_flow_sensor") @set:PropertyName("bypass_flow_sensor") var bypassFlowSensor: Boolean = false,
     @get:PropertyName("reboot_device") @set:PropertyName("reboot_device") var rebootDevice: Boolean = false
 ) {
     fun toDomain() = ShadowDesired(
@@ -50,7 +50,8 @@ data class ShadowReportedDto(
     @get:PropertyName("is_error") @set:PropertyName("is_error") var isError: Boolean = false,
     @get:PropertyName("is_overflow_error") @set:PropertyName("is_overflow_error") var isOverflowError: Boolean = false,
     @get:PropertyName("emergency_stop_latched") @set:PropertyName("emergency_stop_latched") var emergencyStopLatched: Boolean = false,
-    @get:PropertyName("last_fault_message") @set:PropertyName("last_fault_message") var lastFaultMessage: String = ""
+    @get:PropertyName("last_fault_message") @set:PropertyName("last_fault_message") var lastFaultMessage: String = "",
+    @get:PropertyName("last_fault_code") @set:PropertyName("last_fault_code") var lastFaultCode: String = ""
 ) {
     fun toDomain() = ShadowReported(
         runMode = runMode,
@@ -59,7 +60,8 @@ data class ShadowReportedDto(
         isError = isError,
         isOverflowError = isOverflowError,
         emergencyStopLatched = emergencyStopLatched,
-        lastFaultMessage = lastFaultMessage
+        lastFaultMessage = lastFaultMessage,
+        lastFaultCode = lastFaultCode
     )
 }
 
@@ -72,6 +74,37 @@ data class DeviceShadowDto(
         reported = reported.toDomain()
     )
 }
+
+/**
+ * Firebase RTDB representation of /devices/{deviceId}/settings.
+ *
+ * Keep Firebase field names in the DTO and expose contract-aligned names to
+ * the Android domain layer.
+ */
+data class DeviceConfigDto(
+    @get:PropertyName("pump_start_level_pct") @set:PropertyName("pump_start_level_pct")
+    var pumpStartLevelPct: Int = 30,
+    @get:PropertyName("pump_stop_level_pct") @set:PropertyName("pump_stop_level_pct")
+    var pumpStopLevelPct: Int = 100,
+    @get:PropertyName("dry_run_threshold_lpm") @set:PropertyName("dry_run_threshold_lpm")
+    var dryRunThresholdLpm: Float = 1.0f,
+    @get:PropertyName("max_pump_runtime_min") @set:PropertyName("max_pump_runtime_min")
+    var maxPumpRuntimeMin: Int = 120
+) {
+    fun toDomain() = DeviceConfig(
+        pumpStartLevelPct = pumpStartLevelPct,
+        pumpStopLevelPct = pumpStopLevelPct,
+        dryRunThresholdLpm = dryRunThresholdLpm,
+        maxPumpRuntimeMin = maxPumpRuntimeMin
+    )
+}
+
+fun DeviceConfig.toDto() = DeviceConfigDto(
+    pumpStartLevelPct = pumpStartLevelPct,
+    pumpStopLevelPct = pumpStopLevelPct,
+    dryRunThresholdLpm = dryRunThresholdLpm,
+    maxPumpRuntimeMin = maxPumpRuntimeMin
+)
 
 data class TelemetryDto(
     @get:PropertyName("water_level_percent") @set:PropertyName("water_level_percent") var waterLevel: Int = 0,
