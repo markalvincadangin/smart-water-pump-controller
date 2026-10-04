@@ -1,6 +1,6 @@
 /**
  * Smart Water Pump Controller — Cloud Functions
- * Sends FCM push notifications for high-risk events: dry-run, overflow, low tank, pump started.
+ * Sends FCM push notifications for high-risk events: dry-run, max-runtime, low tank, pump started.
  *
  * No email dependencies. Requires Firebase Cloud Messaging enabled on the project.
  * Users must store their FCM token at: /users/{uid}/notification_prefs/fcmTokens/{tokenId}
@@ -72,7 +72,7 @@ interface NotificationConfig {
   lowLevelAlert?: boolean;
   lowLevelThreshold?: number;
   pumpStartedAlert?: boolean;
-  overflowAlert?: boolean;
+  maxRuntimeAlert?: boolean;
 }
 
 async function sendPush(
@@ -133,8 +133,8 @@ export const onDeviceUpdated = onValueWritten(
     if (!after) return;
 
     // Extract data from V2 schema
-    const waterLevel = after.telemetry?.waterLevel ?? 0;
-    const flowRate = after.telemetry?.flowRate ?? 0;
+    const waterLevel = after.telemetry?.water_level_percent ?? 0;
+    const flowRate = after.telemetry?.flow_rate_lpm ?? 0;
     const isRunning = after.shadow?.reported?.is_running ?? false;
     const wasRunning = before?.shadow?.reported?.is_running ?? false;
 
@@ -193,7 +193,7 @@ export const onDeviceEventCreated = onValueCreated(
     const deviceId = event.params.deviceId;
     const code = eventData.code;
 
-    if (code !== "DRY_RUN" && code !== "OVERFLOW" && code !== "COUNTDOWN_FINISHED") {
+    if (code !== "EVT_DRY_RUN_LOCKOUT" && code !== "EVT_MAX_RUNTIME_EXCEEDED") {
       return;
     }
 
@@ -207,12 +207,10 @@ export const onDeviceEventCreated = onValueCreated(
       const tokens = getFcmTokens(config);
       if (tokens.length === 0) continue;
 
-      if (code === "DRY_RUN" && (config.dryRunAlert ?? true)) {
+      if (code === "EVT_DRY_RUN_LOCKOUT" && (config.dryRunAlert ?? true)) {
         await sendPush(tokens, "⚠ Dry-Run Lockout", "No flow detected. Check pump and water source.", "dryRun");
-      } else if (code === "OVERFLOW" && (config.overflowAlert ?? true)) {
-        await sendPush(tokens, "⚠ Overflow Protection", "Max runtime exceeded. Check tank and sensor.", "overflow");
-      } else if (code === "COUNTDOWN_FINISHED") {
-        await sendPush(tokens, "⏱️ Countdown Finished", "The pump countdown has completed.", "countdown");
+      } else if (code === "EVT_MAX_RUNTIME_EXCEEDED" && (config.maxRuntimeAlert ?? true)) {
+        await sendPush(tokens, "⚠ Maximum Runtime Protection", "Maximum pump runtime was exceeded. Check the tank, pump, and sensors.", "maxRuntime");
       }
     }
   }
