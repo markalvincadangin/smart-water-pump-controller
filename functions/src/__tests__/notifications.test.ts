@@ -26,6 +26,12 @@ describe("notifications", () => {
       expect(await canSend(db, "user1", "lowLevel")).toBe(true);
     });
 
+    it("supports the canonical maxRuntime throttle key", async () => {
+      const now = Math.floor(Date.now() / 1000);
+      const db = mockDb({ maxRuntime: now - 60 });
+      expect(await canSend(db, "user1", "maxRuntime")).toBe(false);
+    });
+
     it("returns false when last send was within THROTTLE_SEC", async () => {
       const now = Math.floor(Date.now() / 1000);
       const db = mockDb({ dryRun: now - 60 }); // 1 min ago
