@@ -37,7 +37,7 @@
         "shadow": {
           "desired": {
             ".write": "auth != null && ((auth.token.role === 'device' && auth.token.deviceId === $deviceId) || (auth.token.role !== 'device' && (data.parent().parent().child('ownership/ownerUid').val() === auth.uid || data.parent().parent().child('metadata/claimedByUid').val() === auth.uid)))",
-            ".validate": "(!newData.hasChildren(['mode']) || newData.child('mode').isString()) && (!newData.child('mode').exists() || newData.child('mode').val() === 'MANUAL' || newData.child('mode').val() === 'COUNTDOWN') && (!newData.child('countdown_duration_min').exists() || (newData.child('countdown_duration_min').isNumber() && newData.child('countdown_duration_min').val() >= 1 && newData.child('countdown_duration_min').val() <= 120))"
+            ".validate": "(!newData.hasChildren(['mode']) || newData.child('mode').isString()) && (!newData.child('mode').exists() || newData.child('mode').val() === 'MANUAL' || newData.child('mode').val() === 'COUNTDOWN' || newData.child('mode').val() === 'AUTO') && (!newData.child('countdown_duration_min').exists() || (newData.child('countdown_duration_min').isNumber() && newData.child('countdown_duration_min').val() >= 1 && newData.child('countdown_duration_min').val() <= 120))"
           },
           "reported": {
             ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"
