@@ -3,6 +3,8 @@ package com.smartflow
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.os.Build
 import android.os.Bundle
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -29,6 +31,7 @@ import com.smartflow.presentation.LoginScreen
 import com.smartflow.presentation.ProvisioningScreen
 import com.smartflow.presentation.NotificationsScreen
 import com.smartflow.presentation.NotificationSettingsScreen
+import com.smartflow.presentation.NotificationPermissionDialog
 import com.smartflow.viewmodel.DashboardViewModel
 import com.smartflow.viewmodel.ProvisioningViewModel
 import com.smartflow.viewmodel.DeviceListViewModel
@@ -37,6 +40,7 @@ import com.smartflow.viewmodel.NotificationSettingsViewModel
 import com.smartflow.service.FcmTokenRegistrar
 import com.smartflow.service.NotificationChannels
 import com.smartflow.service.NotificationRouteTarget
+import com.smartflow.service.NotificationPermissionPrompt
 import com.smartflow.service.notificationRouteTarget
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -96,11 +100,20 @@ class MainActivity : ComponentActivity() {
     private lateinit var deviceRepository: DeviceRepository
     private lateinit var settingsRepository: SettingsRepository
 
+    private val notificationPermissionPrompt = mutableStateOf(NotificationPermissionPrompt.NONE)
+    private val notificationPermissionPrefs by lazy { getSharedPreferences("smartflow_permission_state", MODE_PRIVATE) }
+
     private val requestPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
-        if (isGranted) {
-            // FCM SDK (and your app) can post notifications.
+        notificationPermissionPrompt.value = if (isGranted) {
+            NotificationPermissionPrompt.NONE
+        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            NotificationPermissionPrompt.EXPLAIN
+        } else {
+            NotificationPermissionPrompt.SETTINGS
         }
     }
 
@@ -108,21 +121,49 @@ class MainActivity : ComponentActivity() {
         NotificationChannels.create(this)
     }
 
-    private fun askNotificationPermission() {
-        // This is only necessary for API level >= 33 (TIRAMISU)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) ==
-                android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                // FCM SDK (and your app) can post notifications.
-            } else if (shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)) {
-                // TODO: display an educational UI explaining to the user the features that will be enabled
-                requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                // Directly ask for the permission
-                requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            }
+    private fun prepareNotificationPermissionPrompt() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (granted) {
+            notificationPermissionPrompt.value = NotificationPermissionPrompt.NONE
+            return
         }
+
+        val requestedBefore = notificationPermissionPrefs.getBoolean(
+            "notification_permission_requested",
+            false
+        )
+
+        notificationPermissionPrompt.value = when {
+            !requestedBefore -> NotificationPermissionPrompt.EXPLAIN
+            shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS) ->
+                NotificationPermissionPrompt.EXPLAIN
+            else -> NotificationPermissionPrompt.SETTINGS
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionPrefs.edit()
+                .putBoolean("notification_permission_requested", true)
+                .apply()
+            requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun openNotificationSettings() {
+        startActivity(
+            Intent(
+                Settings.ACTION_APP_NOTIFICATION_SETTINGS,
+                Uri.parse("package:$packageName")
+            )
+        )
+        notificationPermissionPrompt.value = NotificationPermissionPrompt.NONE
     }
 
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
@@ -136,7 +177,7 @@ class MainActivity : ComponentActivity() {
         deviceRepository = DeviceRepository(cloudStore)
 
         createNotificationChannel()
-        askNotificationPermission()
+        prepareNotificationPermissionPrompt()
         notificationRouteState.value = notificationRouteTarget(intent)
         firebaseAuth.addAuthStateListener(authStateListener)
 
@@ -164,6 +205,10 @@ class MainActivity : ComponentActivity() {
                             settingsRepository = settingsRepository,
                             snackbarHostState = snackbarHostState,
                             windowWidthSizeClass = windowWidthSizeClass,
+                            notificationPermissionPrompt = notificationPermissionPrompt.value,
+                            onRequestNotificationPermission = { requestNotificationPermission() },
+                            onOpenNotificationSettings = { openNotificationSettings() },
+                            onDismissNotificationPermissionPrompt = { notificationPermissionPrompt.value = NotificationPermissionPrompt.NONE },
                             notificationRouteTarget = notificationRouteState.value,
                             onNotificationRouteConsumed = { notificationRouteState.value = null }
                         )
@@ -197,6 +242,10 @@ fun AppNavigation(
     settingsRepository: SettingsRepository,
     snackbarHostState: SnackbarHostState,
     windowWidthSizeClass: WindowWidthSizeClass,
+    notificationPermissionPrompt: NotificationPermissionPrompt = NotificationPermissionPrompt.NONE,
+    onRequestNotificationPermission: () -> Unit = {},
+    onOpenNotificationSettings: () -> Unit = {},
+    onDismissNotificationPermissionPrompt: () -> Unit = {},
     notificationRouteTarget: NotificationRouteTarget? = null,
     onNotificationRouteConsumed: () -> Unit = {}
 ) {
@@ -234,6 +283,15 @@ fun AppNavigation(
             }
             onNotificationRouteConsumed()
         }
+    }
+
+    if (notificationPermissionPrompt != NotificationPermissionPrompt.NONE) {
+        NotificationPermissionDialog(
+            state = notificationPermissionPrompt,
+            onRequestPermission = onRequestNotificationPermission,
+            onOpenSettings = onOpenNotificationSettings,
+            onDismiss = onDismissNotificationPermissionPrompt
+        )
     }
 
     Scaffold(
