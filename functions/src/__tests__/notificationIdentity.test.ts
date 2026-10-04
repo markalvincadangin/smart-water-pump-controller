@@ -13,6 +13,7 @@ describe("resolveDeviceDisplayName", () => {
 
   it("does not expose the internal device ID as the display name", () => {
     expect(resolveDeviceDisplayName({ displayName: "SF-A1B2C3" }, "SF-A1B2C3")).toBe(DEFAULT_DEVICE_DISPLAY_NAME);
+    expect(resolveDeviceDisplayName({ displayName: "Main Pump (SF-A1B2C3)" }, "SF-A1B2C3")).toBe(DEFAULT_DEVICE_DISPLAY_NAME);
   });
 
   it("removes control characters, normalizes whitespace, and bounds length", () => {
