@@ -4,7 +4,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import android.os.Bundle
-import android.content.Intent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,6 +35,8 @@ import com.smartflow.viewmodel.NotificationsViewModel
 import com.smartflow.viewmodel.NotificationSettingsViewModel
 import com.smartflow.service.FcmTokenRegistrar
 import com.smartflow.service.NotificationChannels
+import com.smartflow.service.NotificationRouteTarget
+import com.smartflow.service.notificationRouteTarget
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -69,30 +70,6 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 
 private fun hasEligibleAccount(): Boolean {
     return AccountSession.state(FirebaseAuth.getInstance().currentUser) == DurableAccountState.ELIGIBLE
-}
-
-data class NotificationRouteTarget(
-    val deviceId: String?,
-    val eventId: String?,
-    val eventCode: String?,
-    val tag: String?
-)
-
-private const val EXTRA_NOTIFICATION_DEVICE_ID = "deviceId"
-private const val EXTRA_NOTIFICATION_EVENT_ID = "eventId"
-private const val EXTRA_NOTIFICATION_EVENT_CODE = "eventCode"
-private const val EXTRA_NOTIFICATION_TAG = "tag"
-
-private fun notificationRouteTarget(intent: Intent?): NotificationRouteTarget? {
-    if (intent?.getBooleanExtra("smartflow_notification", false) != true) return null
-
-    val deviceId = intent.getStringExtra(EXTRA_NOTIFICATION_DEVICE_ID)?.takeIf { it.isNotBlank() }
-    val eventId = intent.getStringExtra(EXTRA_NOTIFICATION_EVENT_ID)?.takeIf { it.isNotBlank() }
-    val eventCode = intent.getStringExtra(EXTRA_NOTIFICATION_EVENT_CODE)?.takeIf { it.isNotBlank() }
-    val tag = intent.getStringExtra(EXTRA_NOTIFICATION_TAG)?.takeIf { it.isNotBlank() }
-
-    if (deviceId == null && eventId == null && eventCode == null && tag == null) return null
-    return NotificationRouteTarget(deviceId, eventId, eventCode, tag)
 }
 
 class MainActivity : ComponentActivity() {
