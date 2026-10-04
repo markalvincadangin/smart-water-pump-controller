@@ -3,7 +3,9 @@
     "users": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        "devices": { ".write": false },
+        "devices": {
+          ".write": false
+        },
         "$userField": {
           ".write": "auth != null && auth.uid === $uid && auth.token.role !== 'device' && $userField !== 'devices'"
         }
@@ -15,8 +17,12 @@
         "metadata": {
           ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId && newData.child('deviceAuthUid').val() === auth.uid && newData.child('claimedByUid').val() === data.child('claimedByUid').val()"
         },
-        "ownership": { ".write": false },
-        "ownershipAudit": { ".write": false },
+        "ownership": {
+          ".write": false
+        },
+        "ownershipAudit": {
+          ".write": false
+        },
         "pairing": {
           "current": {
             ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId && newData.child('proofHash').isString() && !newData.child('rawProof').exists()"
@@ -30,14 +36,28 @@
         },
         "shadow": {
           "desired": {
-            ".write": "auth != null && ((auth.token.role === 'device' && auth.token.deviceId === $deviceId) || (auth.token.role !== 'device' && (data.parent().parent().child('ownership/ownerUid').val() === auth.uid || data.parent().parent().child('metadata/claimedByUid').val() === auth.uid)))"
+            ".write": "auth != null && ((auth.token.role === 'device' && auth.token.deviceId === $deviceId) || (auth.token.role !== 'device' && (data.parent().parent().child('ownership/ownerUid').val() === auth.uid || data.parent().parent().child('metadata/claimedByUid').val() === auth.uid)))",
+            ".validate": "(!newData.hasChildren(['mode']) || newData.child('mode').isString()) && (!newData.child('mode').exists() || newData.child('mode').val() === 'MANUAL' || newData.child('mode').val() === 'COUNTDOWN') && (!newData.child('countdown_duration_min').exists() || (newData.child('countdown_duration_min').isNumber() && newData.child('countdown_duration_min').val() >= 1 && newData.child('countdown_duration_min').val() <= 120))"
           },
           "reported": {
             ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"
           }
         },
         "settings": {
-          ".write": "auth != null && auth.token.role !== 'device' && (data.parent().child('ownership/ownerUid').val() === auth.uid || data.parent().child('metadata/claimedByUid').val() === auth.uid)"
+          ".write": "auth != null && auth.token.role !== 'device' && (data.parent().child('ownership/ownerUid').val() === auth.uid || data.parent().child('metadata/claimedByUid').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['pump_start_level_pct', 'pump_stop_level_pct', 'dry_run_threshold_lpm', 'max_pump_runtime_min'])",
+          "pump_start_level_pct": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+          },
+          "pump_stop_level_pct": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100 && newData.val() > newData.parent().child('pump_start_level_pct').val()"
+          },
+          "dry_run_threshold_lpm": {
+            ".validate": "newData.isNumber() && newData.val() >= 0.1 && newData.val() <= 10.0"
+          },
+          "max_pump_runtime_min": {
+            ".validate": "newData.isNumber() && newData.val() >= 30 && newData.val() <= 120"
+          }
         },
         "diagnostics": {
           ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"
@@ -47,7 +67,10 @@
             ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId"
           }
         },
-        "maintenance": { ".read": false, ".write": false }
+        "maintenance": {
+          ".read": false,
+          ".write": false
+        }
       }
     },
     "firmware": {
