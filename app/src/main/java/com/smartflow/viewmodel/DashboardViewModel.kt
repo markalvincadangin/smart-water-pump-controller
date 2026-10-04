@@ -99,14 +99,14 @@ class DashboardViewModel(
                 val currentMode = mapReportedMode(shadow.reported.runMode, desiredMode)
                 val reported = shadow.reported
 
-                when (
-                    deriveCommandState(
-                        command = command,
-                        connection = connection,
-                        currentMode = currentMode,
-                        reported = reported
-                    )
-                ) {
+                val commandState = deriveCommandState(
+                    command = command,
+                    connection = connection,
+                    currentMode = currentMode,
+                    reported = reported
+                )
+
+                when (commandState) {
                     CommandState.Completed -> finishCommand(CommandState.Completed)
                     is CommandState.Rejected -> finishCommand(commandState)
                     CommandState.InterlockBlocked -> finishCommand(CommandState.InterlockBlocked)
