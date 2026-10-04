@@ -98,7 +98,17 @@ void DeviceShadow::evaluateDesired(const String& desiredMode, bool manualDesired
       }
     } else if (newMode == "COUNTDOWN") {
       if (countdownStart) {
-        uint32_t dur = countdownDurationMin > 0 ? countdownDurationMin : cfgLastCountdownDurationMin;
+        if (countdownDurationMin < 1 || countdownDurationMin > COUNTDOWN_MAX_DURATION_MIN) {
+          lastFaultCode = "COMMAND_REJECTED";
+          lastFaultMessage = "Countdown duration must be between 1 and 120 minutes.";
+          activeCommand.type = CommandType::NONE;
+          LOG(APP_LOG_LEVEL_WARN, "SHADOW",
+              "Rejected countdown duration: %d min. Allowed range: 1-%d min.",
+              countdownDurationMin, COUNTDOWN_MAX_DURATION_MIN);
+          return;
+        }
+
+        uint32_t dur = (uint32_t)countdownDurationMin;
         activeCommand = PumpCommand(CommandType::START_COUNTDOWN, dur * 60);
       } else {
         activeCommand = PumpCommand(CommandType::STOP_COUNTDOWN);
