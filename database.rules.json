@@ -15,7 +15,10 @@
       "$deviceId": {
         ".read": "auth != null && ((auth.token.role === 'device' && auth.token.deviceId === $deviceId) || data.child('ownership/ownerUid').val() === auth.uid || data.child('metadata/claimedByUid').val() === auth.uid)",
         "metadata": {
-          ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId && newData.child('deviceAuthUid').val() === auth.uid && newData.child('claimedByUid').val() === data.child('claimedByUid').val()"
+          ".write": "auth != null && auth.token.role === 'device' && auth.token.deviceId === $deviceId && newData.child('deviceAuthUid').val() === auth.uid && newData.child('claimedByUid').val() === data.child('claimedByUid').val() && newData.child('displayName').val() === data.child('displayName').val()",
+          "displayName": {
+            ".validate": "newData.isString() && newData.val().length <= 64"
+          }
         },
         "ownership": {
           ".write": false
