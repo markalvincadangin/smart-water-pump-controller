@@ -34,6 +34,7 @@ import com.smartflow.viewmodel.DeviceListViewModel
 import com.smartflow.viewmodel.NotificationsViewModel
 import com.smartflow.viewmodel.NotificationSettingsViewModel
 import com.smartflow.service.FcmTokenRegistrar
+import com.smartflow.service.NotificationChannels
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -99,19 +100,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NotificationChannels.PUMP_ALERTS_ID,
-                getString(R.string.notification_channel_pump_alerts_name),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = getString(R.string.notification_channel_pump_alerts_description)
-                enableVibration(true)
-                setShowBadge(true)
-            }
-
-            NotificationChannels.create(this)
-        }
+        NotificationChannels.create(this)
     }
 
     private fun askNotificationPermission() {

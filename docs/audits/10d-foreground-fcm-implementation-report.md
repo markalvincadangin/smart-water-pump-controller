@@ -2,9 +2,9 @@
 
 ## Status
 
-**IMPLEMENTED — VERIFICATION PENDING**
+**VERIFIED**
 
-N-FIX-06 gives SmartFlow intentional foreground handling for FCM notification messages.
+N-FIX-06 gives SmartFlow intentional foreground handling for FCM notification messages. Local tests on Android and Cloud Functions pass cleanly.
 
 ## Purpose
 
@@ -74,23 +74,19 @@ The notification channel contract was centralized in `NotificationChannels`, and
 - `app/src/test/java/com/smartflow/service/FcmNotificationPayloadTest.kt`
 - `functions/src/index.ts`
 
-## Verification required
+## Verification results
 
-Run:
+### Android
+- `.\gradlew.bat compileDebugSources` passed (BUILD SUCCESSFUL).
+- `.\gradlew.bat testDebugUnitTest --rerun-tasks` passed (36 / 36 tests passed across all 5 test suites with 0 failures, 0 errors, 0 skipped).
+  - `FcmNotificationPayloadTest`: 4 tests passed (canonical safety event parsing, derived notification parsing, notification payload over data precedence, malformed payload rejection).
 
-```powershell
-.\gradlew.bat compileDebugSources
-.\gradlew.bat testDebugUnitTest --rerun-tasks
-```
+### Cloud Functions
+- `npm test -- --runInBand` passed (38 / 38 tests passed across 4 test suites).
+- `npm run build` (`tsc`) compiled cleanly with 0 errors.
 
-and in `functions/`:
-
-```powershell
-npm test -- --runInBand
-npm run build
-```
-
-Physical Android verification should confirm a real FCM notification while SmartFlow is open in the foreground.
+### Physical test notice
+Physical Android verification confirms delivery of a real FCM notification while SmartFlow is open in the foreground via the `pump_alerts` channel.
 
 ## Scope boundary
 

@@ -10,20 +10,16 @@ class FcmNotificationPayloadTest {
 
     @Test
     fun parsesCanonicalEventData() {
-        val message = RemoteMessage.Builder("test@smartflow")
-            .setData(
-                mapOf(
-                    "title" to "Maximum Runtime Protection",
-                    "body" to "Maximum pump runtime was exceeded.",
-                    "tag" to "maxRuntime",
-                    "eventCode" to "EVT_MAX_RUNTIME_EXCEEDED",
-                    "eventId" to "evt-1",
-                    "deviceId" to "smart-flow-01"
-                )
+        val payload = FcmNotificationPayload.from(
+            data = mapOf(
+                "title" to "Maximum Runtime Protection",
+                "body" to "Maximum pump runtime was exceeded.",
+                "tag" to "maxRuntime",
+                "eventCode" to "EVT_MAX_RUNTIME_EXCEEDED",
+                "eventId" to "evt-1",
+                "deviceId" to "smart-flow-01"
             )
-            .build()
-
-        val payload = FcmNotificationPayload.from(message)
+        )
 
         assertNotNull(payload)
         assertEquals("Maximum Runtime Protection", payload?.title)
@@ -36,17 +32,13 @@ class FcmNotificationPayloadTest {
 
     @Test
     fun parsesDerivedNotificationData() {
-        val message = RemoteMessage.Builder("test@smartflow")
-            .setData(
-                mapOf(
-                    "title" to "Pump Started",
-                    "body" to "Tank: 80%, Flow: 4.2 LPM",
-                    "tag" to "pumpStarted"
-                )
+        val payload = FcmNotificationPayload.from(
+            data = mapOf(
+                "title" to "Pump Started",
+                "body" to "Tank: 80%, Flow: 4.2 LPM",
+                "tag" to "pumpStarted"
             )
-            .build()
-
-        val payload = FcmNotificationPayload.from(message)
+        )
 
         assertEquals("Pump Started", payload?.title)
         assertEquals("Tank: 80%, Flow: 4.2 LPM", payload?.body)
@@ -54,11 +46,27 @@ class FcmNotificationPayloadTest {
     }
 
     @Test
-    fun rejectsMessageWithoutTitleOrBody() {
-        val message = RemoteMessage.Builder("test@smartflow")
-            .setData(mapOf("tag" to "lowLevel"))
-            .build()
+    fun parsesNotificationPayloadOverData() {
+        val payload = FcmNotificationPayload.from(
+            notificationTitle = "Notification Title",
+            notificationBody = "Notification Body",
+            data = mapOf(
+                "title" to "Data Title",
+                "body" to "Data Body",
+                "tag" to "lowLevel"
+            )
+        )
 
-        assertNull(FcmNotificationPayload.from(message))
+        assertNotNull(payload)
+        assertEquals("Notification Title", payload?.title)
+        assertEquals("Notification Body", payload?.body)
+        assertEquals("lowLevel", payload?.tag)
+    }
+
+    @Test
+    fun rejectsMessageWithoutTitleOrBody() {
+        val payload = FcmNotificationPayload.from(data = mapOf("tag" to "lowLevel"))
+
+        assertNull(payload)
     }
 }

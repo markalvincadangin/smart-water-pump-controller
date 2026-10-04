@@ -17,14 +17,15 @@ data class FcmNotificationPayload(
     val deviceId: String?
 ) {
     companion object {
-        fun from(message: RemoteMessage): FcmNotificationPayload? {
-            val notification = message.notification
-            val data = message.data
-
-            val title = notification?.title?.takeIf { it.isNotBlank() }
+        fun from(
+            notificationTitle: String? = null,
+            notificationBody: String? = null,
+            data: Map<String, String> = emptyMap()
+        ): FcmNotificationPayload? {
+            val title = notificationTitle?.takeIf { it.isNotBlank() }
                 ?: data["title"]?.takeIf { it.isNotBlank() }
                 ?: return null
-            val body = notification?.body?.takeIf { it.isNotBlank() }
+            val body = notificationBody?.takeIf { it.isNotBlank() }
                 ?: data["body"]?.takeIf { it.isNotBlank() }
                 ?: return null
 
@@ -35,6 +36,14 @@ data class FcmNotificationPayload(
                 eventCode = data["eventCode"]?.takeIf { it.isNotBlank() },
                 eventId = data["eventId"]?.takeIf { it.isNotBlank() },
                 deviceId = data["deviceId"]?.takeIf { it.isNotBlank() }
+            )
+        }
+
+        fun from(message: RemoteMessage): FcmNotificationPayload? {
+            return from(
+                notificationTitle = message.notification?.title,
+                notificationBody = message.notification?.body,
+                data = message.data ?: emptyMap()
             )
         }
     }
