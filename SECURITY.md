@@ -17,7 +17,7 @@ Do not open a public issue containing exploit details, credentials, personal dat
 
 Report privately by email:
 
-- **Address:** `markc.dev.iot@gmail.com`
+- **Address:** `markcadangin@gmail.com`
 - **Subject:** `[SmartFlow Security]` followed by a short title
 
 Include, where available:
