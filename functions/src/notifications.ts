@@ -53,6 +53,70 @@ export async function recordSent(
   await lastRef.update({ [type]: Math.floor(Date.now() / 1000) });
 }
 
+/**
+ * Atomically claims a throttle slot. Unlike canSend()+recordSent(), this
+ * prevents concurrent function invocations from both passing the same check.
+ */
+export async function claimThrottle(
+  db: Database,
+  uid: string,
+  type: NotificationType
+): Promise<boolean> {
+  const ref = db.ref(`users/${uid}/notification_last_sent/${type}`);
+  const now = Math.floor(Date.now() / 1000);
+  let claimed = false;
+
+  await ref.transaction((current: unknown) => {
+    const lastTime = typeof current === "number" ? current : 0;
+    if (now - lastTime < THROTTLE_SEC) {
+      return current;
+    }
+    claimed = true;
+    return now;
+  });
+
+  return claimed;
+}
+
+/**
+ * Claims a deterministic delivery key for an authoritative device event.
+ * RTDB event IDs are unique under a device, so the same Cloud Function retry
+ * cannot produce a second push for the same event/user pair.
+ */
+export async function claimEventDelivery(
+  db: Database,
+  uid: string,
+  eventId: string
+): Promise<boolean> {
+  if (!eventId) return false;
+
+  const safeEventId = eventId.replace(/[.#$\[\]/]/g, "_");
+  const ref = db.ref(`users/${uid}/notification_delivery/${safeEventId}`);
+  let claimed = false;
+
+  await ref.transaction((current: unknown) => {
+    if (current != null) return current;
+    claimed = true;
+    return { claimedAt: Date.now() };
+  });
+
+  return claimed;
+}
+
+/**
+ * Releases a delivery claim after a failed FCM attempt so a later retry can
+ * deliver the notification. Successful deliveries remain idempotently claimed.
+ */
+export async function releaseEventDelivery(
+  db: Database,
+  uid: string,
+  eventId: string
+): Promise<void> {
+  if (!eventId) return;
+  const safeEventId = eventId.replace(/[.#$\[\]/g, "_");
+  await db.ref(`users/${uid}/notification_delivery/${safeEventId}`).remove();
+}
+
 
 export function isDndActive(config: NotificationDndConfig, now = new Date()): boolean {
   if (!config.dndEnabled) return false;
