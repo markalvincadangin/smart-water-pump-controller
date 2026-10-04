@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.smartflow.domain.DeviceConfig
+import com.smartflow.domain.DeviceConfigValidator
 import com.smartflow.presentation.components.settings.ThresholdControl
 import com.smartflow.presentation.components.settings.MaintenanceOverrideRow
 import com.smartflow.presentation.components.dialogs.ConfirmationDialog
@@ -25,16 +26,29 @@ fun ConfigBottomSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
-    var lowLevel by remember { mutableFloatStateOf(currentConfig.pumpStartLevelPct.toFloat()) }
+    var startLevel by remember { mutableFloatStateOf(currentConfig.pumpStartLevelPct.toFloat()) }
+    var stopLevel by remember { mutableFloatStateOf(currentConfig.pumpStopLevelPct.toFloat()) }
     var dryRun by remember { mutableFloatStateOf(currentConfig.dryRunThresholdLpm) }
-    var maxOverflow by remember { mutableFloatStateOf(currentConfig.maxPumpRuntimeMin.toFloat()) }
+    var maxRuntime by remember { mutableFloatStateOf(currentConfig.maxPumpRuntimeMin.toFloat()) }
     var localBypassLevel by remember { mutableStateOf(bypassLevel) }
     var localBypassFlow by remember { mutableStateOf(bypassFlow) }
 
-    var lowLevelError by remember { mutableStateOf(false) }
+    var startLevelError by remember { mutableStateOf(false) }
+    var stopLevelError by remember { mutableStateOf(false) }
     var dryRunError by remember { mutableStateOf(false) }
-    var maxOverflowError by remember { mutableStateOf(false) }
-    val hasAnyError = lowLevelError || dryRunError || maxOverflowError
+    var maxRuntimeError by remember { mutableStateOf(false) }
+
+    val validation = remember(startLevel, stopLevel, dryRun, maxRuntime) {
+        DeviceConfigValidator.validate(
+            DeviceConfig(
+                pumpStartLevelPct = startLevel.toInt(),
+                pumpStopLevelPct = stopLevel.toInt(),
+                dryRunThresholdLpm = dryRun,
+                maxPumpRuntimeMin = maxRuntime.toInt()
+            )
+        )
+    }
+    val hasAnyError = startLevelError || stopLevelError || dryRunError || maxRuntimeError || !validation.isValid
 
     var showLevelBypassConfirm by remember { mutableStateOf(false) }
     var showFlowBypassConfirm by remember { mutableStateOf(false) }
@@ -83,40 +97,60 @@ fun ConfigBottomSheet(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            // Low Level Threshold
+            // Pump Start Level
             ThresholdControl(
-                title = "Low Water Threshold",
-                value = lowLevel,
-                onValueChange = { lowLevel = it },
-                valueRange = 0f..50f,
-                steps = 50,
+                title = "Pump Start Level",
+                value = startLevel,
+                onValueChange = { startLevel = it },
+                valueRange = DeviceConfigValidator.PUMP_LEVEL_MIN_PCT.toFloat()..DeviceConfigValidator.PUMP_LEVEL_MAX_PCT.toFloat(),
+                steps = 99,
                 unit = "%",
-                description = "Stops the pump when tank level falls below this threshold.",
-                onErrorChange = { lowLevelError = it }
+                description = "Level threshold used to allow the pump to turn ON.",
+                onErrorChange = { startLevelError = it }
             )
+
+            // Pump Stop Level
+            ThresholdControl(
+                title = "Pump Stop Level",
+                value = stopLevel,
+                onValueChange = { stopLevel = it },
+                valueRange = DeviceConfigValidator.PUMP_LEVEL_MIN_PCT.toFloat()..DeviceConfigValidator.PUMP_LEVEL_MAX_PCT.toFloat(),
+                steps = 99,
+                unit = "%",
+                description = "Level threshold used to turn the pump OFF.",
+                onErrorChange = { stopLevelError = it }
+            )
+
+            if (validation.pumpStopLevelError != null && !stopLevelError) {
+                Text(
+                    text = validation.pumpStopLevelError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
 
             // Dry Run Threshold
             ThresholdControl(
                 title = "Dry-Run Threshold",
                 value = dryRun,
                 onValueChange = { dryRun = it },
-                valueRange = 0f..5f,
-                steps = 50,
+                valueRange = DeviceConfigValidator.DRY_RUN_THRESHOLD_MIN_LPM..DeviceConfigValidator.DRY_RUN_THRESHOLD_MAX_LPM,
+                steps = 98,
                 unit = "L/min",
                 description = "Stops the pump if flow remains below this threshold.",
                 onErrorChange = { dryRunError = it }
             )
 
-            // Max Overflow Timeout
+            // Maximum Pump Runtime
             ThresholdControl(
-                title = "Max Continuous Run",
-                value = maxOverflow,
-                onValueChange = { maxOverflow = it },
-                valueRange = 5f..60f,
-                steps = 55,
+                title = "Maximum Pump Runtime",
+                value = maxRuntime,
+                onValueChange = { maxRuntime = it },
+                valueRange = DeviceConfigValidator.MAX_PUMP_RUNTIME_MIN_MINUTES.toFloat()..DeviceConfigValidator.MAX_PUMP_RUNTIME_MAX_MINUTES.toFloat(),
+                steps = 89,
                 unit = "mins",
-                description = "Safety timeout to prevent continuous overflow.",
-                onErrorChange = { maxOverflowError = it }
+                description = "Safety timeout that stops the pump after continuous operation exceeds this limit.",
+                onErrorChange = { maxRuntimeError = it }
             )
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
@@ -220,10 +254,10 @@ fun ConfigBottomSheet(
                     onClick = {
                         onConfigChanged(
                             DeviceConfig(
-                                pumpStartLevelPct = lowLevel.toInt(),
+                                pumpStartLevelPct = startLevel.toInt(),
+                                pumpStopLevelPct = stopLevel.toInt(),
                                 dryRunThresholdLpm = dryRun,
-                                pumpStopLevelPct = currentConfig.pumpStopLevelPct,
-                                maxPumpRuntimeMin = maxOverflow.toInt()
+                                maxPumpRuntimeMin = maxRuntime.toInt()
                             )
                         )
                         onBypassChanged(localBypassLevel, localBypassFlow)
