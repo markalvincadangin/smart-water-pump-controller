@@ -182,6 +182,8 @@ fun DashboardScreen(
                             connectionState = uiState.connectionStatus,
                             commandState = uiState.commandState,
                             lastFaultMessage = uiState.lastFaultMessage,
+                        lastFaultCode = uiState.lastFaultCode,
+                            lastFaultCode = uiState.lastFaultCode,
                             maxRuntimeLimitMins = uiState.config.maxPumpRuntimeMin,
                             countdownRemainingSec = uiState.countdownRemainingSec,
                             countdownDurationMin = uiState.countdownDurationMin,
